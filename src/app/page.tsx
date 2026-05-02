@@ -1,90 +1,85 @@
-'use client';
-
 import Link from 'next/link';
-import { Shield, Zap, Target, Flame, ChevronRight } from 'lucide-react';
+import { Activity, Zap, Shield, ChevronRight, Target, BrainCircuit } from 'lucide-react';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gray-950 text-white selection:bg-purple-500/30 overflow-hidden relative">
+    <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-emerald-500/30 overflow-hidden relative flex flex-col items-center justify-center">
       
-      {/* Background Ambient Glows */}
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+      {/* --- AMBIENT GLOWS --- */}
+      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[150px] pointer-events-none animate-pulse"></div>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none"></div>
 
-      {/* Navigation Bar */}
-      <nav className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center relative z-10">
-        <div className="flex items-center gap-2">
-          <Zap className="text-yellow-400" size={28} />
-          <span className="text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">
-            GATE COMMAND
-          </span>
-        </div>
-        <div className="flex gap-4">
-          <Link 
-            href="/login" 
-            className="px-6 py-2 rounded-lg font-semibold text-gray-300 hover:text-white transition-colors"
-          >
-            Sign In
-          </Link>
-          <Link 
-            href="/login" 
-            className="px-6 py-2 rounded-lg font-bold bg-white text-black hover:bg-gray-200 transition-colors"
-          >
-            Start Farming XP
-          </Link>
-        </div>
-      </nav>
+      {/* --- BACKGROUND GRID --- */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
 
-      {/* Hero Section */}
-      <main className="max-w-7xl mx-auto px-6 pt-20 pb-32 relative z-10 text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gray-900 border border-gray-800 text-sm font-medium text-purple-400 mb-8">
-          <Flame size={16} /> GATE ECE Gamified Tracker Live
-        </div>
+      <div className="relative z-10 max-w-5xl mx-auto px-6 text-center flex flex-col items-center animate-in fade-in zoom-in-[0.98] duration-1000 ease-out">
         
-        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-8 leading-tight">
-          Don't just study for GATE. <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-blue-500 to-purple-600">
-            Conquer it like a game.
+        {/* Top Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/50 ring-1 ring-white/10 backdrop-blur-md mb-8 shadow-2xl">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">GATE ECE Protocol Active</span>
+        </div>
+
+        {/* Hero Title */}
+        <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-6 leading-tight">
+          <span className="text-zinc-100 drop-shadow-lg">Neural</span>{' '}
+          <span className="bg-gradient-to-r from-emerald-400 via-teal-500 to-indigo-500 bg-clip-text text-transparent">
+            Command
           </span>
         </h1>
-        
-        <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-          Transform your 15-hour engineering mathematics lectures into bite-sized, gamified missions. 
-          Build streaks, earn XP, and obliterate your target syllabus.
+
+        {/* Subtitle */}
+        <p className="text-base md:text-xl text-zinc-400 max-w-2xl mx-auto font-medium leading-relaxed mb-10">
+          The ultimate dopamine-optimized learning matrix. Track your syllabus, manage focus payloads, and predict your progression speed in real-time.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
           <Link 
             href="/login" 
-            className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 shadow-[0_0_30px_rgba(168,85,247,0.3)] transition-all flex items-center justify-center gap-2 group"
+            className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-2xl font-black text-sm uppercase tracking-widest transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2"
           >
-            Initiate Basecamp 
-            <ChevronRight className="group-hover:translate-x-1 transition-transform" size={20} />
+            <Activity size={18} /> Initialize System
           </Link>
-        </div>
-      </main>
-
-      {/* Feature Grid */}
-      <section className="max-w-7xl mx-auto px-6 py-20 border-t border-gray-800/50 relative z-10">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="bg-gray-900/50 border border-gray-800 p-8 rounded-2xl">
-            <Target className="text-blue-400 mb-4" size={32} />
-            <h3 className="text-xl font-bold mb-3">4-Day Timelines</h3>
-            <p className="text-gray-400">Lock in your targets. Break massive subjects down into manageable daily blocks with automated routing.</p>
-          </div>
-          <div className="bg-gray-900/50 border border-gray-800 p-8 rounded-2xl">
-            <Flame className="text-orange-400 mb-4" size={32} />
-            <h3 className="text-xl font-bold mb-3">Streak Multipliers</h3>
-            <p className="text-gray-400">Consistency is everything. Maintain your daily study streak to multiply your XP gains and rank up faster.</p>
-          </div>
-          <div className="bg-gray-900/50 border border-gray-800 p-8 rounded-2xl">
-            <Shield className="text-purple-400 mb-4" size={32} />
-            <h3 className="text-xl font-bold mb-3">Admin Overrides</h3>
-            <p className="text-gray-400">A dedicated control room to dynamically push new YouTube playlists, PDFs, and resources directly to your dashboard.</p>
+          
+          <div className="w-full sm:w-auto px-8 py-4 bg-zinc-900/50 hover:bg-zinc-800/50 text-zinc-300 ring-1 ring-white/10 rounded-2xl font-bold text-sm uppercase tracking-widest backdrop-blur-md transition-all duration-300 flex items-center justify-center gap-2 cursor-not-allowed opacity-80">
+            <Shield size={18} /> Secure Server
           </div>
         </div>
-      </section>
 
+        {/* Features Micro-Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 md:mt-32 w-full max-w-4xl text-left">
+          
+          <div className="bg-zinc-900/30 backdrop-blur-xl ring-1 ring-white/5 rounded-3xl p-6 hover:ring-white/10 transition-colors">
+            <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center mb-4 ring-1 ring-indigo-500/20 text-indigo-400">
+              <BrainCircuit size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-zinc-100 mb-2">Chrono-Predictor</h3>
+            <p className="text-xs text-zinc-500 font-medium leading-relaxed">AI-driven math calculates exactly how many days remain based on your custom brain speed and daily focus hours.</p>
+          </div>
+
+          <div className="bg-zinc-900/30 backdrop-blur-xl ring-1 ring-white/5 rounded-3xl p-6 hover:ring-white/10 transition-colors">
+            <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center mb-4 ring-1 ring-emerald-500/20 text-emerald-400">
+              <Zap size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-zinc-100 mb-2">Dopamine Engine</h3>
+            <p className="text-xs text-zinc-500 font-medium leading-relaxed">Lock in progress to instantly update your global syllabus matrix, earn Focus XP, and secure your daily streak.</p>
+          </div>
+
+          <div className="bg-zinc-900/30 backdrop-blur-xl ring-1 ring-white/5 rounded-3xl p-6 hover:ring-white/10 transition-colors">
+            <div className="w-10 h-10 bg-rose-500/10 rounded-xl flex items-center justify-center mb-4 ring-1 ring-rose-500/20 text-rose-400">
+              <Target size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-zinc-100 mb-2">Matrix Vault</h3>
+            <p className="text-xs text-zinc-500 font-medium leading-relaxed">100% synchronized database. Your exact timeline, completed modules, and study assets are secured in the cloud.</p>
+          </div>
+
+        </div>
+      </div>
+      
     </div>
   );
 }
