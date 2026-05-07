@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '../../../../lib/supabase';
 import { getUserProfile, upsertUserProgress, addExperiencePoints, syncDailyXpAndStreak } from '../../../../lib/dataService';
 import toast from 'react-hot-toast';
-import { BookOpen, ArrowLeft, Check, Maximize2, MonitorPlay, Save, Database, Flame, Zap } from 'lucide-react';
+import {Activity, BookOpen, ArrowLeft, Check, Maximize2, MonitorPlay, Save, Database, Flame, Zap } from 'lucide-react';
 
 export default function FocusRoom() {
   const params = useParams();
