@@ -44,10 +44,18 @@ export default function Gateway() {
       toast.success('Admin Override Accepted. Welcome Commander.');
       // In a real app, we'd set a secure cookie here. For now, local storage works.
       localStorage.setItem('isAdmin', 'true'); 
-      router.push('/admin/dashboard'); // UPDATED: Send admin to the control room dashboard
+      router.push('/admin/dashboard'); // Send admin to the control room dashboard
     } else {
       toast.error('Access Denied. Incorrect Admin Credentials.');
     }
+  };
+
+  // 3. Dynamic Redirect URL (Works on Localhost & Vercel)
+  const getRedirectUrl = () => {
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/dashboard`;
+    }
+    return '';
   };
 
   return (
@@ -107,6 +115,7 @@ export default function Gateway() {
               }} 
               theme="dark"
               providers={[]} // Add 'google' here if you enable it in Supabase!
+              redirectTo={getRedirectUrl()} // <-- THIS FIXES THE REDIRECT BUG
             />
           </div>
         )}
