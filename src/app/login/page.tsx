@@ -3,59 +3,101 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
 import toast from 'react-hot-toast';
-import { Shield, User, Zap } from 'lucide-react';
+import { Shield, User, Zap, Mail, Key } from 'lucide-react';
 
 export default function Gateway() {
   const router = useRouter();
   const [loginType, setLoginType] = useState<'user' | 'admin'>('user');
   
-  // Admin Login State
+  // Admin State
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
 
-  // 1. Check if a User is already logged in via Supabase
+  // User OTP State
+  const [userEmail, setUserEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // 1. Check existing session
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.push('/dashboard'); // Send regular users to their hub
-      }
+      if (session) router.push('/dashboard');
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        router.push('/dashboard');
-      }
+      if (session) router.push('/dashboard');
     });
 
     return () => subscription.unsubscribe();
   }, [router]);
 
-  // 2. Handle the Fixed Admin Login
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const envEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-    const envPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
-
-    if (adminEmail === envEmail && adminPassword === envPassword) {
-      toast.success('Admin Override Accepted. Welcome Commander.');
-      // In a real app, we'd set a secure cookie here. For now, local storage works.
-      localStorage.setItem('isAdmin', 'true'); 
-      router.push('/admin/dashboard'); // Send admin to the control room dashboard
-    } else {
-      toast.error('Access Denied. Incorrect Admin Credentials.');
-    }
-  };
-
-  // 3. Dynamic Redirect URL (Works on Localhost & Vercel)
+  // 2. Redirect URL generator
   const getRedirectUrl = () => {
     if (typeof window !== 'undefined') {
       return `${window.location.origin}/dashboard`;
     }
     return '';
+  };
+
+  // --- NEW: CUSTOM OTP LOGIC ---
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    // This talks directly to Supabase and catches any errors
+    const { error } = await supabase.auth.signInWithOtp({
+      email: userEmail,
+      options: {
+        emailRedirectTo: getRedirectUrl(),
+      },
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      toast.error(`Error: ${error.message}`); // WE WILL FINALLY SEE THE ERROR!
+      console.error("Supabase Error:", error);
+    } else {
+      toast.success('OTP Sent! Check your Gmail.');
+      setOtpSent(true);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    const { error } = await supabase.auth.verifyOtp({
+      email: userEmail,
+      token: otpCode,
+      type: 'email',
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      toast.error(`Invalid OTP: ${error.message}`);
+    } else {
+      toast.success('Access Granted!');
+      router.push('/dashboard');
+    }
+  };
+
+  // 3. Admin Logic
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const envEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    const envPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
+
+    if (adminEmail === envEmail && adminPassword === envPassword) {
+      toast.success('Admin Override Accepted.');
+      localStorage.setItem('isAdmin', 'true'); 
+      router.push('/admin/dashboard');
+    } else {
+      toast.error('Access Denied. Incorrect Admin Credentials.');
+    }
   };
 
   return (
@@ -97,30 +139,70 @@ export default function Gateway() {
           </button>
         </div>
 
-        {/* --- USER LOGIN VIEW (Supabase Auth) --- */}
+        {/* --- CUSTOM USER LOGIN VIEW --- */}
         {loginType === 'user' && (
           <div className="animate-in fade-in zoom-in duration-300">
-            <Auth 
-              supabaseClient={supabase} 
-              appearance={{ 
-                theme: ThemeSupa,
-                variables: {
-                  default: {
-                    colors: {
-                      brand: '#8b5cf6', // Purple-500
-                      brandAccent: '#7c3aed', // Purple-600
-                    }
-                  }
-                }
-              }} 
-              theme="dark"
-              providers={[]} // Add 'google' here if you enable it in Supabase!
-              redirectTo={getRedirectUrl()} // <-- THIS FIXES THE REDIRECT BUG
-            />
+            {!otpSent ? (
+              <form onSubmit={handleSendOtp} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3.5 text-gray-500" size={18} />
+                    <input 
+                      type="email" 
+                      required
+                      value={userEmail}
+                      onChange={(e) => setUserEmail(e.target.value)}
+                      className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 pl-10 pr-3 text-white outline-none focus:border-purple-500 transition-colors"
+                      placeholder="student@example.com"
+                    />
+                  </div>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 rounded-lg hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all disabled:opacity-50"
+                >
+                  {isLoading ? 'Requesting Access...' : 'Send Magic Link / OTP'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">Enter 6-Digit OTP</label>
+                  <div className="relative">
+                    <Key className="absolute left-3 top-3.5 text-gray-500" size={18} />
+                    <input 
+                      type="text" 
+                      required
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                      className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 pl-10 pr-3 text-white outline-none focus:border-purple-500 transition-colors tracking-widest text-center text-lg"
+                      placeholder="000000"
+                      maxLength={6}
+                    />
+                  </div>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-3 rounded-lg hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all disabled:opacity-50"
+                >
+                  {isLoading ? 'Verifying...' : 'Verify & Enter'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setOtpSent(false)}
+                  className="w-full text-sm text-gray-500 hover:text-white transition-colors mt-2"
+                >
+                  Used wrong email? Go back.
+                </button>
+              </form>
+            )}
           </div>
         )}
 
-        {/* --- ADMIN LOGIN VIEW (ENV Variables) --- */}
+        {/* --- ADMIN LOGIN VIEW --- */}
         {loginType === 'admin' && (
           <form onSubmit={handleAdminLogin} className="animate-in fade-in zoom-in duration-300 space-y-4">
             <div>
@@ -158,3 +240,4 @@ export default function Gateway() {
     </div>
   );
 }
+
