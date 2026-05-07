@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
-import { Shield, User, Zap, Mail, Key } from 'lucide-react';
+import { Shield, User, Zap, Mail, Key, Loader2, ArrowRight } from 'lucide-react';
 
 export default function Gateway() {
   const router = useRouter();
@@ -41,12 +41,11 @@ export default function Gateway() {
     return '';
   };
 
-  // --- NEW: CUSTOM OTP LOGIC ---
+  // --- CUSTOM OTP LOGIC ---
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // This talks directly to Supabase and catches any errors
     const { error } = await supabase.auth.signInWithOtp({
       email: userEmail,
       options: {
@@ -57,10 +56,10 @@ export default function Gateway() {
     setIsLoading(false);
 
     if (error) {
-      toast.error(`Error: ${error.message}`); // WE WILL FINALLY SEE THE ERROR!
+      toast.error(`Error: ${error.message}`);
       console.error("Supabase Error:", error);
     } else {
-      toast.success('OTP Sent! Check your Gmail.');
+      toast.success('Secure Intel Sent! Check your Gmail.');
       setOtpSent(true);
     }
   };
@@ -78,7 +77,7 @@ export default function Gateway() {
     setIsLoading(false);
 
     if (error) {
-      toast.error(`Invalid OTP: ${error.message}`);
+      toast.error(`Invalid Code: ${error.message}`);
     } else {
       toast.success('Access Granted!');
       router.push('/dashboard');
@@ -101,29 +100,29 @@ export default function Gateway() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Aesthetic */}
+    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
+      {/* Premium Background Aesthetic */}
       <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none"></div>
 
-      <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-3xl shadow-2xl p-8 z-10 relative">
+      <div className="w-full max-w-md bg-gray-900/80 backdrop-blur-xl border border-gray-800 rounded-3xl shadow-2xl p-8 z-10 relative">
         
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 bg-gray-800 rounded-xl mb-4 border border-gray-700">
-            <Zap className="text-yellow-400" size={32} />
+          <div className="inline-flex items-center justify-center p-3 bg-gray-800/50 rounded-2xl mb-4 border border-gray-700/50 shadow-inner">
+            <Zap className="text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" size={32} />
           </div>
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">
+          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-blue-400 to-blue-600 tracking-tight">
             GATE Command Center
           </h1>
-          <p className="text-gray-400 text-sm mt-2">Identify yourself to proceed.</p>
+          <p className="text-gray-400 text-sm mt-2 font-medium">Identify yourself to proceed.</p>
         </div>
 
         {/* Toggle Switch */}
-        <div className="flex p-1 bg-gray-950 rounded-lg mb-8 border border-gray-800">
+        <div className="flex p-1 bg-gray-950/50 rounded-xl mb-8 border border-gray-800/80 shadow-inner">
           <button
             onClick={() => setLoginType('user')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-md transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
               loginType === 'user' ? 'bg-gray-800 text-white shadow-md' : 'text-gray-500 hover:text-gray-300'
             }`}
           >
@@ -131,8 +130,8 @@ export default function Gateway() {
           </button>
           <button
             onClick={() => setLoginType('admin')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-md transition-all ${
-              loginType === 'admin' ? 'bg-red-900/30 text-red-400 border border-red-500/50 shadow-md' : 'text-gray-500 hover:text-gray-300'
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+              loginType === 'admin' ? 'bg-red-950/40 text-red-400 border border-red-500/30 shadow-md' : 'text-gray-500 hover:text-gray-300'
             }`}
           >
             <Shield size={16} /> Admin
@@ -143,41 +142,55 @@ export default function Gateway() {
         {loginType === 'user' && (
           <div className="animate-in fade-in zoom-in duration-300">
             {!otpSent ? (
-              <form onSubmit={handleSendOtp} className="space-y-4">
+              <form onSubmit={handleSendOtp} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3.5 text-gray-500" size={18} />
+                  <label className="block text-sm font-semibold text-gray-300 mb-1.5 ml-1">Email Address</label>
+                  <div className="relative group">
+                    <Mail className="absolute left-3.5 top-3.5 text-gray-500 group-focus-within:text-purple-400 transition-colors" size={20} />
                     <input 
                       type="email" 
                       required
                       value={userEmail}
                       onChange={(e) => setUserEmail(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 pl-10 pr-3 text-white outline-none focus:border-purple-500 transition-colors"
-                      placeholder="student@example.com"
+                      className="w-full bg-gray-950/50 border border-gray-700/50 rounded-xl py-3.5 pl-11 pr-4 text-white outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all shadow-inner"
+                      placeholder="candidate@example.com"
                     />
                   </div>
                 </div>
                 <button 
                   type="submit"
-                  disabled={isLoading}
-                  className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 rounded-lg hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all disabled:opacity-50"
+                  disabled={isLoading || !userEmail}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3.5 rounded-xl hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                 >
-                  {isLoading ? 'Requesting Access...' : 'Send Magic Link / OTP'}
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : (
+                    <>Request Access <ArrowRight size={18} /></>
+                  )}
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <form onSubmit={handleVerifyOtp} className="space-y-5">
+                
+                {/* Clear UX Instructions */}
+                <div className="bg-purple-900/10 border border-purple-500/20 rounded-xl p-4 text-center backdrop-blur-sm">
+                  <p className="text-purple-300 text-sm font-bold mb-1">Check Your Inbox</p>
+                  <p className="text-gray-400 text-xs leading-relaxed">
+                    We sent a link to <span className="text-white font-medium">{userEmail}</span>.<br/> 
+                    Click the Magic Link inside, <strong>OR</strong> type the code below.
+                  </p>
+                </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Enter 6-Digit OTP</label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-3.5 text-gray-500" size={18} />
+                  <label className="block text-sm font-semibold text-gray-300 mb-1.5 ml-1">Enter 6-Digit OTP</label>
+                  <div className="relative group">
+                    <Key className="absolute left-3.5 top-3.5 text-gray-500 group-focus-within:text-green-400 transition-colors" size={20} />
                     <input 
                       type="text" 
                       required
                       value={otpCode}
                       onChange={(e) => setOtpCode(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg py-3 pl-10 pr-3 text-white outline-none focus:border-purple-500 transition-colors tracking-widest text-center text-lg"
+                      className="w-full bg-gray-950/50 border border-gray-700/50 rounded-xl py-3.5 pl-11 pr-4 text-white outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all tracking-[0.5em] text-center text-xl font-bold shadow-inner"
                       placeholder="000000"
                       maxLength={6}
                     />
@@ -185,17 +198,21 @@ export default function Gateway() {
                 </div>
                 <button 
                   type="submit"
-                  disabled={isLoading}
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-3 rounded-lg hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all disabled:opacity-50"
+                  disabled={isLoading || otpCode.length < 6}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-3.5 rounded-xl hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                 >
-                  {isLoading ? 'Verifying...' : 'Verify & Enter'}
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : (
+                    'Verify & Enter'
+                  )}
                 </button>
                 <button 
                   type="button"
                   onClick={() => setOtpSent(false)}
-                  className="w-full text-sm text-gray-500 hover:text-white transition-colors mt-2"
+                  className="w-full text-xs font-medium text-gray-500 hover:text-white transition-colors py-2"
                 >
-                  Used wrong email? Go back.
+                  Used the wrong email? Go back
                 </button>
               </form>
             )}
@@ -204,32 +221,32 @@ export default function Gateway() {
 
         {/* --- ADMIN LOGIN VIEW --- */}
         {loginType === 'admin' && (
-          <form onSubmit={handleAdminLogin} className="animate-in fade-in zoom-in duration-300 space-y-4">
+          <form onSubmit={handleAdminLogin} className="animate-in fade-in zoom-in duration-300 space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Admin ID (Email)</label>
+              <label className="block text-sm font-semibold text-gray-300 mb-1.5 ml-1">Admin ID</label>
               <input 
                 type="email" 
                 required
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg p-3 text-white outline-none focus:border-red-500 transition-colors"
+                className="w-full bg-gray-950/50 border border-gray-700/50 rounded-xl p-3.5 text-white outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all shadow-inner"
                 placeholder="commander@system.com"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Master Password</label>
+              <label className="block text-sm font-semibold text-gray-300 mb-1.5 ml-1">Master Password</label>
               <input 
                 type="password" 
                 required
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg p-3 text-white outline-none focus:border-red-500 transition-colors"
+                className="w-full bg-gray-950/50 border border-gray-700/50 rounded-xl p-3.5 text-white outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all shadow-inner"
                 placeholder="••••••••"
               />
             </div>
             <button 
               type="submit"
-              className="w-full bg-gradient-to-r from-red-600 to-red-800 text-white font-bold py-3 rounded-lg hover:shadow-[0_0_20px_rgba(220,38,38,0.4)] transition-all mt-4"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-red-800 text-white font-bold py-3.5 rounded-xl hover:shadow-[0_0_20px_rgba(220,38,38,0.4)] transition-all active:scale-[0.98] mt-2"
             >
               Initiate Override
             </button>
@@ -240,4 +257,3 @@ export default function Gateway() {
     </div>
   );
 }
-
