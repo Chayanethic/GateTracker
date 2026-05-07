@@ -125,3 +125,44 @@ export const getUserProfile = async (userId: string) => {
 
   return data;
 };
+
+// --- THE DAILY STREAK ENGINE ---
+export const syncDailyXpAndStreak = async (userId: string, earnedXp: number) => {
+  const getISTDateString = () => {
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  
+  const todayStr = getISTDateString();
+
+  // 1. Check how much XP you already earned today
+  const { data: tracking } = await supabase
+    .from('daily_tracking')
+    .select('xp_earned')
+    .eq('user_id', userId)
+    .eq('date_str', todayStr)
+    .maybeSingle();
+
+  const currentDailyXp = tracking?.xp_earned || 0;
+  const newDailyXp = currentDailyXp + earnedXp;
+
+  // 2. Save the new Daily XP total
+  await supabase.from('daily_tracking').upsert({
+    user_id: userId,
+    date_str: todayStr,
+    xp_earned: newDailyXp
+  });
+
+  // 3. THE MAGIC LOGIC: Did they cross 200 XP just now?
+  if (currentDailyXp < 200 && newDailyXp >= 200) {
+    // Increment Streak!
+    const { data: profile } = await supabase.from('profiles').select('streak').eq('id', userId).single();
+    const newStreak = (profile?.streak || 0) + 1;
+    
+    await supabase.from('profiles').update({ streak: newStreak }).eq('id', userId);
+    
+    return { streakIncreased: true, newStreak, newDailyXp };
+  }
+
+  return { streakIncreased: false, newDailyXp };
+};

@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { 
-  BookOpen, Target, Activity, Zap, Flame, ArrowRight, 
-  CalendarPlus, CheckCircle2, ShieldCheck, AlertCircle, 
-  Clock, CheckSquare, ChevronDown, AlertTriangle, X, Edit3, Calendar
+  Target, Activity, Zap, Flame, ArrowRight, 
+  CalendarPlus, CheckCircle2, ShieldCheck, AlertTriangle, X, Edit3, Calendar,
+  Play, Link as LinkIcon, CheckSquare, Clock, ChevronDown, BookOpen, Layers, Sparkles, HelpCircle, Network, Save
 } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
@@ -27,6 +27,7 @@ const GATE_SYLLABUS = [
 
 export default function UserDashboard() {
   const [profile, setProfile] = useState({ xp: 0, streak: 0 });
+  const [todayXp, setTodayXp] = useState(0);
   const [isTodaySecured, setIsTodaySecured] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -35,12 +36,28 @@ export default function UserDashboard() {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [tempDate, setTempDate] = useState('');
   
+  // Daily Protocol State & Thumbnails
+  const [todayBlocks, setTodayBlocks] = useState<any[]>([]);
+  const [taskUrls, setTaskUrls] = useState<Record<string, string>>({});
+  const [globalProgress, setGlobalProgress] = useState<Set<string>>(new Set());
+  
   const [showSyllabusModal, setShowSyllabusModal] = useState(false);
   const [expandedSubjects, setExpandedSubjects] = useState<string[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const getISTNow = () => new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
   const getISTDateString = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+  const getYoutubeThumbnail = (url: string) => {
+    if (!url) return '';
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2].length === 11) {
+      return `https://img.youtube.com/vi/${match[2]}/maxresdefault.jpg`; 
+    }
+    return ''; 
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -52,7 +69,16 @@ export default function UserDashboard() {
 
       const { data: userProfileData } = await supabase.from('user_profiles').select('streak, syllabus_progress, target_exam_date').eq('user_id', session.user.id).single();
       const xpData = await getUserProfile(session.user.id);
-      const { data: trackingData } = await supabase.from('daily_tracking').select('completion_percent').eq('user_id', session.user.id).eq('date_str', todayStr).maybeSingle();
+      const { data: trackingData } = await supabase.from('daily_tracking').select('xp_earned').eq('user_id', session.user.id).eq('date_str', todayStr).maybeSingle();
+      const { data: progData } = await supabase.from('user_progress').select('material_id').eq('user_id', session.user.id);
+
+      const { data: goalData } = await supabase.from('study_goals')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .lte('start_date', todayStr)
+        .gte('target_date', todayStr)
+        .order('created_at', { ascending: false })
+        .limit(1).single();
 
       if (isMounted) {
         setProfile({ xp: xpData?.xp || 0, streak: userProfileData?.streak || 0 });
@@ -61,7 +87,27 @@ export default function UserDashboard() {
           setTargetDate(userProfileData.target_exam_date);
           setTempDate(userProfileData.target_exam_date);
         }
-        if (trackingData && trackingData.completion_percent === 100) setIsTodaySecured(true);
+        if (progData) setGlobalProgress(new Set(progData.map(p => p.material_id)));
+        
+        if (goalData && goalData.routine_data[todayStr]) {
+          const blocks = goalData.routine_data[todayStr];
+          setTodayBlocks(blocks);
+          
+          const matIds: string[] = [];
+          blocks.forEach((b:any) => b.tasks.forEach((t:any) => { if (t.originalId) matIds.push(t.originalId); }));
+          if (matIds.length > 0) {
+            const { data: mats } = await supabase.from('study_materials').select('id, url').in('id', matIds);
+            if (mats) {
+              const urlMap: Record<string, string> = {};
+              mats.forEach(m => { urlMap[m.id] = m.url; });
+              setTaskUrls(urlMap);
+            }
+          }
+        }
+        
+        const trueTodayXp = trackingData?.xp_earned || 0;
+        setTodayXp(trueTodayXp);
+        setIsTodaySecured(trueTodayXp >= 200); 
         setIsLoading(false);
       }
     };
@@ -88,282 +134,326 @@ export default function UserDashboard() {
     return { daysRemaining: days, isUrgent: days < 150 && remainingPercentage > 40 }; 
   }, [targetDate, remainingPercentage]);
 
+  const allTodayTasks = useMemo(() => {
+    const tasks: any[] = [];
+    todayBlocks.forEach(block => {
+      block.tasks.forEach((task: any) => {
+        tasks.push({ ...task, blockStart: block.start, blockEnd: block.end, blockColor: block.color || 'indigo' });
+      });
+    });
+    return tasks;
+  }, [todayBlocks]);
+
   const saveTargetDate = async () => {
     if (!tempDate) return;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    
-    setTargetDate(tempDate);
-    setIsEditingDate(false);
-    
+    setTargetDate(tempDate); setIsEditingDate(false);
     try {
-      const response = await fetch('/api/sync-target-date', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: session.user.id, targetDate: tempDate })
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Server Error: ${response.status}`);
-      }
+      const response = await fetch('/api/sync-target-date', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: session.user.id, targetDate: tempDate }) });
+      if (!response.ok) throw new Error("Server Error");
       toast.success('Timeline Locked', { style: { background: '#121214', color: '#10b981', border: '1px solid #059669', borderRadius: '12px' }});
-    } catch (error: any) {
-      toast.error(`Sync Failed: ${error.message}`);
-    }
+    } catch (error: any) { toast.error(`Sync Failed`); }
   };
 
-  const toggleTopic = async (topicId: string) => {
+  const toggleTopic = (topicId: string) => {
+    let newTopics = [...completedTopics];
+    if (newTopics.includes(topicId)) newTopics = newTopics.filter(id => id !== topicId); else newTopics.push(topicId); 
+    setCompletedTopics(newTopics);
+    setHasUnsavedChanges(true);
+  };
+
+  const syncSyllabusToServer = async () => {
+    if (!hasUnsavedChanges) {
+        setShowSyllabusModal(false);
+        return;
+    }
     setIsSyncing(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-
-    let newTopics = [...completedTopics];
-    if (newTopics.includes(topicId)) newTopics = newTopics.filter(id => id !== topicId); 
-    else newTopics.push(topicId); 
-    
-    setCompletedTopics(newTopics);
-    
     try {
-      const response = await fetch('/api/sync-syllabus', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: session.user.id, topics: newTopics })
-      });
-      if (!response.ok) throw new Error("Server transmission failed");
-    } catch (error) {
-      toast.error('Network Error: Changes may not have saved.');
+      const response = await fetch('/api/sync-syllabus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: session.user.id, topics: completedTopics }) });
+      if (!response.ok) throw new Error("Transmission failed");
+      toast.success('Matrix Synchronized', { style: { background: '#121214', color: '#10b981', border: '1px solid #059669', borderRadius: '12px' }});
+      setHasUnsavedChanges(false);
+      setShowSyllabusModal(false);
+    } catch (error) { 
+      toast.error('Network Error: Sync Failed.'); 
     }
     setIsSyncing(false);
   };
 
   const toggleSubjectExpand = (subject: string) => setExpandedSubjects(prev => prev.includes(subject) ? prev.filter(s => s !== subject) : [...prev, subject]);
 
-  if (isLoading) return <div className="min-h-screen bg-[#050505] flex items-center justify-center text-emerald-500 font-bold tracking-widest text-xs animate-pulse">Initializing Command Center...</div>;
-  const isHotStreak = profile.streak >= 3;
+  if (isLoading) return <div className="min-h-screen bg-[#050505] flex flex-col gap-4 items-center justify-center text-emerald-500 font-bold tracking-widest text-[10px] uppercase animate-pulse"><Activity size={32} className="animate-spin text-emerald-500"/>Compiling Command Center...</div>;
+  
+  const isOvercharged = todayXp > 200;
+  const xpPercent = Math.min(100, (todayXp / 200) * 100);
+  const ringOffset = 138.16 - (138.16 * xpPercent) / 100;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-emerald-500/30 overflow-hidden flex flex-col relative">
+    <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-emerald-500/30 overflow-hidden flex flex-col relative pb-10">
       
-      {/* ADVANCED AMBIENT GLOWS */}
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[150px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[150px] pointer-events-none"></div>
+      {/* AMBIENT GLOWS */}
+      <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[150px] pointer-events-none"></div>
+      <div className="absolute bottom-[20%] right-[-5%] w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[150px] pointer-events-none"></div>
 
-      <div className="p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto w-full h-full flex flex-col flex-1 animate-in fade-in zoom-in-[0.98] duration-700 ease-out relative z-10">
+      <div className="p-4 md:p-6 lg:p-8 max-w-[1500px] mx-auto w-full h-full flex flex-col flex-1 animate-in fade-in zoom-in-[0.98] duration-700 ease-out relative z-10">
         
         {/* ======================================================== */}
-        {/* PREMIUM HEADER */}
+        {/* ALL-IN-ONE COMPACT TOP-RIGHT WIDGET ARRAY */}
         {/* ======================================================== */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-6 mb-8 pb-6 border-b border-white/5 shrink-0">
-          <div className="w-full sm:w-auto text-center sm:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-widest mb-3 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
-              <span className="relative flex h-2 w-2">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-8 shrink-0 w-full border-b border-zinc-900/80 pb-6">
+          
+          <div className="hidden lg:block w-full lg:w-auto">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-300 text-[9px] font-bold uppercase tracking-widest shadow-inner backdrop-blur-xl">
+              <span className="relative flex h-1.5 w-1.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
               </span>
               System Online
             </div>
-            <h1 className="text-3xl md:text-5xl font-black bg-gradient-to-br from-zinc-100 to-zinc-500 bg-clip-text text-transparent tracking-tight">
-              Command Center
-            </h1>
           </div>
           
-          <div className="flex items-center gap-3">
-            {/* GLASSMORPHISM STREAK WIDGET */}
-            <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl backdrop-blur-xl transition-all duration-500 ${isHotStreak ? 'bg-orange-500/10 ring-1 ring-orange-500/30 shadow-[0_0_20px_rgba(249,115,22,0.15)]' : 'bg-zinc-900/50 ring-1 ring-white/10 shadow-lg'}`}>
-              <div className={`p-1.5 rounded-xl ${isHotStreak ? 'bg-orange-500/20' : 'bg-white/5'}`}>
-                <Flame size={16} className={isHotStreak ? 'text-orange-500 animate-pulse' : 'text-zinc-400'} />
+          {/* HORIZONTAL SCROLLABLE BAR FOR WIDGETS */}
+          <div className="flex items-center justify-start lg:justify-end gap-3 w-full lg:w-auto overflow-x-auto custom-scrollbar pb-2 lg:pb-0 px-1">
+            
+            {/* TOTAL XP WALLET */}
+            <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-zinc-900/40 ring-1 ring-zinc-800 shadow-sm shrink-0 whitespace-nowrap">
+              <div className="p-1.5 rounded-lg bg-indigo-500/10 ring-1 ring-indigo-500/20"><Zap size={14} className="text-indigo-400" /></div>
+              <div>
+                <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold mb-0.5">Wallet</div>
+                <div className="text-xs font-black text-zinc-100 leading-none">{profile.xp.toLocaleString()} XP</div>
+              </div>
+            </div>
+
+            {/* DAILY NEURAL CHARGE / STREAK */}
+            <div className={`flex items-center gap-2.5 px-4 py-2 rounded-xl transition-all duration-700 shrink-0 whitespace-nowrap ${isOvercharged ? 'bg-orange-500/10 ring-1 ring-orange-500/40 shadow-[0_0_20px_rgba(249,115,22,0.2)]' : isTodaySecured ? 'bg-orange-500/5 ring-1 ring-orange-500/20 shadow-sm' : 'bg-zinc-900/40 ring-1 ring-zinc-800 shadow-sm'}`}>
+              <div className="relative w-8 h-8 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 50 50">
+                  <circle cx="25" cy="25" r="22" stroke="currentColor" strokeWidth="3" fill="transparent" className="text-zinc-900" />
+                  <circle cx="25" cy="25" r="22" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray="138.16" strokeDashoffset={ringOffset} className={`transition-all duration-1000 ease-out ${isOvercharged ? 'text-orange-400' : isTodaySecured ? 'text-orange-500' : 'text-zinc-600'}`} strokeLinecap="round" />
+                </svg>
+                <div className={`absolute inset-0 flex items-center justify-center ${isOvercharged ? 'animate-bounce' : isTodaySecured ? 'animate-pulse' : ''}`}>
+                  <Flame size={12} className={isOvercharged ? 'text-white' : isTodaySecured ? 'text-orange-500' : 'text-zinc-700'} />
+                </div>
               </div>
               <div>
-                <div className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold mb-0.5">Active Streak</div>
-                <div className="text-sm font-extrabold text-zinc-100 leading-none flex items-center gap-1.5">
-                  {profile.streak} Days {isTodaySecured && <ShieldCheck size={14} className="text-emerald-500"/>}
+                <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5 flex items-center gap-1">
+                  {isOvercharged ? <span className="text-orange-400">OVERCHARGED</span> : isTodaySecured ? <span className="text-orange-500">SECURED</span> : <span className="text-zinc-500">Goal: 200 XP</span>}
+                </div>
+                <div className="text-xs font-black text-zinc-100 leading-none flex items-center gap-1.5">
+                  <span className={isOvercharged ? 'text-orange-300' : ''}>{todayXp}</span>
+                  <div className="w-1 h-1 rounded-full bg-zinc-800 mx-0.5"></div>
+                  <span className={isTodaySecured ? 'text-orange-400' : 'text-zinc-500'}>{profile.streak} Days</span>
                 </div>
               </div>
             </div>
+
+            {/* TARGET / TIMELINE / SYLLABUS MATRIX BUTTON */}
+            {targetDate ? (
+              <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                <button onClick={() => setShowSyllabusModal(true)} className="flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-900/40 ring-1 ring-zinc-800 hover:ring-emerald-500/40 hover:bg-emerald-500/5 transition-all duration-300 shadow-sm group">
+                  <div className="text-left">
+                    <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold mb-0.5 group-hover:text-emerald-500/70 transition-colors flex items-center gap-1.5">
+                      Syllabus <div className="w-1 h-1 rounded-full bg-zinc-700"></div> {totalPercentage}% Done
+                    </div>
+                    <div className="text-xs font-black text-zinc-100 leading-none flex items-center gap-1.5">
+                      <span className={isUrgent ? 'text-red-400' : 'text-emerald-400'}>{daysRemaining} Days Left</span>
+                      <span className="text-zinc-600 text-[9px] font-mono">({new Date(targetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})</span>
+                    </div>
+                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+                     <Target size={14}/>
+                  </div>
+                </button>
+                <button onClick={() => setIsEditingDate(true)} className="p-2 bg-zinc-900/40 ring-1 ring-zinc-800 hover:bg-zinc-800 rounded-xl text-zinc-500 hover:text-zinc-300 transition-colors">
+                  <Edit3 size={14}/>
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setIsEditingDate(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/30 text-emerald-400 font-black text-[9px] uppercase tracking-widest transition-all hover:bg-emerald-500/20 shrink-0 whitespace-nowrap">
+                <Target size={12}/> Initialize Matrix Target
+              </button>
+            )}
             
-            {/* GLASSMORPHISM XP WIDGET */}
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-indigo-500/10 backdrop-blur-xl ring-1 ring-indigo-500/20 shadow-[0_0_20px_rgba(99,102,241,0.1)]">
-              <div className="p-1.5 rounded-xl bg-indigo-500/20">
-                <Zap size={16} className="text-indigo-400" />
+            {/* INLINE DATE EDITOR (Only visible when editing) */}
+            {isEditingDate && (
+              <div className="flex items-center gap-1.5 bg-[#0a0a0b] px-2 py-1.5 rounded-xl ring-1 ring-emerald-500/50 shadow-xl animate-in fade-in zoom-in shrink-0 whitespace-nowrap">
+                <input type="date" value={tempDate} onChange={e => setTempDate(e.target.value)} className="bg-transparent text-[10px] text-zinc-200 font-bold outline-none px-2 w-28" />
+                <button onClick={saveTargetDate} className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 p-1.5 rounded-md transition-colors"><CheckCircle2 size={12}/></button>
+                <button onClick={() => setIsEditingDate(false)} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 p-1.5 rounded-md transition-colors"><X size={12}/></button>
               </div>
-              <div>
-                <div className="text-[9px] uppercase tracking-widest text-indigo-400/70 font-bold mb-0.5">Focus Wallet</div>
-                <div className="text-sm font-extrabold text-zinc-100 leading-none">{profile.xp.toLocaleString()} XP</div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
         {/* ======================================================== */}
-        {/* GRID LAYOUT */}
+        {/* HERO SECTION: CINEMATIC TODAY'S PROTOCOL */}
         {/* ======================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+        <div className="mb-10 w-full relative z-20 flex-1">
           
-          {/* LEFT: THE REALITY CHECK ENGINE */}
-          <div className="lg:col-span-5 xl:col-span-4 h-full flex flex-col">
-            <div className={`flex-1 rounded-[2rem] p-8 flex flex-col items-center justify-center relative overflow-hidden transition-all duration-700 border ${isUrgent ? 'bg-red-950/20 backdrop-blur-2xl ring-1 ring-red-500/30 shadow-[0_0_50px_rgba(239,68,68,0.15)]' : 'bg-zinc-900/40 backdrop-blur-2xl ring-1 ring-white/10 shadow-2xl'}`}>
-              
-              {isUrgent && <div className="absolute inset-0 bg-red-500/5 animate-pulse pointer-events-none"></div>}
-
-              {/* Editable Target Date */}
-              <div className="absolute top-5 right-5 z-20">
-                {isEditingDate ? (
-                  <div className="flex items-center gap-1.5 bg-zinc-950/80 backdrop-blur-md p-1.5 rounded-xl ring-1 ring-white/20 shadow-xl animate-in slide-in-from-top-2">
-                    <input type="date" value={tempDate} onChange={e => setTempDate(e.target.value)} className="bg-transparent text-xs text-zinc-200 font-bold outline-none px-2" />
-                    <button onClick={saveTargetDate} className="bg-emerald-500/20 text-emerald-400 p-1.5 rounded-lg hover:bg-emerald-500 hover:text-zinc-900 transition-colors"><CheckCircle2 size={14}/></button>
-                    <button onClick={() => setIsEditingDate(false)} className="bg-white/5 text-zinc-400 p-1.5 rounded-lg hover:bg-white/10 transition-colors"><X size={14}/></button>
-                  </div>
-                ) : (
-                  <button onClick={() => setIsEditingDate(true)} className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-zinc-100 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg ring-1 ring-white/5 transition-all">
-                    <Calendar size={12}/> {targetDate ? new Date(targetDate).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : 'Set Target'} <Edit3 size={10} className="ml-1 opacity-50"/>
-                  </button>
-                )}
+          {allTodayTasks.length > 0 ? (
+            <>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shadow-inner">
+                  <Play size={14} fill="currentColor" className="text-emerald-400 ml-0.5" /> 
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-zinc-100 tracking-tight">Today's Protocol</h2>
               </div>
 
-              {!targetDate ? (
-                <div className="text-center space-y-5">
-                  <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto ring-1 ring-white/10 shadow-inner">
-                    <Target size={32} className="text-zinc-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-zinc-200 mb-2">Initialize Engine</h2>
-                    <p className="text-sm text-zinc-500 max-w-[250px] mx-auto leading-relaxed">Lock in your exam date to activate the countdown matrix.</p>
-                  </div>
-                  <button onClick={() => setIsEditingDate(true)} className="bg-emerald-500 text-zinc-950 font-extrabold text-sm px-8 py-3 rounded-xl hover:scale-105 transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]">Activate</button>
-                </div>
-              ) : (
-                <>
-                  {/* Glowing Circular Progress */}
-                  <div className="relative w-52 h-52 sm:w-64 sm:h-64 flex items-center justify-center mb-8 z-10 group">
-                    <svg className="w-full h-full transform -rotate-90 drop-shadow-2xl" viewBox="0 0 100 100">
-                      <circle cx="50" cy="50" r="44" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-zinc-800" />
-                      <circle cx="50" cy="50" r="44" stroke="currentColor" strokeWidth="6" fill="transparent" strokeDasharray="276.46" strokeDashoffset={276.46 - (276.46 * totalPercentage) / 100} className={`transition-all duration-1000 ease-out drop-shadow-[0_0_8px_currentColor] ${isUrgent ? 'text-red-500' : 'text-emerald-500'}`} strokeLinecap="round" />
-                    </svg>
-                    
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                      <span className={`text-6xl sm:text-7xl font-black tracking-tighter ${isUrgent ? 'text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.5)]' : 'text-zinc-100'}`}>
-                        {daysRemaining}
-                      </span>
-                      <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-zinc-500 mt-2">Days Left</span>
-                    </div>
-                  </div>
+              <div className="flex gap-5 overflow-x-auto pb-6 custom-scrollbar snap-x snap-mandatory">
+                {allTodayTasks.map((task: any, idx: number) => {
+                  const targetId = task.originalId || task.id;
+                  const isDone = globalProgress.has(targetId);
+                  const thumbUrl = getYoutubeThumbnail(taskUrls[targetId]);
 
-                  <div className="w-full max-w-[300px] z-10">
-                    <div className="flex justify-between items-end mb-6 px-4">
-                      <div className="text-left">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Remaining</div>
-                        <div className={`text-2xl font-black flex items-baseline gap-1 ${isUrgent ? 'text-red-400' : 'text-zinc-300'}`}>
-                          {remainingPercentage}% <span className="text-[10px] font-semibold text-zinc-600 tracking-normal mb-1">Syllabus</span>
+                  return (
+                    <div key={idx} className={`snap-center shrink-0 w-[280px] sm:w-[320px] flex flex-col gap-3 group transition-all duration-300 ${isDone ? 'opacity-60' : 'hover:-translate-y-1'}`}>
+                      
+                      {/* Full YouTube-Style Thumbnail */}
+                      <Link href={targetId && !isDone ? `/resources/${targetId}` : '#'} className={`relative w-full aspect-video rounded-xl overflow-hidden ring-1 transition-all block ${isDone ? 'ring-emerald-500/50 cursor-default' : 'ring-zinc-800 group-hover:ring-indigo-500/50 shadow-lg group-hover:shadow-[0_15px_30px_rgba(99,102,241,0.15)]'}`}>
+                        {thumbUrl ? (
+                           <img src={thumbUrl} alt="Thumbnail" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                        ) : (
+                           <div className="w-full h-full flex items-center justify-center bg-zinc-900"><BookOpen size={24} className="text-zinc-700"/></div>
+                        )}
+                        
+                        {/* Duration Badge / Done Badge */}
+                        <div className="absolute bottom-2 right-2 z-10">
+                           {isDone ? (
+                              <div className="bg-emerald-500/90 text-zinc-950 px-2 py-0.5 rounded text-[10px] font-black backdrop-blur-md shadow-lg flex items-center gap-1">
+                                <CheckCircle2 size={10}/> Done
+                              </div>
+                           ) : (
+                              <div className="bg-black/80 text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-bold backdrop-blur-md">
+                                {Math.round(task.durationMins || task.minsAllocated || 0)}m
+                              </div>
+                           )}
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/60 mb-1">Completed</div>
-                        <div className="text-2xl font-black text-emerald-400 flex items-baseline justify-end gap-1">
-                          {totalPercentage}% <span className="text-[10px] font-semibold text-emerald-500/40 tracking-normal mb-1">Done</span>
+
+                        {/* Play Overlay */}
+                        {!isDone && (
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px]">
+                             <Play size={40} className="text-white drop-shadow-2xl" fill="currentColor"/>
+                          </div>
+                        )}
+                      </Link>
+
+                      {/* Clean Text Below Thumbnail */}
+                      <div className="flex items-start gap-3 px-1">
+                        <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center ring-1 ${isDone ? 'bg-emerald-500/10 ring-emerald-500/30' : `bg-zinc-900 ring-zinc-800`}`}>
+                           <span className={`text-[10px] font-black ${isDone ? 'text-emerald-500' : `text-zinc-400`}`}>{idx + 1}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`text-sm font-bold truncate leading-tight ${isDone ? 'text-zinc-600 line-through' : 'text-zinc-100 group-hover:text-indigo-400 transition-colors'}`}>{task.title}</h3>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="text-[10px] font-medium text-zinc-500 truncate">{task.subject}</span>
+                            <span className="text-zinc-800 text-[10px]">•</span>
+                            <span className={`text-[9px] font-bold uppercase tracking-widest text-${task.blockColor}-400`}>{task.blockStart}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                    
-                    <button 
-                      onClick={() => setShowSyllabusModal(true)}
-                      className={`w-full py-4 rounded-2xl font-extrabold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${isUrgent ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_30px_rgba(239,68,68,0.3)]' : 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-[0_0_30px_rgba(16,185,129,0.2)]'}`}
-                    >
-                      <CheckSquare size={16} /> Open Syllabus Matrix
-                    </button>
-                    
-                    {isUrgent && (
-                      <div className="mt-5 text-[10px] font-bold uppercase tracking-widest text-red-400/90 flex items-center justify-center gap-1.5 animate-pulse bg-red-500/10 py-2 rounded-xl ring-1 ring-red-500/20">
-                        <AlertTriangle size={12} /> Critical Deficit Detected
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT: ACTION GRID */}
-          <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
-            
-            {/* Primary Action Card */}
-            <Link href="/resources" className="flex-1 group relative overflow-hidden bg-zinc-900/40 backdrop-blur-xl ring-1 ring-white/10 rounded-[2rem] p-8 sm:p-10 transition-all duration-500 hover:ring-indigo-500/50 hover:bg-zinc-900/60 shadow-2xl flex flex-col justify-center hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] -mr-20 -mt-20 pointer-events-none transition-opacity duration-700 opacity-50 group-hover:opacity-100"></div>
-              
-              <div className="relative z-10 flex flex-col md:flex-row md:items-center gap-8">
-                <div className="w-20 h-20 shrink-0 bg-indigo-500/10 ring-1 ring-indigo-500/20 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-700 ease-out">
-                  <BookOpen size={36} className="text-indigo-400" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-2xl sm:text-3xl font-black text-zinc-100 mb-3 tracking-tight group-hover:text-indigo-50 transition-colors">Curriculum Hub</h2>
-                  <p className="text-sm text-zinc-400 font-medium leading-relaxed max-w-md">Access your structured syllabus, track modular completion, and enter distraction-free Focus Rooms.</p>
-                </div>
-                <div className="w-12 h-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center group-hover:bg-indigo-500 group-hover:ring-indigo-400 group-hover:text-white text-zinc-500 transition-all duration-300 shrink-0">
-                  <ArrowRight size={20} className="group-hover:translate-x-0.5 transition-transform" />
-                </div>
+                  )
+                })}
               </div>
-            </Link>
-
-            {/* Secondary Action Split */}
-            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
+            </>
+          ) : (
+            // CLEAN ONBOARDING BANNER
+            <div className="bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
+              <div className="w-16 h-16 bg-zinc-950 rounded-2xl flex items-center justify-center mb-5 ring-1 ring-zinc-800 rotate-3">
+                <CalendarPlus size={28} className="text-zinc-600" />
+              </div>
+              <h3 className="text-xl font-black text-zinc-300 mb-2 tracking-tight group-hover:text-zinc-100 transition-colors">No Protocol Set for Today</h3>
+              <p className="text-xs text-zinc-500 font-medium mb-8 max-w-sm leading-relaxed">Your timeline is empty. Deploy the AI Matrix Engine to auto-balance your workload, or construct a timeline manually.</p>
               
-              <Link href="/daily-goal" className="group bg-zinc-900/40 backdrop-blur-xl ring-1 ring-white/10 rounded-[2rem] p-6 sm:p-8 hover:ring-emerald-500/50 transition-all duration-500 shadow-xl hover:-translate-y-1 flex flex-col relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-[60px] pointer-events-none transition-opacity duration-700 group-hover:opacity-100 opacity-0"></div>
-                <div className="flex justify-between items-start mb-6 relative z-10">
-                  <div className="w-14 h-14 bg-emerald-500/10 ring-1 ring-emerald-500/20 rounded-[1rem] flex items-center justify-center shadow-inner group-hover:rotate-12 transition-transform duration-500 ease-out">
-                    <Target size={24} className="text-emerald-400" />
-                  </div>
-                  {isTodaySecured && <CheckCircle2 className="text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" size={20}/>}
-                </div>
-                <h3 className="text-xl font-black text-zinc-100 mb-2 relative z-10">Daily HUD</h3>
-                <p className="text-xs text-zinc-500 font-medium leading-relaxed mb-6 flex-1 relative z-10">Execute protocol & log progression.</p>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 flex items-center gap-1.5 relative z-10">
-                  Enter HUD <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-                </div>
-              </Link>
+              <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
+                <Link href="/auto-planner" className="flex-1 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-zinc-950 px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ring-1 ring-indigo-500/30 transition-all flex items-center justify-center gap-2 hover:scale-105 active:scale-95 shadow-sm">
+                  <Zap size={14}/> Deploy Auto-AI
+                </Link>
+                <Link href="/create-goal" className="flex-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ring-1 ring-zinc-800 transition-all flex items-center justify-center gap-2 shadow-inner">
+                  <Target size={14}/> Manual Build
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
 
-              <Link href="/create-goal" className="group bg-zinc-900/40 backdrop-blur-xl ring-1 ring-white/10 rounded-[2rem] p-6 sm:p-8 hover:ring-rose-500/50 transition-all duration-500 shadow-xl hover:-translate-y-1 flex flex-col relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-rose-500/5 rounded-full blur-[60px] pointer-events-none transition-opacity duration-700 group-hover:opacity-100 opacity-0"></div>
-                <div className="w-14 h-14 bg-rose-500/10 ring-1 ring-rose-500/20 rounded-[1rem] flex items-center justify-center mb-6 shadow-inner group-hover:-rotate-12 transition-transform duration-500 ease-out relative z-10">
-                  <CalendarPlus size={24} className="text-rose-400" />
-                </div>
-                <h3 className="text-xl font-black text-zinc-100 mb-2 relative z-10">Matrix Planner</h3>
-                <p className="text-xs text-zinc-500 font-medium leading-relaxed mb-6 flex-1 relative z-10">Architect capacity & deploy schedules.</p>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-rose-400 flex items-center gap-1.5 relative z-10">
-                  Build Routine <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-                </div>
-              </Link>
+        {/* ======================================================== */}
+        {/* LOWER SECTION: SPLIT MATRIX PLANNERS */}
+        {/* ======================================================== */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10 w-full xl:w-2/3 mx-auto mt-auto">
+          
+          {/* Card 1: AI Auto Planner */}
+          <Link href="/auto-planner" className="group bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-6 sm:p-8 transition-all duration-500 hover:ring-indigo-500/40 hover:-translate-y-1 relative overflow-hidden flex flex-col">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+            
+            <div className="flex justify-between items-start mb-4 relative z-10">
+               <div className="w-12 h-12 bg-indigo-500/10 ring-1 ring-indigo-500/20 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500 ease-out">
+                 <Network size={20} className="text-indigo-400" />
+               </div>
+               <div className="bg-zinc-950/80 ring-1 ring-zinc-800 px-2.5 py-1 rounded text-[8px] font-bold uppercase tracking-widest text-zinc-500">Automated</div>
             </div>
             
-          </div>
+            <h3 className="text-lg font-black text-zinc-100 mb-2 relative z-10 tracking-tight group-hover:text-indigo-100 transition-colors">Auto-AI Engine</h3>
+            <p className="text-[11px] text-zinc-500 font-medium leading-relaxed mb-6 flex-1 relative z-10">
+              The engine mathematically distributes your syllabus evenly across remaining days. Best for hands-off scheduling.
+            </p>
+            
+            <div className="text-[9px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-1.5 relative z-10">
+              Initialize Engine <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          {/* Card 2: Manual Architect */}
+          <Link href="/create-goal" className="group bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-6 sm:p-8 transition-all duration-500 hover:ring-zinc-600 hover:-translate-y-1 relative overflow-hidden flex flex-col">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-zinc-700/5 rounded-full blur-[40px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+            
+            <div className="flex justify-between items-start mb-4 relative z-10">
+               <div className="w-12 h-12 bg-zinc-800/50 ring-1 ring-zinc-700 rounded-xl flex items-center justify-center shadow-inner group-hover:-rotate-12 transition-transform duration-500 ease-out">
+                 <CalendarPlus size={20} className="text-zinc-400" />
+               </div>
+               <div className="bg-zinc-950/80 ring-1 ring-zinc-800 px-2.5 py-1 rounded text-[8px] font-bold uppercase tracking-widest text-zinc-500">Manual</div>
+            </div>
+            
+            <h3 className="text-lg font-black text-zinc-100 mb-2 relative z-10 tracking-tight group-hover:text-zinc-100 transition-colors">Manual Architect</h3>
+            <p className="text-[11px] text-zinc-500 font-medium leading-relaxed mb-6 flex-1 relative z-10">
+              Drag and drop specific topics into custom time blocks. Best for highly specific, day-by-day micromanagement.
+            </p>
+            
+            <div className="text-[9px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 relative z-10">
+              Construct Build <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* PREMIUM NATIVE-STYLE MODAL */}
+      {/* PREMIUM OPTIMIZED MODAL (SYLLABUS) */}
       {/* ======================================================== */}
       {showSyllabusModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-[#050505]/80 backdrop-blur-lg animate-in fade-in duration-300">
-          <div className="bg-zinc-950/80 backdrop-blur-2xl ring-1 ring-white/10 rounded-[2rem] w-full max-w-[850px] max-h-[90vh] flex flex-col shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-[#050505]/80 backdrop-blur-lg animate-in fade-in duration-200">
+          <div className="bg-[#0a0a0b] ring-1 ring-zinc-800 rounded-[2rem] w-full max-w-[850px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             
-            {/* Modal Header */}
-            <div className="bg-white/[0.02] border-b border-white/5 p-6 sm:p-8 shrink-0 relative z-20 flex justify-between items-center">
+            <div className="bg-zinc-900/30 border-b border-zinc-800 p-6 sm:p-8 shrink-0 relative z-20 flex justify-between items-center">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-emerald-500/10 ring-1 ring-emerald-500/20 rounded-xl shadow-inner"><CheckSquare size={24} className="text-emerald-500"/></div>
                 <div>
                   <h2 className="text-xl sm:text-2xl font-black text-zinc-100 tracking-tight leading-none mb-1.5">GATE ECE Matrix</h2>
-                  <div className="flex items-center gap-3 text-xs font-medium text-zinc-500">
-                    <span className="flex items-center gap-1"><Clock size={12} className="text-emerald-500/70"/> {daysRemaining} Days Left</span>
+                  <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                    <span className="flex items-center gap-1"><Clock size={10} className="text-emerald-500/70"/> {daysRemaining} Days</span>
                     <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
                     <span className="text-emerald-400/80">{totalPercentage}% Mastered</span>
                   </div>
                 </div>
               </div>
-              <button onClick={() => setShowSyllabusModal(false)} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors"><X size={18}/></button>
+              <button onClick={() => setShowSyllabusModal(false)} className="p-2.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-colors ring-1 ring-zinc-800"><X size={18}/></button>
             </div>
 
-            {/* Accordion Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-8">
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {GATE_SYLLABUS.map((subjectData, sIdx) => {
                   const isExpanded = expandedSubjects.includes(subjectData.subject);
                   const subTotalWeight = subjectData.topics.reduce((acc, t) => acc + t.weight, 0);
@@ -372,36 +462,36 @@ export default function UserDashboard() {
                   const isSubComplete = subPercent === 100;
 
                   return (
-                    <div key={sIdx} className={`rounded-2xl overflow-hidden transition-all duration-500 ring-1 ${isExpanded ? 'ring-white/10 bg-white/[0.02] shadow-xl' : 'ring-white/5 bg-transparent hover:bg-white/[0.02]'}`}>
+                    <div key={sIdx} className={`rounded-2xl overflow-hidden transition-all duration-300 ring-1 ${isExpanded ? 'ring-zinc-700 bg-zinc-900/20 shadow-lg' : 'ring-zinc-800/80 bg-transparent hover:bg-zinc-900/40'}`}>
                       
-                      <button onClick={() => toggleSubjectExpand(subjectData.subject)} className="w-full p-4 sm:p-5 flex items-center justify-between transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className={`p-1.5 rounded-lg transition-transform duration-300 ${isExpanded ? 'bg-white/10 rotate-180' : 'bg-transparent'}`}>
-                            <ChevronDown size={16} className={isExpanded ? 'text-zinc-200' : 'text-zinc-500'}/>
+                      <button onClick={() => toggleSubjectExpand(subjectData.subject)} className="w-full p-4 flex items-center justify-between transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-1 rounded-lg transition-transform duration-300 ${isExpanded ? 'bg-zinc-800 rotate-180' : 'bg-transparent'}`}>
+                            <ChevronDown size={14} className={isExpanded ? 'text-zinc-200' : 'text-zinc-500'}/>
                           </div>
-                          <h3 className={`text-sm sm:text-base font-bold tracking-tight text-left ${isSubComplete ? 'text-emerald-400' : 'text-zinc-200'}`}>
+                          <h3 className={`text-xs sm:text-sm font-bold tracking-tight text-left ${isSubComplete ? 'text-emerald-400' : 'text-zinc-200'}`}>
                             {subjectData.subject}
                           </h3>
                         </div>
                         <div className="flex items-center gap-3">
-                          {isSubComplete && <CheckCircle2 size={16} className="text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />}
-                          <div className="text-[11px] font-bold text-zinc-400 bg-black/40 px-2.5 py-1 rounded-md ring-1 ring-white/5">{subPercent}%</div>
+                          {isSubComplete && <CheckCircle2 size={14} className="text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />}
+                          <div className="text-[9px] font-bold text-zinc-400 bg-zinc-950 px-2 py-1 rounded-md ring-1 ring-zinc-800">{subPercent}%</div>
                         </div>
                       </button>
 
                       {isExpanded && (
-                        <div className="p-3 sm:p-5 pt-0 space-y-1.5 animate-in slide-in-from-top-2 duration-300 ease-out">
+                        <div className="p-2 sm:p-4 pt-0 space-y-1 animate-in slide-in-from-top-2 duration-200 ease-out">
                           {subjectData.topics.map(topic => {
                             const isDone = completedTopics.includes(topic.id);
                             return (
-                              <div key={topic.id} onClick={() => !isSyncing && toggleTopic(topic.id)} className={`flex items-center justify-between p-3.5 rounded-xl cursor-pointer transition-all duration-300 group ring-1 ${isDone ? 'bg-emerald-500/10 ring-emerald-500/30' : 'bg-black/20 ring-white/5 hover:ring-white/10 hover:bg-white/5'}`}>
-                                <div className="flex items-center gap-4 min-w-0 pr-4">
-                                  <div className={`w-5 h-5 shrink-0 rounded-[4px] flex items-center justify-center ring-1 transition-all duration-300 ${isDone ? 'bg-emerald-500 ring-emerald-500 text-zinc-950 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'ring-white/20 bg-black/50 group-hover:ring-emerald-500/50'}`}>
-                                    {isDone && <CheckSquare size={12} strokeWidth={3} />}
+                              <div key={topic.id} onClick={() => toggleTopic(topic.id)} className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 group ring-1 ${isDone ? 'bg-emerald-500/10 ring-emerald-500/30' : 'bg-zinc-950 ring-zinc-800 hover:ring-zinc-600 hover:bg-zinc-900'}`}>
+                                <div className="flex items-center gap-3 min-w-0 pr-4">
+                                  <div className={`w-4 h-4 shrink-0 rounded flex items-center justify-center ring-1 transition-all duration-200 ${isDone ? 'bg-emerald-500 ring-emerald-500 text-zinc-950 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'ring-zinc-700 bg-black group-hover:ring-zinc-500'}`}>
+                                    {isDone && <CheckSquare size={10} strokeWidth={3} />}
                                   </div>
-                                  <span className={`text-sm font-medium truncate transition-colors ${isDone ? 'text-emerald-500/70 line-through' : 'text-zinc-300 group-hover:text-zinc-100'}`}>{topic.name}</span>
+                                  <span className={`text-xs font-medium truncate transition-colors ${isDone ? 'text-emerald-500/70 line-through' : 'text-zinc-300 group-hover:text-white'}`}>{topic.name}</span>
                                 </div>
-                                <span className={`text-[10px] font-mono shrink-0 ${isDone ? 'text-emerald-500/40' : 'text-zinc-600'}`}>{topic.weight}%</span>
+                                <span className={`text-[9px] font-mono shrink-0 ${isDone ? 'text-emerald-500/40' : 'text-zinc-600'}`}>{topic.weight}%</span>
                               </div>
                             );
                           })}
@@ -413,12 +503,22 @@ export default function UserDashboard() {
               </div>
             </div>
             
-            {/* Modal Footer */}
-            <div className="bg-white/[0.02] border-t border-white/5 p-4 shrink-0 flex justify-between items-center relative z-20">
-               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                 {isSyncing ? <Activity size={12} className="animate-spin text-emerald-500"/> : <ShieldCheck size={12} className="text-emerald-500"/>}
-                 {isSyncing ? 'Transmitting to Server...' : 'Matrix Synchronized'}
-               </span>
+            {/* OPTIMIZED BATCH SAVE BUTTON */}
+            <div className="bg-zinc-900/30 border-t border-zinc-800 p-4 shrink-0 flex justify-between items-center relative z-20">
+               {hasUnsavedChanges ? (
+                 <>
+                   <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
+                     <AlertTriangle size={12}/> Unsaved Changes
+                   </span>
+                   <button onClick={syncSyllabusToServer} disabled={isSyncing} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] uppercase tracking-widest px-6 py-2.5 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center gap-2 disabled:opacity-50">
+                     {isSyncing ? <Activity size={14} className="animate-spin"/> : <Save size={14}/>} {isSyncing ? 'Syncing...' : 'Sync to Server'}
+                   </button>
+                 </>
+               ) : (
+                 <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                   <ShieldCheck size={12} className="text-emerald-500"/> Matrix Synchronized
+                 </span>
+               )}
             </div>
           </div>
         </div>
