@@ -58,7 +58,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
             <Hexagon size={20} className="text-emerald-400 relative z-10" />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-black text-zinc-100 tracking-tight leading-tight">Ozone Platform</span>
+            <span className="text-sm font-black text-zinc-100 tracking-tight leading-tight">Target Gate Platform</span>
             <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Neural Engine</span>
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shadow-inner">
             <Hexagon size={16} className="text-emerald-400" />
           </div>
-          <span className="text-sm font-black text-zinc-100 tracking-tight">Ozone</span>
+          <span className="text-sm font-black text-zinc-100 tracking-tight">Target Gate</span>
         </div>
         <button onClick={handleLogout} className="p-2 text-zinc-500 hover:text-red-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors">
           <LogOut size={16} />
