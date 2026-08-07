@@ -7,7 +7,7 @@ import {
   Wand2, Play, FileText, Database, Plus, ChevronDown, ChevronRight, 
   Activity, CheckCircle2, Image as ImageIcon, Folder, FolderOpen, X, 
   LayoutGrid, Link as LinkIcon, Clock, ListVideo, Trash2, Edit2, Save,
-  Scissors
+  Scissors, GripVertical
 } from 'lucide-react';
 
 type ResourceNode = any;
@@ -45,6 +45,10 @@ export default function AdvancedResourceManager() {
   // EDITING STATE
   const [editingNode, setEditingNode] = useState<{ id: string, type: 'subject' | 'topic' | 'video', oldVal: string } | null>(null);
   const [editValue, setEditValue] = useState('');
+
+  // DRAG & DROP STATE
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
   useEffect(() => { fetchSystemData(); }, []);
 
@@ -163,6 +167,50 @@ export default function AdvancedResourceManager() {
     } catch (err) {
       toast.error('Delete Failed', { id: toastId });
     }
+  };
+
+  // --- DRAG & DROP REORDER ---
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedItemId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnter = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (id !== draggedItemId) setDragOverItemId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // required to allow dropping
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItemId(null);
+    setDragOverItemId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!selectedSubject || !selectedTopic || !draggedItemId || draggedItemId === targetId) {
+      setDraggedItemId(null); setDragOverItemId(null); return;
+    }
+
+    setHierarchy(prev => {
+      const newTree = { ...prev };
+      const list = [...newTree[selectedSubject][selectedTopic]];
+      const fromIndex = list.findIndex(v => v.id === draggedItemId);
+      const toIndex = list.findIndex(v => v.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+
+      const [moved] = list.splice(fromIndex, 1);
+      list.splice(toIndex, 0, moved);
+
+      newTree[selectedSubject][selectedTopic] = list;
+      return newTree;
+    });
+
+    setDraggedItemId(null);
+    setDragOverItemId(null);
   };
 
   // --- YOUTUBE UTILS ---
@@ -571,7 +619,10 @@ export default function AdvancedResourceManager() {
                 <div className="bg-[#18181b] border border-zinc-800 rounded-2xl flex flex-col shadow-xl h-[500px]">
                   <div className="p-5 border-b border-zinc-800 flex justify-between items-center shrink-0">
                     <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">Existing Assets</h2>
-                    <div className="bg-zinc-900 px-3 py-1 rounded-full text-[10px] font-bold text-zinc-400 uppercase tracking-widest border border-zinc-800">Count: {activeResources.length}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-zinc-600 italic hidden sm:inline">Drag to reorder</span>
+                      <div className="bg-zinc-900 px-3 py-1 rounded-full text-[10px] font-bold text-zinc-400 uppercase tracking-widest border border-zinc-800">Count: {activeResources.length}</div>
+                    </div>
                   </div>
                   
                   <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
@@ -583,8 +634,23 @@ export default function AdvancedResourceManager() {
                     ) : (
                       <div className="space-y-2">
                         {activeResources.map((item: any) => (
-                          <div key={item.id} className="p-3 bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-800/50 hover:border-zinc-700 rounded-xl transition-all flex items-start gap-3 group">
-                            
+                          <div 
+                            key={item.id} 
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, item.id)}
+                            onDragEnter={(e) => handleDragEnter(e, item.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, item.id)}
+                            onDragEnd={handleDragEnd}
+                            className={`p-3 bg-zinc-900/50 hover:bg-zinc-800 rounded-xl transition-all flex items-start gap-3 group border
+                              ${draggedItemId === item.id ? 'opacity-40 border-indigo-500/60 scale-[0.98]' : 'border-zinc-800/50 hover:border-zinc-700'}
+                              ${dragOverItemId === item.id && draggedItemId !== item.id ? 'border-indigo-500 border-2 -translate-y-0.5 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : ''}
+                            `}
+                          >
+                            <div className="mt-1 text-zinc-700 group-hover:text-zinc-400 shrink-0 cursor-grab active:cursor-grabbing transition-colors">
+                              <GripVertical size={14} />
+                            </div>
+
                             <div className="mt-0.5 p-1.5 bg-zinc-900 rounded-md text-zinc-400 group-hover:text-indigo-400 transition-colors shadow-inner shrink-0">
                               {item.resource_type === 'video' ? <Play size={14} /> : <FileText size={14} />}
                             </div>
