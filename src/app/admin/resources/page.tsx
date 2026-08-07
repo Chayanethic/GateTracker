@@ -7,7 +7,7 @@ import {
   Wand2, Play, FileText, Database, Plus, ChevronDown, ChevronRight, 
   Activity, CheckCircle2, Image as ImageIcon, Folder, FolderOpen, X, 
   LayoutGrid, Link as LinkIcon, Clock, ListVideo, Trash2, Edit2, Save,
-  Scissors, GripVertical
+  Scissors, GripVertical, Lock, Unlock, Hash, Crown
 } from 'lucide-react';
 
 type ResourceNode = any;
@@ -33,6 +33,10 @@ export default function AdvancedResourceManager() {
   const [url, setUrl] = useState('');
   const [type, setType] = useState('video');
   const [duration, setDuration] = useState('');
+
+  // PAID CONTENT + LECTURE NUMBERING STATE
+  const [isPaid, setIsPaid] = useState(false);
+  const [lectureNo, setLectureNo] = useState('');
   
   // PLAYLIST SLICER STATE
   const [rangeStart, setRangeStart] = useState('');
@@ -45,6 +49,10 @@ export default function AdvancedResourceManager() {
   // EDITING STATE
   const [editingNode, setEditingNode] = useState<{ id: string, type: 'subject' | 'topic' | 'video', oldVal: string } | null>(null);
   const [editValue, setEditValue] = useState('');
+
+  // INLINE LECTURE NUMBER EDIT STATE
+  const [editingLectureId, setEditingLectureId] = useState<string | null>(null);
+  const [editingLectureValue, setEditingLectureValue] = useState('');
 
   // DRAG & DROP STATE
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
@@ -169,6 +177,54 @@ export default function AdvancedResourceManager() {
     }
   };
 
+  // --- PAID TOGGLE ---
+  const togglePaidStatus = async (item: any) => {
+    const newPaidStatus = !item.is_paid;
+    const toastId = toast.loading(newPaidStatus ? 'Marking as Paid...' : 'Marking as Free...');
+    try {
+      await supabase.from('study_materials').update({ is_paid: newPaidStatus }).eq('id', item.id);
+      setHierarchy(prev => {
+        const newTree = { ...prev };
+        const list = newTree[selectedSubject!][selectedTopic!];
+        const idx = list.findIndex(v => v.id === item.id);
+        if (idx > -1) list[idx] = { ...list[idx], is_paid: newPaidStatus };
+        return newTree;
+      });
+      toast.success(newPaidStatus ? 'Marked as Paid Content' : 'Marked as Free Content', { id: toastId, style: { background: '#121214', color: '#10b981', border: '1px solid #059669' }});
+    } catch (err) {
+      toast.error('Update Failed', { id: toastId });
+    }
+  };
+
+  // --- LECTURE NUMBER INLINE EDIT ---
+  const startLectureEdit = (e: React.MouseEvent, item: any) => {
+    e.stopPropagation();
+    setEditingLectureId(item.id);
+    setEditingLectureValue(item.lecture_no != null ? String(item.lecture_no) : '');
+  };
+
+  const submitLectureEdit = async (e: React.FormEvent, itemId: string) => {
+    e.preventDefault();
+    const parsed = parseInt(editingLectureValue);
+    if (isNaN(parsed) || parsed < 1) { setEditingLectureId(null); return; }
+
+    const toastId = toast.loading('Updating Lecture #...');
+    try {
+      await supabase.from('study_materials').update({ lecture_no: parsed }).eq('id', itemId);
+      setHierarchy(prev => {
+        const newTree = { ...prev };
+        const list = newTree[selectedSubject!][selectedTopic!];
+        const idx = list.findIndex(v => v.id === itemId);
+        if (idx > -1) list[idx] = { ...list[idx], lecture_no: parsed };
+        return newTree;
+      });
+      toast.success('Lecture Number Updated', { id: toastId, style: { background: '#121214', color: '#10b981', border: '1px solid #059669' }});
+    } catch (err) {
+      toast.error('Update Failed', { id: toastId });
+    }
+    setEditingLectureId(null);
+  };
+
   // --- DRAG & DROP REORDER ---
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDraggedItemId(id);
@@ -263,6 +319,17 @@ export default function AdvancedResourceManager() {
     else { setThumbnailId(null); setType('link'); }
   }, [url, uploadMode]);
 
+  // --- AUTO LECTURE NUMBER DEFAULT (resets when switching topic) ---
+  useEffect(() => {
+    if (selectedSubject && selectedTopic) {
+      const list = hierarchy[selectedSubject]?.[selectedTopic] || [];
+      setLectureNo(String(list.length + 1));
+    } else {
+      setLectureNo('');
+    }
+    setIsPaid(false);
+  }, [selectedSubject, selectedTopic]);
+
   // --- BATCH PLAYLIST UPLOAD (WITH SLICER) ---
   const handlePlaylistUpload = async () => {
     if (!selectedSubject || !selectedTopic || !url) return toast.error('Missing parameters.');
@@ -319,15 +386,18 @@ export default function AdvancedResourceManager() {
         }
       }
 
-      // 4. Build the Final Payload
-      const payload = slicedItems.map((item: any) => ({
+      // 4. Build the Final Payload (lecture numbers auto-assigned sequentially after existing videos)
+      const existingCount = (hierarchy[selectedSubject]?.[selectedTopic] || []).length;
+      const payload = slicedItems.map((item: any, i: number) => ({
         exam_name: exam,
         subject_name: selectedSubject,
         topic_name: selectedTopic,
         title: item.snippet.title,
         url: `https://www.youtube.com/watch?v=${item.snippet.resourceId.videoId}`,
         resource_type: 'video',
-        duration: durationMap[item.snippet.resourceId.videoId] || '0:00'
+        duration: durationMap[item.snippet.resourceId.videoId] || '0:00',
+        is_paid: false,
+        lecture_no: existingCount + i + 1
       })).filter((item:any) => item.title !== 'Private video' && item.title !== 'Deleted video');
 
       if (payload.length === 0) throw new Error('All selected videos were private or deleted.');
@@ -357,20 +427,25 @@ export default function AdvancedResourceManager() {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (uploadMode === 'playlist') return handlePlaylistUpload();
-    if (!selectedSubject || !selectedTopic || !title || !url) return toast.error('Missing payload parameters.');
+    if (!selectedSubject || !selectedTopic || !title) return toast.error('Missing payload parameters.');
+    // URL only required when the lecture is NOT paid (paid lectures can be locked/coming-soon with no link yet)
+    if (!isPaid && !url) return toast.error('URL is required for a free lecture.');
 
     setLoading(true);
     
     const finalDuration = duration.trim() || '0:00';
+    const parsedLectureNo = lectureNo.trim() ? parseInt(lectureNo) : null;
 
     const newResource = { 
       exam_name: exam, 
       subject_name: selectedSubject, 
       topic_name: selectedTopic, 
       title: title.trim(), 
-      url: url.trim(), 
+      url: url.trim() || null, 
       resource_type: type, 
-      duration: finalDuration 
+      duration: finalDuration,
+      is_paid: isPaid,
+      lecture_no: parsedLectureNo
     };
     
     const { data, error } = await supabase.from('study_materials').insert([newResource]).select().single();
@@ -379,9 +454,10 @@ export default function AdvancedResourceManager() {
       toast.error('Deployment Failed.', { style: { background: '#7f1d1d', color: '#fff' }});
       console.error(error);
     } else {
-      toast.success('Resource Deployed!', { icon: '🚀', style: { background: '#18181b', color: '#10b981', border: '1px solid #059669' }});
+      toast.success(isPaid ? 'Paid Lecture Deployed!' : 'Resource Deployed!', { icon: '🚀', style: { background: '#18181b', color: '#10b981', border: '1px solid #059669' }});
       setHierarchy(prev => { const updated = { ...prev }; updated[selectedSubject][selectedTopic] = [data, ...(updated[selectedSubject][selectedTopic] || [])]; return updated; });
-      setTitle(''); setUrl(''); setDuration(''); setThumbnailId(null);
+      setTitle(''); setUrl(''); setDuration(''); setThumbnailId(null); setIsPaid(false);
+      setLectureNo(String((parsedLectureNo || 0) + 1 || (hierarchy[selectedSubject]?.[selectedTopic]?.length || 0) + 2));
     }
     setLoading(false);
   };
@@ -551,9 +627,32 @@ export default function AdvancedResourceManager() {
                   </div>
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+
+                    {uploadMode === 'single' && (
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-1"><Hash size={11}/> Lecture #</label>
+                          <input type="number" min="1" placeholder="1" value={lectureNo} onChange={e => setLectureNo(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl p-3 text-zinc-100 text-sm outline-none focus:border-indigo-500 transition-colors" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Access</label>
+                          <button
+                            type="button"
+                            onClick={() => setIsPaid(p => !p)}
+                            className={`w-full flex items-center justify-center gap-2 rounded-xl p-3 text-sm font-bold uppercase tracking-wider transition-all border ${isPaid ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-[#09090b] border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
+                          >
+                            {isPaid ? <Lock size={14}/> : <Unlock size={14}/>}
+                            {isPaid ? 'Paid' : 'Free'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div>
-                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">{uploadMode === 'playlist' ? 'YouTube Playlist URL' : 'Resource URL'}</label>
-                      <input required type="url" placeholder="https://youtube.com/..." value={url} onChange={(e) => setUrl(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl p-3.5 text-zinc-100 text-sm outline-none focus:border-indigo-500 transition-colors mb-4" />
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">
+                        {uploadMode === 'playlist' ? 'YouTube Playlist URL' : isPaid ? 'Resource URL (optional — leave blank for locked lecture)' : 'Resource URL'}
+                      </label>
+                      <input required={uploadMode === 'playlist' || !isPaid} type="url" placeholder={isPaid && uploadMode === 'single' ? 'Leave blank if not available yet...' : 'https://youtube.com/...'} value={url} onChange={(e) => setUrl(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl p-3.5 text-zinc-100 text-sm outline-none focus:border-indigo-500 transition-colors mb-4" />
                     </div>
                     
                     {uploadMode === 'single' ? (
@@ -564,13 +663,22 @@ export default function AdvancedResourceManager() {
                             <input required type="text" placeholder="e.g., Intro to Linear Algebra" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl p-3.5 text-zinc-100 text-sm outline-none focus:border-indigo-500 transition-colors" />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Duration</label>
+                            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Approx Time</label>
                             <div className="relative">
                               <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
                               <input type="text" placeholder="--:--" value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl py-3.5 pl-8 pr-3 text-zinc-100 text-sm outline-none focus:border-indigo-500 transition-colors" />
                             </div>
                           </div>
                         </div>
+
+                        {isPaid && (
+                          <div className="mt-4 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-start gap-2">
+                            <Crown size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                            <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                              This will deploy as a <b>paid lecture</b>. If no URL is given, it shows as a locked "coming soon" card until you add the link later.
+                            </p>
+                          </div>
+                        )}
 
                         {url && (
                           <div className="w-full h-24 bg-[#09090b] border border-zinc-800 rounded-xl overflow-hidden relative flex items-center justify-center mt-4">
@@ -600,7 +708,7 @@ export default function AdvancedResourceManager() {
                              <input type="number" min="1" placeholder="All" value={rangeEnd} onChange={e=>setRangeEnd(e.target.value)} className="w-full bg-[#09090b] border border-indigo-500/20 rounded-xl p-3 text-indigo-100 text-sm outline-none focus:border-indigo-500 transition-colors" />
                           </div>
                         </div>
-                        <p className="text-[9px] text-zinc-600 mt-4 italic text-center">Leave inputs blank to deploy the entire playlist.</p>
+                        <p className="text-[9px] text-zinc-600 mt-4 italic text-center">Leave inputs blank to deploy the entire playlist. Lecture numbers auto-assign in order.</p>
                       </div>
                     )}
                   </div>
@@ -608,10 +716,10 @@ export default function AdvancedResourceManager() {
                   <button 
                     type="submit" 
                     disabled={loading || isFetchingMeta} 
-                    className={`w-full font-bold py-3.5 rounded-xl transition-all shrink-0 text-sm disabled:opacity-50 flex justify-center items-center gap-2 mt-4 ${uploadMode === 'playlist' ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)]' : 'bg-zinc-100 hover:bg-white text-zinc-900 shadow-[0_0_20px_rgba(255,255,255,0.1)]'}`}
+                    className={`w-full font-bold py-3.5 rounded-xl transition-all shrink-0 text-sm disabled:opacity-50 flex justify-center items-center gap-2 mt-4 ${uploadMode === 'playlist' ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)]' : isPaid ? 'bg-amber-500 hover:bg-amber-400 text-zinc-900 shadow-[0_0_20px_rgba(245,158,11,0.3)]' : 'bg-zinc-100 hover:bg-white text-zinc-900 shadow-[0_0_20px_rgba(255,255,255,0.1)]'}`}
                   >
-                    {loading ? <Activity className="animate-spin" size={18} /> : uploadMode === 'playlist' ? <Database size={18}/> : <Plus size={18} />}
-                    {loading ? 'Transmitting...' : isFetchingMeta ? 'Extracting Data...' : uploadMode === 'playlist' ? 'Batch Sync Slice' : 'Confirm Deployment'}
+                    {loading ? <Activity className="animate-spin" size={18} /> : uploadMode === 'playlist' ? <Database size={18}/> : isPaid ? <Lock size={18}/> : <Plus size={18} />}
+                    {loading ? 'Transmitting...' : isFetchingMeta ? 'Extracting Data...' : uploadMode === 'playlist' ? 'Batch Sync Slice' : isPaid ? 'Deploy Paid Lecture' : 'Confirm Deployment'}
                   </button>
                 </form>
 
@@ -633,7 +741,9 @@ export default function AdvancedResourceManager() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {activeResources.map((item: any) => (
+                        {activeResources.map((item: any, idx: number) => {
+                          const isLocked = item.is_paid && !item.url;
+                          return (
                           <div 
                             key={item.id} 
                             draggable
@@ -642,8 +752,9 @@ export default function AdvancedResourceManager() {
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, item.id)}
                             onDragEnd={handleDragEnd}
-                            className={`p-3 bg-zinc-900/50 hover:bg-zinc-800 rounded-xl transition-all flex items-start gap-3 group border
-                              ${draggedItemId === item.id ? 'opacity-40 border-indigo-500/60 scale-[0.98]' : 'border-zinc-800/50 hover:border-zinc-700'}
+                            className={`p-3 rounded-xl transition-all flex items-start gap-3 group border
+                              ${item.is_paid ? 'bg-amber-500/[0.04] hover:bg-amber-500/[0.08]' : 'bg-zinc-900/50 hover:bg-zinc-800'}
+                              ${draggedItemId === item.id ? 'opacity-40 border-indigo-500/60 scale-[0.98]' : item.is_paid ? 'border-amber-500/20 hover:border-amber-500/40' : 'border-zinc-800/50 hover:border-zinc-700'}
                               ${dragOverItemId === item.id && draggedItemId !== item.id ? 'border-indigo-500 border-2 -translate-y-0.5 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : ''}
                             `}
                           >
@@ -651,8 +762,8 @@ export default function AdvancedResourceManager() {
                               <GripVertical size={14} />
                             </div>
 
-                            <div className="mt-0.5 p-1.5 bg-zinc-900 rounded-md text-zinc-400 group-hover:text-indigo-400 transition-colors shadow-inner shrink-0">
-                              {item.resource_type === 'video' ? <Play size={14} /> : <FileText size={14} />}
+                            <div className={`mt-0.5 p-1.5 rounded-md shadow-inner shrink-0 transition-colors ${isLocked ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-900 text-zinc-400 group-hover:text-indigo-400'}`}>
+                              {isLocked ? <Lock size={14} /> : item.resource_type === 'video' ? <Play size={14} /> : <FileText size={14} />}
                             </div>
                             
                             <div className="flex-1 min-w-0">
@@ -667,20 +778,41 @@ export default function AdvancedResourceManager() {
                                 <p className="text-sm font-medium text-zinc-200 truncate group-hover:text-white transition-colors">{item.title}</p>
                               )}
                               
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                {/* LECTURE NUMBER - inline editable */}
+                                {editingLectureId === item.id ? (
+                                  <form onSubmit={(e) => submitLectureEdit(e, item.id)} className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                    <input autoFocus type="number" min="1" value={editingLectureValue} onChange={e => setEditingLectureValue(e.target.value)} className="w-12 bg-zinc-950 border border-indigo-500/50 rounded px-1 py-0.5 text-[10px] text-zinc-100 outline-none" />
+                                    <button type="submit" className="text-indigo-400"><Save size={10}/></button>
+                                    <button type="button" onClick={() => setEditingLectureId(null)} className="text-zinc-500"><X size={10}/></button>
+                                  </form>
+                                ) : (
+                                  <button onClick={(e) => startLectureEdit(e, item)} className="text-[9px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 hover:bg-indigo-500/20 transition-colors">
+                                    <Hash size={9}/> Lec {item.lecture_no ?? (idx + 1)}
+                                  </button>
+                                )}
+
                                 <span className="text-[9px] font-bold bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded uppercase tracking-widest">{item.resource_type}</span>
                                 {item.duration && <span className="text-[9px] font-bold bg-zinc-800/50 text-zinc-400 border border-zinc-700/50 px-1.5 py-0.5 rounded flex items-center gap-1"><Clock size={10}/> {item.duration}</span>}
+                                {item.is_paid && (
+                                  <span className="text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded uppercase tracking-widest flex items-center gap-1">
+                                    <Crown size={9}/> Paid{isLocked ? ' · Locked' : ''}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
                             {/* RESOURCE ACTIONS */}
                             <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => togglePaidStatus(item)} title={item.is_paid ? 'Mark as Free' : 'Mark as Paid'} className={`p-1.5 hover:bg-zinc-700 rounded ${item.is_paid ? 'text-amber-400' : 'text-zinc-500 hover:text-amber-400'}`}>
+                                {item.is_paid ? <Lock size={12}/> : <Unlock size={12}/>}
+                              </button>
                               <button onClick={(e) => startEdit(e, 'video', item.title, item.id)} className="p-1.5 hover:bg-zinc-700 text-zinc-500 hover:text-indigo-400 rounded"><Edit2 size={12}/></button>
                               <button onClick={(e) => handleDelete(e, 'video', item.title, item.id)} className="p-1.5 hover:bg-zinc-700 text-zinc-500 hover:text-red-400 rounded"><Trash2 size={12}/></button>
                             </div>
 
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
                   </div>
