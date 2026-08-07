@@ -152,13 +152,13 @@ export default function ResourcesHub() {
   const [studyHours, setStudyHours] = useState<number>(4);
   const [playbackSpeed, setPlaybackSpeed] = useState<number | string>(1.25);
 
-  // --- THEME STATE (default = LIGHT / DAY MODE) ---
-  const [isDark, setIsDark] = useState(false);
+  // --- THEME STATE (default = DARK / NIGHT MODE) ---
+  const [isDark, setIsDark] = useState(true);
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? window.localStorage.getItem('resourcesHubTheme') : null;
     if (saved === 'dark') setIsDark(true);
     else if (saved === 'light') setIsDark(false);
-    // if nothing saved, default stays light (day mode)
+    // if nothing saved, default stays dark (night mode)
   }, []);
   const toggleTheme = () => {
     setIsDark(prev => {
