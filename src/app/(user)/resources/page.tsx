@@ -487,11 +487,10 @@ export default function ResourcesHub() {
                                     ${locked ? `${T.rowBgLocked} cursor-not-allowed` : isDone ? `${T.rowBgDone} cursor-pointer` : `${T.rowBg} cursor-pointer hover:-translate-y-0.5`}
                                   `}
                                 >
-                                  {/* COMPLETION CHECKBOX */}
+                                  {/* COMPLETION CHECKBOX (works for paid/locked lectures too) */}
                                   <button
-                                    onClick={(e) => { if (!locked) handleToggleProgress(e, mat.id, isDone); else e.stopPropagation(); }}
-                                    disabled={locked}
-                                    className="shrink-0 transition-transform hover:scale-110 active:scale-95 z-10 relative disabled:opacity-40 disabled:cursor-not-allowed"
+                                    onClick={(e) => handleToggleProgress(e, mat.id, isDone)}
+                                    className="shrink-0 transition-transform hover:scale-110 active:scale-95 z-10 relative"
                                   >
                                     {isDone ? (
                                       <CheckCircle2 size={18} className={T.checkOn} />
