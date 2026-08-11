@@ -97,21 +97,34 @@ const daysInMonth = (month: string) => {
   return new Date(y, m, 0).getDate();
 };
 
-// Quick-jump navigation for this long, single-page dashboard.
+// Tabbed navigation — replaces the old long single-page scroll so each
+// area of the dashboard gets focused space instead of competing for it.
 const SECTION_NAV = [
-  { id: 'today', label: 'Today', icon: Clock3 },
-  { id: 'ledger', label: 'Ledger & Notes', icon: FileText },
-  { id: 'targets', label: 'Targets', icon: Target },
-  { id: 'graphs', label: 'Graphs', icon: BarChart3 },
-  { id: 'exams', label: 'Exams', icon: GraduationCap },
-  { id: 'sacrifice', label: 'Sacrifice', icon: Flame },
+  { id: 'today', label: 'Today', icon: Clock3, accent: 'emerald' },
+  { id: 'ledger', label: 'Ledger & Notes', icon: FileText, accent: 'rose' },
+  { id: 'targets', label: 'Targets', icon: Target, accent: 'indigo' },
+  { id: 'graphs', label: 'Graphs', icon: BarChart3, accent: 'violet' },
+  { id: 'exams', label: 'Exams', icon: GraduationCap, accent: 'amber' },
+  { id: 'sacrifice', label: 'Sacrifice', icon: Flame, accent: 'orange' },
 ] as const;
+
+type SectionId = typeof SECTION_NAV[number]['id'];
+
+const ACCENT_STYLES: Record<string, { bg: string; ring: string; text: string; solid: string; solidHover: string }> = {
+  emerald: { bg: 'bg-emerald-500/10', ring: 'ring-emerald-500/25', text: 'text-emerald-400', solid: 'bg-emerald-600', solidHover: 'hover:bg-emerald-500' },
+  rose:    { bg: 'bg-rose-500/10',    ring: 'ring-rose-500/25',    text: 'text-rose-400',    solid: 'bg-rose-600',    solidHover: 'hover:bg-rose-500' },
+  indigo:  { bg: 'bg-indigo-500/10',  ring: 'ring-indigo-500/25',  text: 'text-indigo-300',  solid: 'bg-indigo-600',  solidHover: 'hover:bg-indigo-500' },
+  violet:  { bg: 'bg-violet-500/10',  ring: 'ring-violet-500/25',  text: 'text-violet-300',  solid: 'bg-violet-600',  solidHover: 'hover:bg-violet-500' },
+  amber:   { bg: 'bg-amber-500/10',   ring: 'ring-amber-500/25',   text: 'text-amber-400',   solid: 'bg-amber-500',   solidHover: 'hover:bg-amber-400' },
+  orange:  { bg: 'bg-orange-500/10',  ring: 'ring-orange-500/25',  text: 'text-orange-400',  solid: 'bg-orange-500',  solidHover: 'hover:bg-orange-400' },
+};
 
 export default function DailyTrackerPage() {
   const router = useRouter();
   const today = getISTDateString();
 
   const [selectedDate, setSelectedDate] = useState(today);
+  const [activeSection, setActiveSection] = useState<SectionId>('today');
   const [logs, setLogs] = useState<LectureLog[]>([]);
   const [allLogs, setAllLogs] = useState<LectureLog[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
@@ -522,11 +535,19 @@ export default function DailyTrackerPage() {
     return Math.round((Number(exam.score) / Number(exam.total_marks)) * 100);
   };
 
+  const activeMeta = SECTION_NAV.find(s => s.id === activeSection)!;
+  const activeAccent = ACCENT_STYLES[activeMeta.accent];
+
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans pb-24 scroll-smooth">
+    <div className="min-h-screen bg-[#050608] text-zinc-300 font-sans pb-16">
+      {/* Ambient backdrop glow — a single quiet signature, not scattered decoration */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-emerald-500/[0.06] blur-[120px] rounded-full" />
+      </div>
+
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-zinc-950/85 backdrop-blur-xl border-b border-white/5 px-4 sm:px-6 py-4">
-        <div className="max-w-[1400px] mx-auto flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-40 bg-[#050608]/90 backdrop-blur-xl border-b border-white/5">
+        <div className="max-w-[1400px] mx-auto flex items-center justify-between gap-4 px-4 sm:px-6 py-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push('/dashboard')}
@@ -543,699 +564,769 @@ export default function DailyTrackerPage() {
           </div>
           <Link
             href="/resources"
-            className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white hover:ring-zinc-700 transition-all"
+            className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white hover:ring-zinc-700 transition-all"
           >
             <Video size={13} /> Continue Lectures
           </Link>
         </div>
-
-        {/* Quick section jump — helps navigate this long dashboard */}
-        <nav className="max-w-[1400px] mx-auto mt-3 -mb-1 flex gap-1.5 overflow-x-auto no-scrollbar">
-          {SECTION_NAV.map(({ id, label, icon: Icon }) => (
-            <a
-              key={id}
-              href={`#${id}`}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/70 ring-1 ring-zinc-800 text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-emerald-400 hover:ring-emerald-500/30 transition-colors"
-            >
-              <Icon size={11} /> {label}
-            </a>
-          ))}
-        </nav>
       </header>
 
-      <main className="max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+      <main className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
 
-        {/* ============ TODAY ============ */}
-        <div id="today" className="scroll-mt-32 space-y-6">
-          {/* Snapshot */}
-          <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: 'Selected Day', value: formatMinutes(dailyMinutes), icon: Clock3, box: 'bg-emerald-500/10 ring-emerald-500/20', iconText: 'text-emerald-400' },
-              { label: 'Lectures Done', value: logs.length, icon: CheckCircle2, box: 'bg-indigo-500/10 ring-indigo-500/20', iconText: 'text-indigo-400' },
-              { label: 'Active Days', value: activeDays, icon: Flame, box: 'bg-orange-500/10 ring-orange-500/20', iconText: 'text-orange-400' },
-              { label: 'This Month', value: formatMinutes(monthlyMinutes), icon: Target, box: 'bg-violet-500/10 ring-violet-500/20', iconText: 'text-violet-400' },
-            ].map(({ label, value, icon: Icon, box, iconText }) => (
+        {/* ============ ALWAYS-VISIBLE SNAPSHOT ============ */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { label: 'Selected Day', value: formatMinutes(dailyMinutes), icon: Clock3, accent: 'emerald' },
+            { label: 'Lectures Done', value: logs.length, icon: CheckCircle2, accent: 'indigo' },
+            { label: 'Active Days', value: activeDays, icon: Flame, accent: 'orange' },
+            { label: 'This Month', value: formatMinutes(monthlyMinutes), icon: Target, accent: 'violet' },
+          ].map(({ label, value, icon: Icon, accent }) => {
+            const a = ACCENT_STYLES[accent];
+            return (
               <div
                 key={label}
-                className="bg-zinc-900/50 ring-1 ring-zinc-800 rounded-2xl p-4 hover:ring-zinc-700 hover:-translate-y-0.5 transition-all"
+                className="group relative bg-zinc-900/40 ring-1 ring-zinc-800 rounded-2xl p-4 hover:ring-zinc-700 hover:-translate-y-0.5 transition-all overflow-hidden"
               >
-                <div className={`w-9 h-9 rounded-xl ${box} ring-1 flex items-center justify-center mb-3`}>
-                  <Icon size={16} className={iconText} />
+                <div className={`absolute -right-4 -top-4 w-16 h-16 rounded-full ${a.bg} blur-2xl opacity-60 group-hover:opacity-100 transition-opacity`} />
+                <div className={`relative w-9 h-9 rounded-xl ${a.bg} ring-1 ${a.ring} flex items-center justify-center mb-3`}>
+                  <Icon size={16} className={a.text} />
                 </div>
-                <div className="text-xl font-black text-zinc-100">{value}</div>
-                <div className="text-[8px] uppercase tracking-widest font-bold text-zinc-600 mt-1">{label}</div>
+                <div className="relative text-xl font-black text-zinc-100">{value}</div>
+                <div className="relative text-[8px] uppercase tracking-widest font-bold text-zinc-600 mt-1">{label}</div>
               </div>
-            ))}
-          </section>
+            );
+          })}
+        </section>
 
-          {/* Date navigator + daily progress */}
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div>
-                <div className="flex items-center gap-2 text-zinc-600 text-[9px] font-black uppercase tracking-[0.2em]">
-                  <CalendarDays size={11} /> Daily Report
-                </div>
-                <h2 className="font-black text-zinc-100 text-base mt-1">{getDateLabel(selectedDate)}</h2>
-              </div>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="bg-zinc-950 ring-1 ring-zinc-800 rounded-lg px-3 py-2 text-[10px] text-zinc-300 outline-none focus:ring-emerald-500/40"
-              />
-            </div>
+        {/* ============ TAB NAVIGATION ============ */}
+        <nav className="sticky top-[73px] z-30 -mx-4 sm:mx-0 px-4 sm:px-0">
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar bg-zinc-900/60 backdrop-blur-xl ring-1 ring-zinc-800 rounded-2xl p-1.5">
+            {SECTION_NAV.map(({ id, label, icon: Icon, accent }) => {
+              const isActive = id === activeSection;
+              const a = ACCENT_STYLES[accent];
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveSection(id)}
+                  className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                    isActive
+                      ? `${a.bg} ${a.text} ring-1 ${a.ring}`
+                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.03]'
+                  }`}
+                >
+                  <Icon size={13} /> {label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
 
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-              {dateStrip.map(date => {
-                const dayLogs = allLogs.filter(log => log.date_str === date);
-                const mins = dayLogs.reduce((sum, log) => sum + Number(log.duration_mins || 0), 0);
-                const active = date === selectedDate;
-                const isToday = date === today;
-                return (
-                  <button
-                    key={date}
-                    onClick={() => setSelectedDate(date)}
-                    className={`min-w-0 rounded-xl p-2.5 text-center ring-1 transition-all ${
-                      active ? 'bg-emerald-500/10 ring-emerald-500/40' : 'bg-zinc-950/70 ring-zinc-800 hover:ring-zinc-600'
-                    }`}
-                  >
-                    <div className={`text-[8px] font-black uppercase ${active ? 'text-emerald-400' : 'text-zinc-600'}`}>
-                      {new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })}
-                    </div>
-                    <div className={`text-sm font-black mt-1 ${active ? 'text-zinc-100' : 'text-zinc-400'}`}>
-                      {new Date(`${date}T12:00:00`).getDate()}
-                    </div>
-                    <div className={`text-[8px] font-bold mt-1 ${mins ? 'text-emerald-500' : 'text-zinc-700'}`}>
-                      {mins ? formatMinutes(mins) : isToday ? 'Today' : '—'}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+        {/* ============ ACTIVE SECTION CONTENT ============ */}
+        <div className="space-y-6 animate-[fadeIn_.25s_ease]">
 
-            <div className="mt-5">
-              <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-2">
-                <span className="text-zinc-500">6-hour study target</span>
-                <span className="text-emerald-400">{dailyPercent}%</span>
-              </div>
-              <div className="h-2 bg-zinc-950 rounded-full ring-1 ring-zinc-800 overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${dailyPercent}%` }} />
-              </div>
-            </div>
-          </section>
-        </div>
-
-        {/* ============ LEDGER + NOTES ============ */}
-        <div id="ledger" className="scroll-mt-32 grid lg:grid-cols-[1.4fr_0.9fr] gap-6">
-          {/* Lecture ledger */}
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
-            <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-zinc-600 text-[9px] font-black uppercase tracking-[0.2em]">
-                  <ListChecks size={11} /> Completed Lectures
-                </div>
-                <h2 className="font-black text-zinc-100 text-sm mt-1">What I Completed</h2>
-              </div>
-              <div className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 text-emerald-400 text-[9px] font-black">
-                {formatMinutes(dailyMinutes)}
-              </div>
-            </div>
-
-            <div className="p-3 sm:p-4">
-              {loading ? (
-                <div className="py-16 text-center text-[10px] uppercase tracking-widest text-zinc-600 animate-pulse">Loading ledger...</div>
-              ) : logs.length === 0 ? (
-                <div className="py-16 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-zinc-950 ring-1 ring-zinc-800 flex items-center justify-center mx-auto mb-3">
-                    <CalendarDays size={20} className="text-zinc-700" />
+        {activeSection === 'today' && (
+          <div className="space-y-6">
+            {/* Date navigator + daily progress */}
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <div className="flex items-center gap-2 text-zinc-600 text-[9px] font-black uppercase tracking-[0.2em]">
+                    <CalendarDays size={11} /> Daily Report
                   </div>
-                  <p className="text-sm font-bold text-zinc-500">Nothing logged for this day.</p>
-                  <p className="text-[9px] text-zinc-700 mt-1">Tick a lecture as completed from Curriculum to create the entry.</p>
+                  <h2 className="font-black text-zinc-100 text-base mt-1">{getDateLabel(selectedDate)}</h2>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {logs.map(log => (
-                    <div key={log.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800/80 hover:ring-zinc-700 transition-colors">
-                      <div className="w-9 h-9 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shrink-0">
-                        <CheckCircle2 size={15} className="text-emerald-500" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-zinc-200 truncate">{log.title}</div>
-                        <div className="text-[8px] uppercase tracking-widest text-zinc-600 mt-1 truncate">
-                          {log.subject_name} {log.topic_name ? `• ${log.topic_name}` : ''}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-zinc-400 shrink-0">
-                        <Clock3 size={11} /> {formatMinutes(Number(log.duration_mins))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={e => setSelectedDate(e.target.value)}
+                  className="bg-zinc-950 ring-1 ring-zinc-800 rounded-lg px-3 py-2 text-[10px] text-zinc-300 outline-none focus:ring-emerald-500/40"
+                />
+              </div>
 
-          {/* Notes */}
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 flex flex-col min-h-[300px]">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20 flex items-center justify-center">
-                <FileText size={15} className="text-rose-400" />
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                {dateStrip.map(date => {
+                  const dayLogs = allLogs.filter(log => log.date_str === date);
+                  const mins = dayLogs.reduce((sum, log) => sum + Number(log.duration_mins || 0), 0);
+                  const active = date === selectedDate;
+                  const isToday = date === today;
+                  return (
+                    <button
+                      key={date}
+                      onClick={() => setSelectedDate(date)}
+                      className={`min-w-0 rounded-xl p-2.5 text-center ring-1 transition-all ${
+                        active ? 'bg-emerald-500/10 ring-emerald-500/40' : 'bg-zinc-950/70 ring-zinc-800 hover:ring-zinc-600'
+                      }`}
+                    >
+                      <div className={`text-[8px] font-black uppercase ${active ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                        {new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })}
+                      </div>
+                      <div className={`text-sm font-black mt-1 ${active ? 'text-zinc-100' : 'text-zinc-400'}`}>
+                        {new Date(`${date}T12:00:00`).getDate()}
+                      </div>
+                      <div className={`text-[8px] font-bold mt-1 ${mins ? 'text-emerald-500' : 'text-zinc-700'}`}>
+                        {mins ? formatMinutes(mins) : isToday ? 'Today' : '—'}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              <div>
-                <h2 className="font-black text-zinc-100 text-sm">Daily Reflection</h2>
-                <p className="text-[9px] text-zinc-600">Write what actually happened.</p>
-              </div>
-            </div>
-            <textarea
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              placeholder="What did you study? What went well? What should you fix tomorrow?"
-              className="flex-1 min-h-[170px] bg-zinc-950/70 ring-1 ring-zinc-800 rounded-xl p-4 text-xs text-zinc-300 placeholder:text-zinc-700 outline-none focus:ring-emerald-500/40 resize-none"
-            />
-            <button
-              onClick={saveNote}
-              disabled={savingNote}
-              className="mt-3 w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
-            >
-              <Save size={13} /> {savingNote ? 'Saving...' : 'Save Daily Report'}
-            </button>
-          </section>
-        </div>
 
-        {/* ============ TARGETS ============ */}
-        <div id="targets" className="scroll-mt-32 grid lg:grid-cols-[1.35fr_0.9fr] gap-6">
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
-            <div className="p-5 border-b border-zinc-800 flex items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Target size={16} className="text-emerald-400" />
-                  <h2 className="font-black text-zinc-100">
-                    {dateObj(`${currentMonth}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} Big Target
-                  </h2>
+              <div className="mt-5">
+                <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-2">
+                  <span className="text-zinc-500">6-hour study target</span>
+                  <span className="text-emerald-400">{dailyPercent}%</span>
                 </div>
-                <p className="text-[9px] text-zinc-600 mt-1">
-                  Set the big goal, then break it into weekly actions.
-                </p>
+                <div className="h-2 bg-zinc-950 rounded-full ring-1 ring-zinc-800 overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${dailyPercent}%` }} />
+                </div>
               </div>
+            </section>
+
+            {/* Quick jump into the rest of the dashboard from today's view */}
+            <section className="grid sm:grid-cols-3 gap-3">
               <button
-                onClick={() => setShowTargetForm(v => !v)}
-                className="px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-emerald-500/20 transition-colors"
+                onClick={() => setActiveSection('ledger')}
+                className="text-left bg-zinc-900/40 ring-1 ring-zinc-800 hover:ring-rose-500/30 rounded-2xl p-4 transition-all group"
               >
-                <Pencil size={12} /> {showTargetForm ? 'Close' : 'Set / Edit Target'}
+                <div className="w-9 h-9 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <FileText size={15} className="text-rose-400" />
+                </div>
+                <div className="text-xs font-black text-zinc-200">Log &amp; Reflect</div>
+                <div className="text-[9px] text-zinc-600 mt-1">{logs.length} lecture{logs.length === 1 ? '' : 's'} logged today</div>
               </button>
-            </div>
+              <button
+                onClick={() => setActiveSection('targets')}
+                className="text-left bg-zinc-900/40 ring-1 ring-zinc-800 hover:ring-indigo-500/30 rounded-2xl p-4 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Target size={15} className="text-indigo-300" />
+                </div>
+                <div className="text-xs font-black text-zinc-200">Targets</div>
+                <div className="text-[9px] text-zinc-600 mt-1">{weekTargetMinutes ? `${pct(weekMinutes, weekTargetMinutes)}% of week done` : 'No target set yet'}</div>
+              </button>
+              <button
+                onClick={() => setActiveSection('sacrifice')}
+                className="text-left bg-zinc-900/40 ring-1 ring-zinc-800 hover:ring-orange-500/30 rounded-2xl p-4 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-orange-500/10 ring-1 ring-orange-500/20 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Flame size={15} className="text-orange-400" />
+                </div>
+                <div className="text-xs font-black text-zinc-200">Sacrifice Log</div>
+                <div className="text-[9px] text-zinc-600 mt-1">
+                  {sacrifices.filter(s => s.date_str === selectedDate).length ? 'Written for today' : 'Nothing written yet'}
+                </div>
+              </button>
+            </section>
+          </div>
+        )}
 
-            <div className="p-5 grid sm:grid-cols-3 gap-5 items-center">
-              <div>
-                <div className="text-2xl font-black text-white">{formatMinutes(monthlyMinutes)}</div>
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600 mt-1">
-                  of {formatMinutes(targetMinutes)} target
-                </div>
-              </div>
-              <div>
-                <div className="text-2xl font-black text-white">
-                  {targetVideos ? `${targetCompletedVideos}/${targetVideos}` : monthVideos}
-                </div>
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600 mt-1">
-                  target videos
-                </div>
-              </div>
-              <div>
-                <div className="text-2xl font-black text-emerald-400">
-                  {targetMinutes ? pct(monthlyMinutes, targetMinutes) : 0}%
-                </div>
-                <div className="h-2 bg-zinc-950 rounded-full ring-1 ring-zinc-800 overflow-hidden mt-3">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full transition-all"
-                    style={{ width: `${targetMinutes ? pct(monthlyMinutes, targetMinutes) : 0}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {showTargetForm && (
-              <div className="border-t border-zinc-800 p-5 bg-zinc-950/40 space-y-4">
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <label className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
-                    Monthly study target (minutes)
-                    <input
-                      type="number"
-                      value={targetForm.target_minutes}
-                      onChange={e => setTargetForm({ ...targetForm, target_minutes: e.target.value })}
-                      placeholder="Example: 3600 = 60h"
-                      className="mt-2 w-full bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-emerald-500/40"
-                    />
-                  </label>
-                  <label className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
-                    Monthly video target
-                    <input
-                      type="number"
-                      value={targetForm.target_videos}
-                      onChange={e => setTargetForm({ ...targetForm, target_videos: e.target.value })}
-                      placeholder="Example: 80"
-                      className="mt-2 w-full bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-emerald-500/40"
-                    />
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs font-black text-zinc-200">Pick videos from curriculum</div>
-                    <div className="text-[9px] text-zinc-600">Selected: {selectedTargetIds.size}</div>
+        {activeSection === 'ledger' && (
+          <div className="grid lg:grid-cols-[1.4fr_0.9fr] gap-6">
+            {/* Lecture ledger */}
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
+              <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-zinc-600 text-[9px] font-black uppercase tracking-[0.2em]">
+                    <ListChecks size={11} /> Completed Lectures
                   </div>
-                  <button
-                    onClick={() => setShowCurriculum(v => !v)}
-                    className="px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500/20 transition-colors"
-                  >
-                    {showCurriculum ? 'Hide curriculum' : 'Choose videos'}
-                  </button>
+                  <h2 className="font-black text-zinc-100 text-sm mt-1">What I Completed — {getDateLabel(selectedDate)}</h2>
                 </div>
+                <div className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 text-emerald-400 text-[9px] font-black">
+                  {formatMinutes(dailyMinutes)}
+                </div>
+              </div>
 
-                {showCurriculum && (
-                  <div className="max-h-72 overflow-y-auto rounded-xl ring-1 ring-zinc-800 bg-zinc-950/70 p-2 space-y-1">
-                    {materials.map(material => (
-                      <label
-                        key={material.id}
-                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedTargetIds.has(String(material.id))}
-                          onChange={() => toggleMaterial(String(material.id))}
-                          className="accent-emerald-500"
-                        />
+              <div className="p-3 sm:p-4">
+                {loading ? (
+                  <div className="py-16 text-center text-[10px] uppercase tracking-widest text-zinc-600 animate-pulse">Loading ledger...</div>
+                ) : logs.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-950 ring-1 ring-zinc-800 flex items-center justify-center mx-auto mb-3">
+                      <CalendarDays size={20} className="text-zinc-700" />
+                    </div>
+                    <p className="text-sm font-bold text-zinc-500">Nothing logged for this day.</p>
+                    <p className="text-[9px] text-zinc-700 mt-1">Tick a lecture as completed from Curriculum to create the entry.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {logs.map(log => (
+                      <div key={log.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800/80 hover:ring-zinc-700 transition-colors">
+                        <div className="w-9 h-9 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shrink-0">
+                          <CheckCircle2 size={15} className="text-emerald-500" />
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-bold text-zinc-200 truncate">{material.title}</div>
-                          <div className="text-[8px] text-zinc-600">
-                            {material.subject_name}
-                            {material.topic_name ? ` • ${material.topic_name}` : ''}
-                            {material.duration ? ` • ${material.duration}` : ''}
+                          <div className="text-xs font-bold text-zinc-200 truncate">{log.title}</div>
+                          <div className="text-[8px] uppercase tracking-widest text-zinc-600 mt-1 truncate">
+                            {log.subject_name} {log.topic_name ? `• ${log.topic_name}` : ''}
                           </div>
                         </div>
-                        {completedIds.has(String(material.id)) && (
-                          <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-                        )}
-                      </label>
-                    ))}
-                    {materials.length === 0 && (
-                      <div className="py-8 text-center text-[9px] text-zinc-700">
-                        No curriculum videos found.
+                        <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-zinc-400 shrink-0">
+                          <Clock3 size={11} /> {formatMinutes(Number(log.duration_mins))}
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
+              </div>
+            </section>
 
+            {/* Notes */}
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 flex flex-col min-h-[300px]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/10 ring-1 ring-rose-500/20 flex items-center justify-center">
+                  <FileText size={15} className="text-rose-400" />
+                </div>
+                <div>
+                  <h2 className="font-black text-zinc-100 text-sm">Daily Reflection</h2>
+                  <p className="text-[9px] text-zinc-600">Write what actually happened.</p>
+                </div>
+              </div>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="What did you study? What went well? What should you fix tomorrow?"
+                className="flex-1 min-h-[170px] bg-zinc-950/70 ring-1 ring-zinc-800 rounded-xl p-4 text-xs text-zinc-300 placeholder:text-zinc-700 outline-none focus:ring-emerald-500/40 resize-none"
+              />
+              <button
+                onClick={saveNote}
+                disabled={savingNote}
+                className="mt-3 w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+              >
+                <Save size={13} /> {savingNote ? 'Saving...' : 'Save Daily Report'}
+              </button>
+            </section>
+          </div>
+        )}
+
+        {activeSection === 'targets' && (
+          <div className="grid lg:grid-cols-[1.35fr_0.9fr] gap-6">
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
+              <div className="p-5 border-b border-zinc-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Target size={16} className="text-emerald-400" />
+                    <h2 className="font-black text-zinc-100">
+                      {dateObj(`${currentMonth}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} Big Target
+                    </h2>
+                  </div>
+                  <p className="text-[9px] text-zinc-600 mt-1">
+                    Set the big goal, then break it into weekly actions.
+                  </p>
+                </div>
                 <button
-                  onClick={saveMonthlyTarget}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                  onClick={() => setShowTargetForm(v => !v)}
+                  className="px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-emerald-500/20 transition-colors"
                 >
-                  <Save size={13} /> Save Monthly Goal
+                  <Pencil size={12} /> {showTargetForm ? 'Close' : 'Set / Edit Target'}
                 </button>
               </div>
-            )}
-          </section>
 
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <FlameKindling size={16} className="text-orange-400" />
-                  <h2 className="font-black text-zinc-100">This Week</h2>
+              <div className="p-5 grid sm:grid-cols-3 gap-5 items-center">
+                <div>
+                  <div className="text-2xl font-black text-white">{formatMinutes(monthlyMinutes)}</div>
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600 mt-1">
+                    of {formatMinutes(targetMinutes)} target
+                  </div>
                 </div>
-                <p className="text-[9px] text-zinc-600 mt-1">
-                  {getDateLabel(currentWeek)} – {getDateLabel(weekEnd)}
-                </p>
+                <div>
+                  <div className="text-2xl font-black text-white">
+                    {targetVideos ? `${targetCompletedVideos}/${targetVideos}` : monthVideos}
+                  </div>
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600 mt-1">
+                    target videos
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-emerald-400">
+                    {targetMinutes ? pct(monthlyMinutes, targetMinutes) : 0}%
+                  </div>
+                  <div className="h-2 bg-zinc-950 rounded-full ring-1 ring-zinc-800 overflow-hidden mt-3">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all"
+                      style={{ width: `${targetMinutes ? pct(monthlyMinutes, targetMinutes) : 0}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={() => setShowWeeklyForm(v => !v)}
-                className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 text-zinc-500 hover:text-white transition-colors"
-              >
-                <Pencil size={13} />
-              </button>
-            </div>
 
-            <div className="mt-6 grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-2xl font-black text-white">{formatMinutes(weekMinutes)}</div>
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600">
-                  of {formatMinutes(weekTargetMinutes)}
+              {showTargetForm && (
+                <div className="border-t border-zinc-800 p-5 bg-zinc-950/40 space-y-4">
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                      Monthly study target (minutes)
+                      <input
+                        type="number"
+                        value={targetForm.target_minutes}
+                        onChange={e => setTargetForm({ ...targetForm, target_minutes: e.target.value })}
+                        placeholder="Example: 3600 = 60h"
+                        className="mt-2 w-full bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-emerald-500/40"
+                      />
+                    </label>
+                    <label className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                      Monthly video target
+                      <input
+                        type="number"
+                        value={targetForm.target_videos}
+                        onChange={e => setTargetForm({ ...targetForm, target_videos: e.target.value })}
+                        placeholder="Example: 80"
+                        className="mt-2 w-full bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-emerald-500/40"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-black text-zinc-200">Pick videos from curriculum</div>
+                      <div className="text-[9px] text-zinc-600">Selected: {selectedTargetIds.size}</div>
+                    </div>
+                    <button
+                      onClick={() => setShowCurriculum(v => !v)}
+                      className="px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500/20 transition-colors"
+                    >
+                      {showCurriculum ? 'Hide curriculum' : 'Choose videos'}
+                    </button>
+                  </div>
+
+                  {showCurriculum && (
+                    <div className="max-h-72 overflow-y-auto rounded-xl ring-1 ring-zinc-800 bg-zinc-950/70 p-2 space-y-1">
+                      {materials.map(material => (
+                        <label
+                          key={material.id}
+                          className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedTargetIds.has(String(material.id))}
+                            onChange={() => toggleMaterial(String(material.id))}
+                            className="accent-emerald-500"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[10px] font-bold text-zinc-200 truncate">{material.title}</div>
+                            <div className="text-[8px] text-zinc-600">
+                              {material.subject_name}
+                              {material.topic_name ? ` • ${material.topic_name}` : ''}
+                              {material.duration ? ` • ${material.duration}` : ''}
+                            </div>
+                          </div>
+                          {completedIds.has(String(material.id)) && (
+                            <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                          )}
+                        </label>
+                      ))}
+                      {materials.length === 0 && (
+                        <div className="py-8 text-center text-[9px] text-zinc-700">
+                          No curriculum videos found.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={saveMonthlyTarget}
+                    className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Save size={13} /> Save Monthly Goal
+                  </button>
+                </div>
+              )}
+            </section>
+
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <FlameKindling size={16} className="text-orange-400" />
+                    <h2 className="font-black text-zinc-100">This Week</h2>
+                  </div>
+                  <p className="text-[9px] text-zinc-600 mt-1">
+                    {getDateLabel(currentWeek)} – {getDateLabel(weekEnd)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowWeeklyForm(v => !v)}
+                  className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 text-zinc-500 hover:text-white transition-colors"
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-2xl font-black text-white">{formatMinutes(weekMinutes)}</div>
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">
+                    of {formatMinutes(weekTargetMinutes)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-indigo-300">
+                    {weekTargetMinutes ? pct(weekMinutes, weekTargetMinutes) : 0}%
+                  </div>
+                  <div className="h-2 bg-zinc-950 rounded-full mt-3 overflow-hidden ring-1 ring-zinc-800">
+                    <div
+                      className="h-full bg-indigo-500 rounded-full"
+                      style={{ width: `${weekTargetMinutes ? pct(weekMinutes, weekTargetMinutes) : 0}%` }}
+                    />
+                  </div>
                 </div>
               </div>
-              <div>
-                <div className="text-2xl font-black text-indigo-300">
-                  {weekTargetMinutes ? pct(weekMinutes, weekTargetMinutes) : 0}%
+
+              <div className="mt-5 p-4 rounded-2xl bg-orange-500/5 ring-1 ring-orange-500/10">
+                <div className="text-[8px] uppercase tracking-widest font-black text-orange-400">Today's required pace</div>
+                <div className="text-2xl font-black text-zinc-100 mt-1">
+                  {weekTargetMinutes ? formatMinutes(todayNeeded) : 'Set monthly target'}
                 </div>
-                <div className="h-2 bg-zinc-950 rounded-full mt-3 overflow-hidden ring-1 ring-zinc-800">
+                <div className="text-[9px] text-zinc-600 mt-1">
+                  {weekTargetMinutes
+                    ? `${formatMinutes(remainingWeekMinutes)} remaining across ${daysLeftWeek} day${daysLeftWeek > 1 ? 's' : ''}.`
+                    : 'A weekly target will be derived from your monthly goal.'}
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                  <div className="text-sm font-black text-white">{weekVideos}</div>
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">videos done</div>
+                </div>
+                <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                  <div className="text-sm font-black text-indigo-300">
+                    {weekTargetVideos ? `${weekTargetCompletedVideos}/${weekTargetVideos}` : '—'}
+                  </div>
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">video target</div>
+                </div>
+              </div>
+
+              {showWeeklyForm && (
+                <div className="mt-5 pt-5 border-t border-zinc-800 space-y-3">
+                  <div className="text-[9px] text-zinc-600">
+                    Default is derived from your monthly target. Edit it when a week needs a different workload.
+                  </div>
+                  <input
+                    type="number"
+                    value={weeklyForm.target_minutes}
+                    onChange={e => setWeeklyForm({ ...weeklyForm, target_minutes: e.target.value })}
+                    placeholder={`Weekly minutes (auto: ${autoWeeklyMinutes})`}
+                    className="w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-indigo-500/40"
+                  />
+                  <input
+                    type="number"
+                    value={weeklyForm.target_videos}
+                    onChange={e => setWeeklyForm({ ...weeklyForm, target_videos: e.target.value })}
+                    placeholder={`Weekly videos (auto: ${autoWeeklyVideos})`}
+                    className="w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-indigo-500/40"
+                  />
+                  <button
+                    onClick={saveWeeklyTarget}
+                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-black uppercase tracking-widest transition-colors"
+                  >
+                    Save Weekly Target
+                  </button>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
+        {activeSection === 'graphs' && (
+          <div className="space-y-6">
+            <section className="grid lg:grid-cols-[1.45fr_.8fr] gap-6">
+              <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <BarChart3 size={16} className="text-indigo-400" />
+                      <h2 className="font-black text-zinc-100">Weekly Study Graph</h2>
+                    </div>
+                    <p className="text-[9px] text-zinc-600 mt-1">Daily study hours and lecture output.</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => shiftWeek(-1)} className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
+                      <ChevronLeft size={13} />
+                    </button>
+                    <button onClick={() => shiftWeek(1)} className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-64 flex items-end gap-2 sm:gap-4 border-b border-zinc-800 pb-1">
+                  {dailySeries.map(day => (
+                    <button
+                      key={day.date}
+                      onClick={() => setSelectedDate(day.date)}
+                      className="flex-1 h-full flex flex-col justify-end gap-2 group"
+                      title={`${day.date}: ${formatMinutes(day.minutes)} • ${day.videos} videos`}
+                    >
+                      <div className="text-[8px] text-zinc-600 opacity-0 group-hover:opacity-100">
+                        {formatMinutes(day.minutes)}
+                      </div>
+                      <div
+                        className={`w-full max-w-12 mx-auto rounded-t-lg transition-all ${
+                          day.date === selectedDate ? 'bg-emerald-400' : 'bg-indigo-500/70 group-hover:bg-indigo-400'
+                        }`}
+                        style={{ height: `${Math.max(day.minutes ? 4 : 1, (day.minutes / maxWeek) * 190)}px` }}
+                      />
+                      <div className="text-[8px] uppercase font-black text-zinc-600">
+                        {dateObj(day.date).toLocaleDateString('en-IN', { weekday: 'short' })}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                    <div className="text-lg font-black text-white">{formatMinutes(weekMinutes)}</div>
+                    <div className="text-[8px] uppercase tracking-widest text-zinc-600">study</div>
+                  </div>
+                  <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                    <div className="text-lg font-black text-white">{weekVideos}</div>
+                    <div className="text-[8px] uppercase tracking-widest text-zinc-600">videos</div>
+                  </div>
+                  <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                    <div className="text-lg font-black text-white">{weekExams.length}</div>
+                    <div className="text-[8px] uppercase tracking-widest text-zinc-600">exams</div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
+                <div className="flex items-center gap-2 mb-5">
+                  <Timer size={16} className="text-emerald-400" />
+                  <h2 className="font-black text-zinc-100">Today's Pace</h2>
+                </div>
+                <div className="text-[8px] uppercase tracking-widest text-zinc-600">Selected day</div>
+                <div className="text-3xl font-black text-white mt-1">{formatMinutes(dailyMinutes)}</div>
+
+                <div className="mt-5 text-[9px] text-zinc-500">Weekly target progress</div>
+                <div className="h-2 bg-zinc-950 rounded-full mt-2 overflow-hidden ring-1 ring-zinc-800">
                   <div
-                    className="h-full bg-indigo-500 rounded-full"
+                    className="h-full bg-emerald-500 rounded-full"
                     style={{ width: `${weekTargetMinutes ? pct(weekMinutes, weekTargetMinutes) : 0}%` }}
                   />
                 </div>
-              </div>
-            </div>
 
-            <div className="mt-5 p-4 rounded-2xl bg-orange-500/5 ring-1 ring-orange-500/10">
-              <div className="text-[8px] uppercase tracking-widest font-black text-orange-400">Today's required pace</div>
-              <div className="text-2xl font-black text-zinc-100 mt-1">
-                {weekTargetMinutes ? formatMinutes(todayNeeded) : 'Set monthly target'}
-              </div>
-              <div className="text-[9px] text-zinc-600 mt-1">
-                {weekTargetMinutes
-                  ? `${formatMinutes(remainingWeekMinutes)} remaining across ${daysLeftWeek} day${daysLeftWeek > 1 ? 's' : ''}.`
-                  : 'A weekly target will be derived from your monthly goal.'}
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
-                <div className="text-sm font-black text-white">{weekVideos}</div>
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600">videos done</div>
-              </div>
-              <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
-                <div className="text-sm font-black text-indigo-300">
-                  {weekTargetVideos ? `${weekTargetCompletedVideos}/${weekTargetVideos}` : '—'}
+                <div className="flex justify-between text-[8px] text-zinc-600 mt-2">
+                  <span>{formatMinutes(weekMinutes)} done</span>
+                  <span>{formatMinutes(remainingWeekMinutes)} left</span>
                 </div>
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600">video target</div>
-              </div>
-            </div>
 
-            {showWeeklyForm && (
-              <div className="mt-5 pt-5 border-t border-zinc-800 space-y-3">
-                <div className="text-[9px] text-zinc-600">
-                  Default is derived from your monthly target. Edit it when a week needs a different workload.
+                <div className="mt-6 p-4 rounded-2xl bg-zinc-950/70 ring-1 ring-zinc-800">
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">Needed per remaining day</div>
+                  <div className="text-sm font-black text-zinc-200 mt-1">
+                    {weekTargetMinutes ? formatMinutes(todayNeeded) : 'Set a monthly target'}
+                  </div>
                 </div>
-                <input
-                  type="number"
-                  value={weeklyForm.target_minutes}
-                  onChange={e => setWeeklyForm({ ...weeklyForm, target_minutes: e.target.value })}
-                  placeholder={`Weekly minutes (auto: ${autoWeeklyMinutes})`}
-                  className="w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-indigo-500/40"
-                />
-                <input
-                  type="number"
-                  value={weeklyForm.target_videos}
-                  onChange={e => setWeeklyForm({ ...weeklyForm, target_videos: e.target.value })}
-                  placeholder={`Weekly videos (auto: ${autoWeeklyVideos})`}
-                  className="w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-indigo-500/40"
-                />
-                <button
-                  onClick={saveWeeklyTarget}
-                  className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-black uppercase tracking-widest transition-colors"
-                >
-                  Save Weekly Target
-                </button>
-              </div>
-            )}
-          </section>
-        </div>
+              </section>
+            </section>
 
-        {/* ============ GRAPHS ============ */}
-        <div id="graphs" className="scroll-mt-32 space-y-6">
-          <section className="grid lg:grid-cols-[1.45fr_.8fr] gap-6">
+            {/* Monthly graph */}
             <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <div className="flex items-center gap-2">
-                    <BarChart3 size={16} className="text-indigo-400" />
-                    <h2 className="font-black text-zinc-100">Weekly Study Graph</h2>
+                    <BarChart3 size={16} className="text-violet-400" />
+                    <h2 className="font-black text-zinc-100">Month at a Glance</h2>
                   </div>
-                  <p className="text-[9px] text-zinc-600 mt-1">Daily study hours and lecture output.</p>
+                  <p className="text-[9px] text-zinc-600 mt-1">One bar per day. Select a bar to open that day's report.</p>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => shiftWeek(-1)} className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
-                    <ChevronLeft size={13} />
-                  </button>
-                  <button onClick={() => shiftWeek(1)} className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
-                    <ChevronRight size={13} />
-                  </button>
+                <div className="text-right">
+                  <div className="text-sm font-black text-violet-300">{formatMinutes(monthlyMinutes)}</div>
+                  <div className="text-[8px] text-zinc-600">{monthVideos} videos • {monthExams.length} exams</div>
                 </div>
               </div>
 
-              <div className="h-64 flex items-end gap-2 sm:gap-4 border-b border-zinc-800 pb-1">
-                {dailySeries.map(day => (
+              <div className="h-40 flex items-end gap-0.5 sm:gap-1 overflow-hidden">
+                {monthSeries.map(day => (
                   <button
                     key={day.date}
-                    onClick={() => setSelectedDate(day.date)}
-                    className="flex-1 h-full flex flex-col justify-end gap-2 group"
                     title={`${day.date}: ${formatMinutes(day.minutes)} • ${day.videos} videos`}
-                  >
-                    <div className="text-[8px] text-zinc-600 opacity-0 group-hover:opacity-100">
-                      {formatMinutes(day.minutes)}
-                    </div>
-                    <div
-                      className={`w-full max-w-12 mx-auto rounded-t-lg transition-all ${
-                        day.date === selectedDate ? 'bg-emerald-400' : 'bg-indigo-500/70 group-hover:bg-indigo-400'
-                      }`}
-                      style={{ height: `${Math.max(day.minutes ? 4 : 1, (day.minutes / maxWeek) * 190)}px` }}
-                    />
-                    <div className="text-[8px] uppercase font-black text-zinc-600">
-                      {dateObj(day.date).toLocaleDateString('en-IN', { weekday: 'short' })}
-                    </div>
-                  </button>
+                    onClick={() => setSelectedDate(day.date)}
+                    className={`flex-1 min-w-[5px] max-w-7 rounded-t-sm ${
+                      day.date === selectedDate ? 'bg-emerald-400' : 'bg-violet-500/55 hover:bg-violet-400/80'
+                    }`}
+                    style={{ height: `${Math.max(day.minutes ? 3 : 1, (day.minutes / maxMonth) * 125)}px` }}
+                  />
                 ))}
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-3">
-                <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
-                  <div className="text-lg font-black text-white">{formatMinutes(weekMinutes)}</div>
-                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">study</div>
-                </div>
-                <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
-                  <div className="text-lg font-black text-white">{weekVideos}</div>
-                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">videos</div>
-                </div>
-                <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
-                  <div className="text-lg font-black text-white">{weekExams.length}</div>
-                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">exams</div>
-                </div>
+              <div className="flex justify-between mt-2 text-[8px] text-zinc-700">
+                <span>1</span>
+                <span>{Math.ceil(daysInMonth(currentMonth) / 2)}</span>
+                <span>{daysInMonth(currentMonth)}</span>
               </div>
             </section>
 
-            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
-              <div className="flex items-center gap-2 mb-5">
-                <Timer size={16} className="text-emerald-400" />
-                <h2 className="font-black text-zinc-100">Today's Pace</h2>
-              </div>
-              <div className="text-[8px] uppercase tracking-widest text-zinc-600">Selected day</div>
-              <div className="text-3xl font-black text-white mt-1">{formatMinutes(dailyMinutes)}</div>
-
-              <div className="mt-5 text-[9px] text-zinc-500">Weekly target progress</div>
-              <div className="h-2 bg-zinc-950 rounded-full mt-2 overflow-hidden ring-1 ring-zinc-800">
-                <div
-                  className="h-full bg-emerald-500 rounded-full"
-                  style={{ width: `${weekTargetMinutes ? pct(weekMinutes, weekTargetMinutes) : 0}%` }}
-                />
-              </div>
-
-              <div className="flex justify-between text-[8px] text-zinc-600 mt-2">
-                <span>{formatMinutes(weekMinutes)} done</span>
-                <span>{formatMinutes(remainingWeekMinutes)} left</span>
-              </div>
-
-              <div className="mt-6 p-4 rounded-2xl bg-zinc-950/70 ring-1 ring-zinc-800">
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600">Needed per remaining day</div>
-                <div className="text-sm font-black text-zinc-200 mt-1">
-                  {weekTargetMinutes ? formatMinutes(todayNeeded) : 'Set a monthly target'}
+            {/* 28 day activity */}
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20 flex items-center justify-center">
+                  <Activity size={15} className="text-indigo-400" />
                 </div>
+                <div>
+                  <h2 className="font-black text-zinc-100 text-sm">28-Day Consistency</h2>
+                  <p className="text-[9px] text-zinc-600">A visual record of the days you actually studied.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-7 sm:grid-cols-14 gap-2">
+                {recentDays.map(day => {
+                  const level = day.minutes === 0 ? 0 : day.minutes < 60 ? 1 : day.minutes < 180 ? 2 : day.minutes < 360 ? 3 : 4;
+                  return (
+                    <button
+                      key={day.date}
+                      onClick={() => setSelectedDate(day.date)}
+                      title={`${day.date}: ${formatMinutes(day.minutes)}`}
+                      className={`aspect-square rounded-lg ring-1 transition-all hover:scale-105 ${
+                        level === 0 ? 'bg-zinc-950 ring-zinc-800' :
+                        level === 1 ? 'bg-emerald-950 ring-emerald-900' :
+                        level === 2 ? 'bg-emerald-900 ring-emerald-800' :
+                        level === 3 ? 'bg-emerald-700 ring-emerald-600' :
+                        'bg-emerald-500 ring-emerald-400'
+                      } ${selectedDate === day.date ? 'outline outline-2 outline-white/50 outline-offset-2' : ''}`}
+                    />
+                  );
+                })}
               </div>
             </section>
-          </section>
-
-          {/* Monthly graph */}
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <div className="flex items-center gap-2">
-                  <BarChart3 size={16} className="text-violet-400" />
-                  <h2 className="font-black text-zinc-100">Month at a Glance</h2>
-                </div>
-                <p className="text-[9px] text-zinc-600 mt-1">One bar per day. Select a bar to open that day's report.</p>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-black text-violet-300">{formatMinutes(monthlyMinutes)}</div>
-                <div className="text-[8px] text-zinc-600">{monthVideos} videos • {monthExams.length} exams</div>
-              </div>
-            </div>
-
-            <div className="h-40 flex items-end gap-0.5 sm:gap-1 overflow-hidden">
-              {monthSeries.map(day => (
-                <button
-                  key={day.date}
-                  title={`${day.date}: ${formatMinutes(day.minutes)} • ${day.videos} videos`}
-                  onClick={() => setSelectedDate(day.date)}
-                  className={`flex-1 min-w-[5px] max-w-7 rounded-t-sm ${
-                    day.date === selectedDate ? 'bg-emerald-400' : 'bg-violet-500/55 hover:bg-violet-400/80'
-                  }`}
-                  style={{ height: `${Math.max(day.minutes ? 3 : 1, (day.minutes / maxMonth) * 125)}px` }}
-                />
-              ))}
-            </div>
-
-            <div className="flex justify-between mt-2 text-[8px] text-zinc-700">
-              <span>1</span>
-              <span>{Math.ceil(daysInMonth(currentMonth) / 2)}</span>
-              <span>{daysInMonth(currentMonth)}</span>
-            </div>
-          </section>
-
-          {/* 28 day activity */}
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20 flex items-center justify-center">
-                <Activity size={15} className="text-indigo-400" />
-              </div>
-              <div>
-                <h2 className="font-black text-zinc-100 text-sm">28-Day Consistency</h2>
-                <p className="text-[9px] text-zinc-600">A visual record of the days you actually studied.</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-7 sm:grid-cols-14 gap-2">
-              {recentDays.map(day => {
-                const level = day.minutes === 0 ? 0 : day.minutes < 60 ? 1 : day.minutes < 180 ? 2 : day.minutes < 360 ? 3 : 4;
-                return (
-                  <button
-                    key={day.date}
-                    onClick={() => setSelectedDate(day.date)}
-                    title={`${day.date}: ${formatMinutes(day.minutes)}`}
-                    className={`aspect-square rounded-lg ring-1 transition-all hover:scale-105 ${
-                      level === 0 ? 'bg-zinc-950 ring-zinc-800' :
-                      level === 1 ? 'bg-emerald-950 ring-emerald-900' :
-                      level === 2 ? 'bg-emerald-900 ring-emerald-800' :
-                      level === 3 ? 'bg-emerald-700 ring-emerald-600' :
-                      'bg-emerald-500 ring-emerald-400'
-                    } ${selectedDate === day.date ? 'outline outline-2 outline-white/50 outline-offset-2' : ''}`}
-                  />
-                );
-              })}
-            </div>
-          </section>
-        </div>
-
-        {/* ============ EXAMS ============ */}
-        <section id="exams" className="scroll-mt-32 bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
-          <div className="p-5 border-b border-zinc-800 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20 flex items-center justify-center">
-                <GraduationCap size={16} className="text-amber-400" />
-              </div>
-              <div>
-                <h2 className="font-black text-zinc-100 text-sm">Exam Scoreboard</h2>
-                <p className="text-[9px] text-zinc-600">Record every mock, GATE test, or other exam.</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowExamForm(v => !v)}
-              className="px-3 py-2 rounded-xl bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-amber-500/20 transition-colors"
-            >
-              {showExamForm ? <X size={12} /> : <Plus size={12} />} {showExamForm ? 'Close' : 'Add Exam'}
-            </button>
           </div>
+        )}
 
-          {showExamForm && (
-            <div className="p-5 border-b border-zinc-800 bg-zinc-950/40 grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <input value={examForm.exam_name} onChange={e => setExamForm({ ...examForm, exam_name: e.target.value })} placeholder="Exam name" className="lg:col-span-2 bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
-              <input type="date" value={examForm.exam_date} onChange={e => setExamForm({ ...examForm, exam_date: e.target.value })} className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
-              <input type="number" value={examForm.score} onChange={e => setExamForm({ ...examForm, score: e.target.value })} placeholder="Score" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
-              <input type="number" value={examForm.total_marks} onChange={e => setExamForm({ ...examForm, total_marks: e.target.value })} placeholder="Total marks" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
-              <textarea value={examForm.notes} onChange={e => setExamForm({ ...examForm, notes: e.target.value })} placeholder="Short note (optional)" className="sm:col-span-2 lg:col-span-4 bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none resize-none h-12 focus:ring-amber-500/40" />
-              <button onClick={addExam} className="bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors">Save Result</button>
+        {activeSection === 'exams' && (
+          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
+            <div className="p-5 border-b border-zinc-800 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20 flex items-center justify-center">
+                  <GraduationCap size={16} className="text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="font-black text-zinc-100 text-sm">Exam Scoreboard</h2>
+                  <p className="text-[9px] text-zinc-600">Record every mock, GATE test, or other exam.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowExamForm(v => !v)}
+                className="px-3 py-2 rounded-xl bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-amber-500/20 transition-colors"
+              >
+                {showExamForm ? <X size={12} /> : <Plus size={12} />} {showExamForm ? 'Close' : 'Add Exam'}
+              </button>
             </div>
-          )}
 
-          <div className="p-4 space-y-2">
-            {exams.length === 0 ? (
-              <div className="py-10 text-center text-[10px] uppercase tracking-widest text-zinc-700">No exams recorded yet.</div>
-            ) : (
-              exams.map(exam => {
-                const scorePct = getScorePercent(exam);
-                return (
-                  <div key={exam.id} className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
-                    <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                      <Trophy size={15} className="text-amber-400" />
-                    </div>
-                    <div className="flex-1 min-w-[150px]">
-                      <div className="text-xs font-bold text-zinc-200">{exam.exam_name}</div>
-                      <div className="text-[8px] text-zinc-600 uppercase tracking-widest mt-1">{getDateLabel(exam.exam_date)}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-black text-zinc-100">
-                        {exam.score === null ? '—' : `${exam.score}${exam.total_marks !== null ? ` / ${exam.total_marks}` : ''}`}
-                      </div>
-                      {scorePct !== null && <div className="text-[8px] font-bold text-emerald-400">{scorePct}%</div>}
-                    </div>
-                    <button onClick={() => deleteExam(exam.id)} className="p-2 text-zinc-600 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                );
-              })
+            {showExamForm && (
+              <div className="p-5 border-b border-zinc-800 bg-zinc-950/40 grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <input value={examForm.exam_name} onChange={e => setExamForm({ ...examForm, exam_name: e.target.value })} placeholder="Exam name" className="lg:col-span-2 bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
+                <input type="date" value={examForm.exam_date} onChange={e => setExamForm({ ...examForm, exam_date: e.target.value })} className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
+                <input type="number" value={examForm.score} onChange={e => setExamForm({ ...examForm, score: e.target.value })} placeholder="Score" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
+                <input type="number" value={examForm.total_marks} onChange={e => setExamForm({ ...examForm, total_marks: e.target.value })} placeholder="Total marks" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
+                <textarea value={examForm.notes} onChange={e => setExamForm({ ...examForm, notes: e.target.value })} placeholder="Short note (optional)" className="sm:col-span-2 lg:col-span-4 bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none resize-none h-12 focus:ring-amber-500/40" />
+                <button onClick={addExam} className="bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors">Save Result</button>
+              </div>
             )}
-          </div>
-        </section>
 
-        {/* ============ SACRIFICE ============ */}
-        <div id="sacrifice" className="scroll-mt-32 grid lg:grid-cols-[1.1fr_.9fr] gap-6">
-          <section className="bg-gradient-to-br from-orange-500/10 via-zinc-900/50 to-rose-500/5 ring-1 ring-orange-500/15 rounded-[1.5rem] p-5 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-orange-400" />
-                  <h2 className="font-black text-zinc-100">Today's Sacrifice</h2>
-                </div>
-                <p className="text-[9px] text-zinc-600 mt-1">Write what you deliberately gave up for your study goal.</p>
-              </div>
-              <Sparkles size={17} className="text-orange-400" />
-            </div>
-
-            <textarea
-              value={sacrificeText}
-              onChange={e => setSacrificeText(e.target.value)}
-              placeholder="Today I sacrificed ______ because I wanted to study..."
-              className="mt-5 w-full min-h-[120px] bg-zinc-950/70 ring-1 ring-zinc-800 rounded-xl p-4 text-xs text-zinc-300 placeholder:text-zinc-700 outline-none resize-none focus:ring-orange-500/30"
-            />
-
-            <button
-              onClick={addSacrifice}
-              disabled={savingSacrifice || !sacrificeText.trim()}
-              className="mt-3 w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-zinc-950 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
-            >
-              <Plus size={13} /> {savingSacrifice ? 'Saving...' : 'Add to My Sacrifice Log'}
-            </button>
-          </section>
-
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Flame size={16} className="text-orange-400" />
-              <div>
-                <h2 className="font-black text-zinc-100">Sacrifice History</h2>
-                <p className="text-[9px] text-zinc-600">{getDateLabel(selectedDate)}</p>
-              </div>
-            </div>
-
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {sacrifices.filter(item => item.date_str === selectedDate).map(item => (
-                <div key={item.id} className="p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800 flex gap-3">
-                  <Flame size={14} className="text-orange-400 mt-0.5 shrink-0" />
-                  <div className="flex-1 text-[10px] leading-relaxed text-zinc-300">{item.content}</div>
-                  <button
-                    onClick={() => deleteSacrifice(item.id)}
-                    className="text-zinc-700 hover:text-red-400 transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
-
-              {sacrifices.filter(item => item.date_str === selectedDate).length === 0 && (
-                <div className="text-[9px] text-zinc-700 text-center py-8">
-                  No sacrifice written for this day.
-                </div>
+            <div className="p-4 space-y-2">
+              {exams.length === 0 ? (
+                <div className="py-10 text-center text-[10px] uppercase tracking-widest text-zinc-700">No exams recorded yet.</div>
+              ) : (
+                exams.map(exam => {
+                  const scorePct = getScorePercent(exam);
+                  return (
+                    <div key={exam.id} className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
+                      <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                        <Trophy size={15} className="text-amber-400" />
+                      </div>
+                      <div className="flex-1 min-w-[150px]">
+                        <div className="text-xs font-bold text-zinc-200">{exam.exam_name}</div>
+                        <div className="text-[8px] text-zinc-600 uppercase tracking-widest mt-1">{getDateLabel(exam.exam_date)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-black text-zinc-100">
+                          {exam.score === null ? '—' : `${exam.score}${exam.total_marks !== null ? ` / ${exam.total_marks}` : ''}`}
+                        </div>
+                        {scorePct !== null && <div className="text-[8px] font-bold text-emerald-400">{scorePct}%</div>}
+                      </div>
+                      <button onClick={() => deleteExam(exam.id)} className="p-2 text-zinc-600 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           </section>
+        )}
+
+        {activeSection === 'sacrifice' && (
+          <div className="grid lg:grid-cols-[1.1fr_.9fr] gap-6">
+            <section className="bg-gradient-to-br from-orange-500/10 via-zinc-900/50 to-rose-500/5 ring-1 ring-orange-500/15 rounded-[1.5rem] p-5 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck size={16} className="text-orange-400" />
+                    <h2 className="font-black text-zinc-100">Today's Sacrifice</h2>
+                  </div>
+                  <p className="text-[9px] text-zinc-600 mt-1">Write what you deliberately gave up for your study goal.</p>
+                </div>
+                <Sparkles size={17} className="text-orange-400" />
+              </div>
+
+              <textarea
+                value={sacrificeText}
+                onChange={e => setSacrificeText(e.target.value)}
+                placeholder="Today I sacrificed ______ because I wanted to study..."
+                className="mt-5 w-full min-h-[120px] bg-zinc-950/70 ring-1 ring-zinc-800 rounded-xl p-4 text-xs text-zinc-300 placeholder:text-zinc-700 outline-none resize-none focus:ring-orange-500/30"
+              />
+
+              <button
+                onClick={addSacrifice}
+                disabled={savingSacrifice || !sacrificeText.trim()}
+                className="mt-3 w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-zinc-950 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+              >
+                <Plus size={13} /> {savingSacrifice ? 'Saving...' : 'Add to My Sacrifice Log'}
+              </button>
+            </section>
+
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Flame size={16} className="text-orange-400" />
+                <div>
+                  <h2 className="font-black text-zinc-100">Sacrifice History</h2>
+                  <p className="text-[9px] text-zinc-600">{getDateLabel(selectedDate)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {sacrifices.filter(item => item.date_str === selectedDate).map(item => (
+                  <div key={item.id} className="p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800 flex gap-3">
+                    <Flame size={14} className="text-orange-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 text-[10px] leading-relaxed text-zinc-300">{item.content}</div>
+                    <button
+                      onClick={() => deleteSacrifice(item.id)}
+                      className="text-zinc-700 hover:text-red-400 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+
+                {sacrifices.filter(item => item.date_str === selectedDate).length === 0 && (
+                  <div className="text-[9px] text-zinc-700 text-center py-8">
+                    No sacrifice written for this day.
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
         </div>
       </main>
+
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 }
