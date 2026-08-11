@@ -512,18 +512,6 @@ export default function DailyTrackerPage() {
     return Math.round((Number(exam.score) / Number(exam.total_marks)) * 100);
   };
 
-  const recentDays = useMemo(() => {
-    // Keep date arithmetic inside the existing pure-ish helper instead of
-    // constructing/mutating Date objects directly inside this memo. This is
-    // compatible with the React Compiler used by the current Next.js build.
-    return Array.from({ length: 28 }, (_, i) => {
-      const date = addDays(today, -(27 - i));
-      const minutes = allLogs
-        .filter(log => log.date_str === date)
-        .reduce((sum, log) => sum + Number(log.duration_mins || 0), 0);
-      return { date, minutes };
-    });
-  }, [allLogs, today]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans pb-20">
