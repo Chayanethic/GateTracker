@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '../../../../lib/supabase';
-import { getUserProfile, upsertUserProgress, addExperiencePoints, syncDailyXpAndStreak } from '../../../../lib/dataService';
+import { getUserProfile, upsertUserProgress, addExperiencePoints, syncDailyXpAndStreak, syncDailyLectureCompletion } from '../../../../lib/dataService';
 import toast from 'react-hot-toast';
 import {Activity, BookOpen, ArrowLeft, Check, Maximize2, MonitorPlay, Save, Database, Flame, Zap } from 'lucide-react';
 
@@ -135,6 +135,7 @@ export default function FocusRoom() {
     setIsCompleted(newStatus); 
     
     await upsertUserProgress(userId, material.id, newStatus, notes);
+    await syncDailyLectureCompletion(userId, material, newStatus);
     toast(newStatus ? 'Marked as Completed' : 'Status Reverted', {
       style: { background: '#18181b', color: '#e4e4e7', border: '1px solid #27272a', fontSize: '14px' }
     });
@@ -197,6 +198,7 @@ export default function FocusRoom() {
     
     if (material && currentUserId) {
         await upsertUserProgress(currentUserId, material.id, isCompleted, notes);
+        if (isCompleted) await syncDailyLectureCompletion(currentUserId, material, true);
     }
     
     // Redirect back to Hub after allowing toasts to show
