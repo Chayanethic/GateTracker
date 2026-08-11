@@ -331,11 +331,11 @@ export default function DailyTrackerPage() {
   const dailyPercent = Math.min(100, Math.round((dailyMinutes / 360) * 100));
 
   const recentDays = useMemo(() => {
-    const base = new Date(`${today}T12:00:00`);
+    // Keep date arithmetic inside the existing pure-ish helper instead of
+    // constructing/mutating Date objects directly inside this memo. This is
+    // compatible with the React Compiler used by the current Next.js build.
     return Array.from({ length: 28 }, (_, i) => {
-      const d = new Date(base);
-      d.setDate(base.getDate() - (27 - i));
-      const date = getISTDateString(d);
+      const date = addDays(today, -(27 - i));
       const minutes = allLogs
         .filter(log => log.date_str === date)
         .reduce((sum, log) => sum + Number(log.duration_mins || 0), 0);
@@ -513,11 +513,11 @@ export default function DailyTrackerPage() {
   };
 
   const recentDays = useMemo(() => {
-    const base = new Date(`${today}T12:00:00`);
+    // Keep date arithmetic inside the existing pure-ish helper instead of
+    // constructing/mutating Date objects directly inside this memo. This is
+    // compatible with the React Compiler used by the current Next.js build.
     return Array.from({ length: 28 }, (_, i) => {
-      const d = new Date(base);
-      d.setDate(base.getDate() - (27 - i));
-      const date = getISTDateString(d);
+      const date = addDays(today, -(27 - i));
       const minutes = allLogs
         .filter(log => log.date_str === date)
         .reduce((sum, log) => sum + Number(log.duration_mins || 0), 0);
