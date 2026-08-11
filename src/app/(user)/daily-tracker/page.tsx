@@ -8,7 +8,7 @@ import {
   Activity, ArrowLeft, CalendarDays, CheckCircle2, Clock3, FileText,
   Flame, GraduationCap, Plus, Save, Trash2, Trophy, Video, X, Target,
   BarChart3, ChevronLeft, ChevronRight, FlameKindling, Sparkles, Pencil,
-  BookOpen, Timer, CalendarRange, Brain, ShieldCheck
+  BookOpen, Timer, CalendarRange, Brain, ShieldCheck, ListChecks
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { getISTDateString } from '../../../lib/dataService';
@@ -96,6 +96,16 @@ const daysInMonth = (month: string) => {
   const [y, m] = month.split('-').map(Number);
   return new Date(y, m, 0).getDate();
 };
+
+// Quick-jump navigation for this long, single-page dashboard.
+const SECTION_NAV = [
+  { id: 'today', label: 'Today', icon: Clock3 },
+  { id: 'ledger', label: 'Ledger & Notes', icon: FileText },
+  { id: 'targets', label: 'Targets', icon: Target },
+  { id: 'graphs', label: 'Graphs', icon: BarChart3 },
+  { id: 'exams', label: 'Exams', icon: GraduationCap },
+  { id: 'sacrifice', label: 'Sacrifice', icon: Flame },
+] as const;
 
 export default function DailyTrackerPage() {
   const router = useRouter();
@@ -512,15 +522,15 @@ export default function DailyTrackerPage() {
     return Math.round((Number(exam.score) / Number(exam.total_marks)) * 100);
   };
 
-
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans pb-20">
+    <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans pb-24 scroll-smooth">
+      {/* Header */}
       <header className="sticky top-0 z-40 bg-zinc-950/85 backdrop-blur-xl border-b border-white/5 px-4 sm:px-6 py-4">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push('/dashboard')}
-              className="p-2 bg-black/40 hover:bg-white/10 ring-1 ring-white/10 rounded-lg text-zinc-400 hover:text-white"
+              className="p-2 bg-black/40 hover:bg-white/10 ring-1 ring-white/10 rounded-lg text-zinc-400 hover:text-white transition-colors"
             >
               <ArrowLeft size={16} />
             </button>
@@ -533,93 +543,118 @@ export default function DailyTrackerPage() {
           </div>
           <Link
             href="/resources"
-            className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white"
+            className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white hover:ring-zinc-700 transition-all"
           >
             <Video size={13} /> Continue Lectures
           </Link>
         </div>
+
+        {/* Quick section jump — helps navigate this long dashboard */}
+        <nav className="max-w-[1400px] mx-auto mt-3 -mb-1 flex gap-1.5 overflow-x-auto no-scrollbar">
+          {SECTION_NAV.map(({ id, label, icon: Icon }) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/70 ring-1 ring-zinc-800 text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-emerald-400 hover:ring-emerald-500/30 transition-colors"
+            >
+              <Icon size={11} /> {label}
+            </a>
+          ))}
+        </nav>
       </header>
 
-      <main className="max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Snapshot */}
-        <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          {[
-            { label: 'Selected Day', value: formatMinutes(dailyMinutes), icon: Clock3, box: 'bg-emerald-500/10 ring-emerald-500/20', iconText: 'text-emerald-400' },
-            { label: 'Lectures Done', value: logs.length, icon: CheckCircle2, box: 'bg-indigo-500/10 ring-indigo-500/20', iconText: 'text-indigo-400' },
-            { label: 'Active Days', value: activeDays, icon: Flame, box: 'bg-orange-500/10 ring-orange-500/20', iconText: 'text-orange-400' },
-            { label: 'This Month', value: formatMinutes(monthlyMinutes), icon: Target, box: 'bg-violet-500/10 ring-violet-500/20', iconText: 'text-violet-400' },
-          ].map(({ label, value, icon: Icon, box, iconText }) => (
-            <div key={label} className="bg-zinc-900/50 ring-1 ring-zinc-800 rounded-2xl p-4">
-              <div className={`w-9 h-9 rounded-xl ${box} ring-1 flex items-center justify-center mb-3`}>
-                <Icon size={16} className={iconText} />
+      <main className="max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+
+        {/* ============ TODAY ============ */}
+        <div id="today" className="scroll-mt-32 space-y-6">
+          {/* Snapshot */}
+          <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: 'Selected Day', value: formatMinutes(dailyMinutes), icon: Clock3, box: 'bg-emerald-500/10 ring-emerald-500/20', iconText: 'text-emerald-400' },
+              { label: 'Lectures Done', value: logs.length, icon: CheckCircle2, box: 'bg-indigo-500/10 ring-indigo-500/20', iconText: 'text-indigo-400' },
+              { label: 'Active Days', value: activeDays, icon: Flame, box: 'bg-orange-500/10 ring-orange-500/20', iconText: 'text-orange-400' },
+              { label: 'This Month', value: formatMinutes(monthlyMinutes), icon: Target, box: 'bg-violet-500/10 ring-violet-500/20', iconText: 'text-violet-400' },
+            ].map(({ label, value, icon: Icon, box, iconText }) => (
+              <div
+                key={label}
+                className="bg-zinc-900/50 ring-1 ring-zinc-800 rounded-2xl p-4 hover:ring-zinc-700 hover:-translate-y-0.5 transition-all"
+              >
+                <div className={`w-9 h-9 rounded-xl ${box} ring-1 flex items-center justify-center mb-3`}>
+                  <Icon size={16} className={iconText} />
+                </div>
+                <div className="text-xl font-black text-zinc-100">{value}</div>
+                <div className="text-[8px] uppercase tracking-widest font-bold text-zinc-600 mt-1">{label}</div>
               </div>
-              <div className="text-xl font-black text-zinc-100">{value}</div>
-              <div className="text-[8px] uppercase tracking-widest font-bold text-zinc-600 mt-1">{label}</div>
-            </div>
-          ))}
-        </section>
+            ))}
+          </section>
 
-        {/* Date navigator */}
-        <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="font-black text-zinc-100 text-sm">Daily Report</h2>
-              <p className="text-[10px] text-zinc-600 mt-1">{getDateLabel(selectedDate)}</p>
+          {/* Date navigator + daily progress */}
+          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <div className="flex items-center gap-2 text-zinc-600 text-[9px] font-black uppercase tracking-[0.2em]">
+                  <CalendarDays size={11} /> Daily Report
+                </div>
+                <h2 className="font-black text-zinc-100 text-base mt-1">{getDateLabel(selectedDate)}</h2>
+              </div>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                className="bg-zinc-950 ring-1 ring-zinc-800 rounded-lg px-3 py-2 text-[10px] text-zinc-300 outline-none focus:ring-emerald-500/40"
+              />
             </div>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-              className="bg-zinc-950 ring-1 ring-zinc-800 rounded-lg px-2 py-2 text-[10px] text-zinc-300 outline-none"
-            />
-          </div>
 
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-            {dateStrip.map(date => {
-              const dayLogs = allLogs.filter(log => log.date_str === date);
-              const mins = dayLogs.reduce((sum, log) => sum + Number(log.duration_mins || 0), 0);
-              const active = date === selectedDate;
-              const isToday = date === today;
-              return (
-                <button
-                  key={date}
-                  onClick={() => setSelectedDate(date)}
-                  className={`min-w-0 rounded-xl p-2.5 text-center ring-1 transition-all ${
-                    active ? 'bg-emerald-500/10 ring-emerald-500/40' : 'bg-zinc-950/70 ring-zinc-800 hover:ring-zinc-600'
-                  }`}
-                >
-                  <div className={`text-[8px] font-black uppercase ${active ? 'text-emerald-400' : 'text-zinc-600'}`}>
-                    {new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })}
-                  </div>
-                  <div className={`text-sm font-black mt-1 ${active ? 'text-zinc-100' : 'text-zinc-400'}`}>
-                    {new Date(`${date}T12:00:00`).getDate()}
-                  </div>
-                  <div className={`text-[8px] font-bold mt-1 ${mins ? 'text-emerald-500' : 'text-zinc-700'}`}>
-                    {mins ? formatMinutes(mins) : isToday ? 'Today' : '—'}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-5">
-            <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-2">
-              <span className="text-zinc-500">6-hour study target</span>
-              <span className="text-emerald-400">{dailyPercent}%</span>
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+              {dateStrip.map(date => {
+                const dayLogs = allLogs.filter(log => log.date_str === date);
+                const mins = dayLogs.reduce((sum, log) => sum + Number(log.duration_mins || 0), 0);
+                const active = date === selectedDate;
+                const isToday = date === today;
+                return (
+                  <button
+                    key={date}
+                    onClick={() => setSelectedDate(date)}
+                    className={`min-w-0 rounded-xl p-2.5 text-center ring-1 transition-all ${
+                      active ? 'bg-emerald-500/10 ring-emerald-500/40' : 'bg-zinc-950/70 ring-zinc-800 hover:ring-zinc-600'
+                    }`}
+                  >
+                    <div className={`text-[8px] font-black uppercase ${active ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                      {new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })}
+                    </div>
+                    <div className={`text-sm font-black mt-1 ${active ? 'text-zinc-100' : 'text-zinc-400'}`}>
+                      {new Date(`${date}T12:00:00`).getDate()}
+                    </div>
+                    <div className={`text-[8px] font-bold mt-1 ${mins ? 'text-emerald-500' : 'text-zinc-700'}`}>
+                      {mins ? formatMinutes(mins) : isToday ? 'Today' : '—'}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-            <div className="h-2 bg-zinc-950 rounded-full ring-1 ring-zinc-800 overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${dailyPercent}%` }} />
-            </div>
-          </div>
-        </section>
 
-        <div className="grid lg:grid-cols-[1.4fr_0.9fr] gap-6">
+            <div className="mt-5">
+              <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-2">
+                <span className="text-zinc-500">6-hour study target</span>
+                <span className="text-emerald-400">{dailyPercent}%</span>
+              </div>
+              <div className="h-2 bg-zinc-950 rounded-full ring-1 ring-zinc-800 overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${dailyPercent}%` }} />
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* ============ LEDGER + NOTES ============ */}
+        <div id="ledger" className="scroll-mt-32 grid lg:grid-cols-[1.4fr_0.9fr] gap-6">
           {/* Lecture ledger */}
           <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
             <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
               <div>
-                <h2 className="font-black text-zinc-100 text-sm">What I Completed</h2>
-                <p className="text-[9px] text-zinc-600 mt-1">Every completed lecture is stamped with its date.</p>
+                <div className="flex items-center gap-2 text-zinc-600 text-[9px] font-black uppercase tracking-[0.2em]">
+                  <ListChecks size={11} /> Completed Lectures
+                </div>
+                <h2 className="font-black text-zinc-100 text-sm mt-1">What I Completed</h2>
               </div>
               <div className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 text-emerald-400 text-[9px] font-black">
                 {formatMinutes(dailyMinutes)}
@@ -640,7 +675,7 @@ export default function DailyTrackerPage() {
               ) : (
                 <div className="space-y-2">
                   {logs.map(log => (
-                    <div key={log.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800/80">
+                    <div key={log.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800/80 hover:ring-zinc-700 transition-colors">
                       <div className="w-9 h-9 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shrink-0">
                         <CheckCircle2 size={15} className="text-emerald-500" />
                       </div>
@@ -680,15 +715,15 @@ export default function DailyTrackerPage() {
             <button
               onClick={saveNote}
               disabled={savingNote}
-              className="mt-3 w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+              className="mt-3 w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
             >
               <Save size={13} /> {savingNote ? 'Saving...' : 'Save Daily Report'}
             </button>
           </section>
         </div>
 
-        {/* Monthly target + weekly target */}
-        <section className="grid lg:grid-cols-[1.35fr_0.9fr] gap-6">
+        {/* ============ TARGETS ============ */}
+        <div id="targets" className="scroll-mt-32 grid lg:grid-cols-[1.35fr_0.9fr] gap-6">
           <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
             <div className="p-5 border-b border-zinc-800 flex items-center justify-between gap-4">
               <div>
@@ -704,7 +739,7 @@ export default function DailyTrackerPage() {
               </div>
               <button
                 onClick={() => setShowTargetForm(v => !v)}
-                className="px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"
+                className="px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-emerald-500/20 transition-colors"
               >
                 <Pencil size={12} /> {showTargetForm ? 'Close' : 'Set / Edit Target'}
               </button>
@@ -770,7 +805,7 @@ export default function DailyTrackerPage() {
                   </div>
                   <button
                     onClick={() => setShowCurriculum(v => !v)}
-                    className="px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20 text-[9px] font-black uppercase tracking-widest"
+                    className="px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500/20 transition-colors"
                   >
                     {showCurriculum ? 'Hide curriculum' : 'Choose videos'}
                   </button>
@@ -812,7 +847,7 @@ export default function DailyTrackerPage() {
 
                 <button
                   onClick={saveMonthlyTarget}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
                 >
                   <Save size={13} /> Save Monthly Goal
                 </button>
@@ -833,7 +868,7 @@ export default function DailyTrackerPage() {
               </div>
               <button
                 onClick={() => setShowWeeklyForm(v => !v)}
-                className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 text-zinc-500 hover:text-white"
+                className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 text-zinc-500 hover:text-white transition-colors"
               >
                 <Pencil size={13} />
               </button>
@@ -894,188 +929,190 @@ export default function DailyTrackerPage() {
                   value={weeklyForm.target_minutes}
                   onChange={e => setWeeklyForm({ ...weeklyForm, target_minutes: e.target.value })}
                   placeholder={`Weekly minutes (auto: ${autoWeeklyMinutes})`}
-                  className="w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none"
+                  className="w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-indigo-500/40"
                 />
                 <input
                   type="number"
                   value={weeklyForm.target_videos}
                   onChange={e => setWeeklyForm({ ...weeklyForm, target_videos: e.target.value })}
                   placeholder={`Weekly videos (auto: ${autoWeeklyVideos})`}
-                  className="w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none"
+                  className="w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-indigo-500/40"
                 />
                 <button
                   onClick={saveWeeklyTarget}
-                  className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-black uppercase tracking-widest"
+                  className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-black uppercase tracking-widest transition-colors"
                 >
                   Save Weekly Target
                 </button>
               </div>
             )}
           </section>
-        </section>
+        </div>
 
-        {/* Weekly graph + today's pace */}
-        <section className="grid lg:grid-cols-[1.45fr_.8fr] gap-6">
+        {/* ============ GRAPHS ============ */}
+        <div id="graphs" className="scroll-mt-32 space-y-6">
+          <section className="grid lg:grid-cols-[1.45fr_.8fr] gap-6">
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={16} className="text-indigo-400" />
+                    <h2 className="font-black text-zinc-100">Weekly Study Graph</h2>
+                  </div>
+                  <p className="text-[9px] text-zinc-600 mt-1">Daily study hours and lecture output.</p>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => shiftWeek(-1)} className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
+                    <ChevronLeft size={13} />
+                  </button>
+                  <button onClick={() => shiftWeek(1)} className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
+                    <ChevronRight size={13} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="h-64 flex items-end gap-2 sm:gap-4 border-b border-zinc-800 pb-1">
+                {dailySeries.map(day => (
+                  <button
+                    key={day.date}
+                    onClick={() => setSelectedDate(day.date)}
+                    className="flex-1 h-full flex flex-col justify-end gap-2 group"
+                    title={`${day.date}: ${formatMinutes(day.minutes)} • ${day.videos} videos`}
+                  >
+                    <div className="text-[8px] text-zinc-600 opacity-0 group-hover:opacity-100">
+                      {formatMinutes(day.minutes)}
+                    </div>
+                    <div
+                      className={`w-full max-w-12 mx-auto rounded-t-lg transition-all ${
+                        day.date === selectedDate ? 'bg-emerald-400' : 'bg-indigo-500/70 group-hover:bg-indigo-400'
+                      }`}
+                      style={{ height: `${Math.max(day.minutes ? 4 : 1, (day.minutes / maxWeek) * 190)}px` }}
+                    />
+                    <div className="text-[8px] uppercase font-black text-zinc-600">
+                      {dateObj(day.date).toLocaleDateString('en-IN', { weekday: 'short' })}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                  <div className="text-lg font-black text-white">{formatMinutes(weekMinutes)}</div>
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">study</div>
+                </div>
+                <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                  <div className="text-lg font-black text-white">{weekVideos}</div>
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">videos</div>
+                </div>
+                <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                  <div className="text-lg font-black text-white">{weekExams.length}</div>
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">exams</div>
+                </div>
+              </div>
+            </section>
+
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <Timer size={16} className="text-emerald-400" />
+                <h2 className="font-black text-zinc-100">Today's Pace</h2>
+              </div>
+              <div className="text-[8px] uppercase tracking-widest text-zinc-600">Selected day</div>
+              <div className="text-3xl font-black text-white mt-1">{formatMinutes(dailyMinutes)}</div>
+
+              <div className="mt-5 text-[9px] text-zinc-500">Weekly target progress</div>
+              <div className="h-2 bg-zinc-950 rounded-full mt-2 overflow-hidden ring-1 ring-zinc-800">
+                <div
+                  className="h-full bg-emerald-500 rounded-full"
+                  style={{ width: `${weekTargetMinutes ? pct(weekMinutes, weekTargetMinutes) : 0}%` }}
+                />
+              </div>
+
+              <div className="flex justify-between text-[8px] text-zinc-600 mt-2">
+                <span>{formatMinutes(weekMinutes)} done</span>
+                <span>{formatMinutes(remainingWeekMinutes)} left</span>
+              </div>
+
+              <div className="mt-6 p-4 rounded-2xl bg-zinc-950/70 ring-1 ring-zinc-800">
+                <div className="text-[8px] uppercase tracking-widest text-zinc-600">Needed per remaining day</div>
+                <div className="text-sm font-black text-zinc-200 mt-1">
+                  {weekTargetMinutes ? formatMinutes(todayNeeded) : 'Set a monthly target'}
+                </div>
+              </div>
+            </section>
+          </section>
+
+          {/* Monthly graph */}
           <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <div className="flex items-center gap-2">
-                  <BarChart3 size={16} className="text-indigo-400" />
-                  <h2 className="font-black text-zinc-100">Weekly Study Graph</h2>
+                  <BarChart3 size={16} className="text-violet-400" />
+                  <h2 className="font-black text-zinc-100">Month at a Glance</h2>
                 </div>
-                <p className="text-[9px] text-zinc-600 mt-1">Daily study hours and lecture output.</p>
+                <p className="text-[9px] text-zinc-600 mt-1">One bar per day. Select a bar to open that day's report.</p>
               </div>
-              <div className="flex gap-1">
-                <button onClick={() => shiftWeek(-1)} className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800">
-                  <ChevronLeft size={13} />
-                </button>
-                <button onClick={() => shiftWeek(1)} className="p-2 rounded-lg bg-zinc-950 ring-1 ring-zinc-800">
-                  <ChevronRight size={13} />
-                </button>
+              <div className="text-right">
+                <div className="text-sm font-black text-violet-300">{formatMinutes(monthlyMinutes)}</div>
+                <div className="text-[8px] text-zinc-600">{monthVideos} videos • {monthExams.length} exams</div>
               </div>
             </div>
 
-            <div className="h-64 flex items-end gap-2 sm:gap-4 border-b border-zinc-800 pb-1">
-              {dailySeries.map(day => (
+            <div className="h-40 flex items-end gap-0.5 sm:gap-1 overflow-hidden">
+              {monthSeries.map(day => (
                 <button
                   key={day.date}
-                  onClick={() => setSelectedDate(day.date)}
-                  className="flex-1 h-full flex flex-col justify-end gap-2 group"
                   title={`${day.date}: ${formatMinutes(day.minutes)} • ${day.videos} videos`}
-                >
-                  <div className="text-[8px] text-zinc-600 opacity-0 group-hover:opacity-100">
-                    {formatMinutes(day.minutes)}
-                  </div>
-                  <div
-                    className={`w-full max-w-12 mx-auto rounded-t-lg transition-all ${
-                      day.date === selectedDate ? 'bg-emerald-400' : 'bg-indigo-500/70 group-hover:bg-indigo-400'
-                    }`}
-                    style={{ height: `${Math.max(day.minutes ? 4 : 1, (day.minutes / maxWeek) * 190)}px` }}
-                  />
-                  <div className="text-[8px] uppercase font-black text-zinc-600">
-                    {dateObj(day.date).toLocaleDateString('en-IN', { weekday: 'short' })}
-                  </div>
-                </button>
+                  onClick={() => setSelectedDate(day.date)}
+                  className={`flex-1 min-w-[5px] max-w-7 rounded-t-sm ${
+                    day.date === selectedDate ? 'bg-emerald-400' : 'bg-violet-500/55 hover:bg-violet-400/80'
+                  }`}
+                  style={{ height: `${Math.max(day.minutes ? 3 : 1, (day.minutes / maxMonth) * 125)}px` }}
+                />
               ))}
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
-                <div className="text-lg font-black text-white">{formatMinutes(weekMinutes)}</div>
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600">study</div>
-              </div>
-              <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
-                <div className="text-lg font-black text-white">{weekVideos}</div>
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600">videos</div>
-              </div>
-              <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
-                <div className="text-lg font-black text-white">{weekExams.length}</div>
-                <div className="text-[8px] uppercase tracking-widest text-zinc-600">exams</div>
-              </div>
+            <div className="flex justify-between mt-2 text-[8px] text-zinc-700">
+              <span>1</span>
+              <span>{Math.ceil(daysInMonth(currentMonth) / 2)}</span>
+              <span>{daysInMonth(currentMonth)}</span>
             </div>
           </section>
 
-          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <Timer size={16} className="text-emerald-400" />
-              <h2 className="font-black text-zinc-100">Today's Pace</h2>
-            </div>
-            <div className="text-[8px] uppercase tracking-widest text-zinc-600">Selected day</div>
-            <div className="text-3xl font-black text-white mt-1">{formatMinutes(dailyMinutes)}</div>
-
-            <div className="mt-5 text-[9px] text-zinc-500">Weekly target progress</div>
-            <div className="h-2 bg-zinc-950 rounded-full mt-2 overflow-hidden ring-1 ring-zinc-800">
-              <div
-                className="h-full bg-emerald-500 rounded-full"
-                style={{ width: `${weekTargetMinutes ? pct(weekMinutes, weekTargetMinutes) : 0}%` }}
-              />
-            </div>
-
-            <div className="flex justify-between text-[8px] text-zinc-600 mt-2">
-              <span>{formatMinutes(weekMinutes)} done</span>
-              <span>{formatMinutes(remainingWeekMinutes)} left</span>
-            </div>
-
-            <div className="mt-6 p-4 rounded-2xl bg-zinc-950/70 ring-1 ring-zinc-800">
-              <div className="text-[8px] uppercase tracking-widest text-zinc-600">Needed per remaining day</div>
-              <div className="text-sm font-black text-zinc-200 mt-1">
-                {weekTargetMinutes ? formatMinutes(todayNeeded) : 'Set a monthly target'}
+          {/* 28 day activity */}
+          <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20 flex items-center justify-center">
+                <Activity size={15} className="text-indigo-400" />
               </div>
+              <div>
+                <h2 className="font-black text-zinc-100 text-sm">28-Day Consistency</h2>
+                <p className="text-[9px] text-zinc-600">A visual record of the days you actually studied.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-7 sm:grid-cols-14 gap-2">
+              {recentDays.map(day => {
+                const level = day.minutes === 0 ? 0 : day.minutes < 60 ? 1 : day.minutes < 180 ? 2 : day.minutes < 360 ? 3 : 4;
+                return (
+                  <button
+                    key={day.date}
+                    onClick={() => setSelectedDate(day.date)}
+                    title={`${day.date}: ${formatMinutes(day.minutes)}`}
+                    className={`aspect-square rounded-lg ring-1 transition-all hover:scale-105 ${
+                      level === 0 ? 'bg-zinc-950 ring-zinc-800' :
+                      level === 1 ? 'bg-emerald-950 ring-emerald-900' :
+                      level === 2 ? 'bg-emerald-900 ring-emerald-800' :
+                      level === 3 ? 'bg-emerald-700 ring-emerald-600' :
+                      'bg-emerald-500 ring-emerald-400'
+                    } ${selectedDate === day.date ? 'outline outline-2 outline-white/50 outline-offset-2' : ''}`}
+                  />
+                );
+              })}
             </div>
           </section>
-        </section>
+        </div>
 
-        {/* Monthly graph */}
-        <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <div className="flex items-center gap-2">
-                <BarChart3 size={16} className="text-violet-400" />
-                <h2 className="font-black text-zinc-100">Month at a Glance</h2>
-              </div>
-              <p className="text-[9px] text-zinc-600 mt-1">One bar per day. Select a bar to open that day's report.</p>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-black text-violet-300">{formatMinutes(monthlyMinutes)}</div>
-              <div className="text-[8px] text-zinc-600">{monthVideos} videos • {monthExams.length} exams</div>
-            </div>
-          </div>
-
-          <div className="h-40 flex items-end gap-0.5 sm:gap-1 overflow-hidden">
-            {monthSeries.map(day => (
-              <button
-                key={day.date}
-                title={`${day.date}: ${formatMinutes(day.minutes)} • ${day.videos} videos`}
-                onClick={() => setSelectedDate(day.date)}
-                className={`flex-1 min-w-[5px] max-w-7 rounded-t-sm ${
-                  day.date === selectedDate ? 'bg-emerald-400' : 'bg-violet-500/55 hover:bg-violet-400/80'
-                }`}
-                style={{ height: `${Math.max(day.minutes ? 3 : 1, (day.minutes / maxMonth) * 125)}px` }}
-              />
-            ))}
-          </div>
-
-          <div className="flex justify-between mt-2 text-[8px] text-zinc-700">
-            <span>1</span>
-            <span>{Math.ceil(daysInMonth(currentMonth) / 2)}</span>
-            <span>{daysInMonth(currentMonth)}</span>
-          </div>
-        </section>
-
-        {/* 28 day activity */}
-        <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20 flex items-center justify-center">
-              <Activity size={15} className="text-indigo-400" />
-            </div>
-            <div>
-              <h2 className="font-black text-zinc-100 text-sm">28-Day Consistency</h2>
-              <p className="text-[9px] text-zinc-600">A visual record of the days you actually studied.</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-7 sm:grid-cols-14 gap-2">
-            {recentDays.map(day => {
-              const level = day.minutes === 0 ? 0 : day.minutes < 60 ? 1 : day.minutes < 180 ? 2 : day.minutes < 360 ? 3 : 4;
-              return (
-                <button
-                  key={day.date}
-                  onClick={() => setSelectedDate(day.date)}
-                  title={`${day.date}: ${formatMinutes(day.minutes)}`}
-                  className={`aspect-square rounded-lg ring-1 transition-all hover:scale-105 ${
-                    level === 0 ? 'bg-zinc-950 ring-zinc-800' :
-                    level === 1 ? 'bg-emerald-950 ring-emerald-900' :
-                    level === 2 ? 'bg-emerald-900 ring-emerald-800' :
-                    level === 3 ? 'bg-emerald-700 ring-emerald-600' :
-                    'bg-emerald-500 ring-emerald-400'
-                  } ${selectedDate === day.date ? 'outline outline-2 outline-white/50 outline-offset-2' : ''}`}
-                />
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Exams */}
-        <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
+        {/* ============ EXAMS ============ */}
+        <section id="exams" className="scroll-mt-32 bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] overflow-hidden">
           <div className="p-5 border-b border-zinc-800 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20 flex items-center justify-center">
@@ -1088,7 +1125,7 @@ export default function DailyTrackerPage() {
             </div>
             <button
               onClick={() => setShowExamForm(v => !v)}
-              className="px-3 py-2 rounded-xl bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"
+              className="px-3 py-2 rounded-xl bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-amber-500/20 transition-colors"
             >
               {showExamForm ? <X size={12} /> : <Plus size={12} />} {showExamForm ? 'Close' : 'Add Exam'}
             </button>
@@ -1097,11 +1134,11 @@ export default function DailyTrackerPage() {
           {showExamForm && (
             <div className="p-5 border-b border-zinc-800 bg-zinc-950/40 grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <input value={examForm.exam_name} onChange={e => setExamForm({ ...examForm, exam_name: e.target.value })} placeholder="Exam name" className="lg:col-span-2 bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
-              <input type="date" value={examForm.exam_date} onChange={e => setExamForm({ ...examForm, exam_date: e.target.value })} className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none" />
-              <input type="number" value={examForm.score} onChange={e => setExamForm({ ...examForm, score: e.target.value })} placeholder="Score" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none" />
-              <input type="number" value={examForm.total_marks} onChange={e => setExamForm({ ...examForm, total_marks: e.target.value })} placeholder="Total marks" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none" />
-              <textarea value={examForm.notes} onChange={e => setExamForm({ ...examForm, notes: e.target.value })} placeholder="Short note (optional)" className="sm:col-span-2 lg:col-span-4 bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none resize-none h-12" />
-              <button onClick={addExam} className="bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-[9px] font-black uppercase tracking-widest">Save Result</button>
+              <input type="date" value={examForm.exam_date} onChange={e => setExamForm({ ...examForm, exam_date: e.target.value })} className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
+              <input type="number" value={examForm.score} onChange={e => setExamForm({ ...examForm, score: e.target.value })} placeholder="Score" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
+              <input type="number" value={examForm.total_marks} onChange={e => setExamForm({ ...examForm, total_marks: e.target.value })} placeholder="Total marks" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
+              <textarea value={examForm.notes} onChange={e => setExamForm({ ...examForm, notes: e.target.value })} placeholder="Short note (optional)" className="sm:col-span-2 lg:col-span-4 bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none resize-none h-12 focus:ring-amber-500/40" />
+              <button onClick={addExam} className="bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors">Save Result</button>
             </div>
           )}
 
@@ -1110,9 +1147,9 @@ export default function DailyTrackerPage() {
               <div className="py-10 text-center text-[10px] uppercase tracking-widest text-zinc-700">No exams recorded yet.</div>
             ) : (
               exams.map(exam => {
-                const pct = getScorePercent(exam);
+                const scorePct = getScorePercent(exam);
                 return (
-                  <div key={exam.id} className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800">
+                  <div key={exam.id} className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 hover:ring-zinc-700 transition-colors">
                     <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
                       <Trophy size={15} className="text-amber-400" />
                     </div>
@@ -1124,9 +1161,9 @@ export default function DailyTrackerPage() {
                       <div className="text-sm font-black text-zinc-100">
                         {exam.score === null ? '—' : `${exam.score}${exam.total_marks !== null ? ` / ${exam.total_marks}` : ''}`}
                       </div>
-                      {pct !== null && <div className="text-[8px] font-bold text-emerald-400">{pct}%</div>}
+                      {scorePct !== null && <div className="text-[8px] font-bold text-emerald-400">{scorePct}%</div>}
                     </div>
-                    <button onClick={() => deleteExam(exam.id)} className="p-2 text-zinc-600 hover:text-red-400 rounded-lg hover:bg-red-500/10">
+                    <button onClick={() => deleteExam(exam.id)} className="p-2 text-zinc-600 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -1134,11 +1171,10 @@ export default function DailyTrackerPage() {
               })
             )}
           </div>
-
         </section>
 
-        {/* Today's sacrifice */}
-        <section className="grid lg:grid-cols-[1.1fr_.9fr] gap-6">
+        {/* ============ SACRIFICE ============ */}
+        <div id="sacrifice" className="scroll-mt-32 grid lg:grid-cols-[1.1fr_.9fr] gap-6">
           <section className="bg-gradient-to-br from-orange-500/10 via-zinc-900/50 to-rose-500/5 ring-1 ring-orange-500/15 rounded-[1.5rem] p-5 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -1161,7 +1197,7 @@ export default function DailyTrackerPage() {
             <button
               onClick={addSacrifice}
               disabled={savingSacrifice || !sacrificeText.trim()}
-              className="mt-3 w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-zinc-950 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+              className="mt-3 w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-zinc-950 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
             >
               <Plus size={13} /> {savingSacrifice ? 'Saving...' : 'Add to My Sacrifice Log'}
             </button>
@@ -1183,7 +1219,7 @@ export default function DailyTrackerPage() {
                   <div className="flex-1 text-[10px] leading-relaxed text-zinc-300">{item.content}</div>
                   <button
                     onClick={() => deleteSacrifice(item.id)}
-                    className="text-zinc-700 hover:text-red-400"
+                    className="text-zinc-700 hover:text-red-400 transition-colors"
                     title="Delete"
                   >
                     <Trash2 size={12} />
@@ -1198,7 +1234,7 @@ export default function DailyTrackerPage() {
               )}
             </div>
           </section>
-        </section>
+        </div>
       </main>
     </div>
   );
