@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
-import { getUserProfile, getUserProgress, getUniqueSubjects, getSubjectSyllabus } from '../../../lib/dataService';
+import { getUserProfile, getUserProgress, getUniqueSubjects, getSubjectSyllabus, syncDailyLectureCompletion } from '../../../lib/dataService';
 import { 
   Flame, Zap, Activity, ChevronRight, ArrowLeft, BookOpen, 
   LayoutGrid, CheckCircle2, CircleDashed, Play, Clock, 
@@ -277,10 +277,14 @@ export default function ResourcesHub() {
     });
 
     try {
+      const material = activeSubjectMaterials.find((m: any) => m.id === matId);
+
       if (currentlyDone) {
         await supabase.from('user_progress').delete().match({ user_id: session.user.id, material_id: matId });
+        if (material) await syncDailyLectureCompletion(session.user.id, material, false);
       } else {
         await supabase.from('user_progress').upsert({ user_id: session.user.id, material_id: matId, completed: true });
+        if (material) await syncDailyLectureCompletion(session.user.id, material, true);
         toast.success('Module Mastered!', { icon: '🔥', style: { background: '#121214', color: '#10b981', border: '1px solid #059669', fontSize: '12px' }});
       }
     } catch (err) { console.error("Progress Sync Error", err); }
