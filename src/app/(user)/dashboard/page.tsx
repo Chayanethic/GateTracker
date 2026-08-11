@@ -383,8 +383,29 @@ export default function UserDashboard() {
         {/* ======================================================== */}
         {/* LOWER SECTION: SPLIT MATRIX PLANNERS */}
         {/* ======================================================== */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10 w-full xl:w-2/3 mx-auto mt-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-10 w-full xl:w-5/6 mx-auto mt-auto">
           
+          {/* Card 0: Daily Study Tracker */}
+          <Link href="/daily-tracker" className="group bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-6 sm:p-8 transition-all duration-500 hover:ring-emerald-500/40 hover:-translate-y-1 relative overflow-hidden flex flex-col">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-[40px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+
+            <div className="flex justify-between items-start mb-4 relative z-10">
+               <div className="w-12 h-12 bg-emerald-500/10 ring-1 ring-emerald-500/20 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500 ease-out">
+                 <Activity size={20} className="text-emerald-400" />
+               </div>
+               <div className="bg-zinc-950/80 ring-1 ring-zinc-800 px-2.5 py-1 rounded text-[8px] font-bold uppercase tracking-widest text-zinc-500">Daily Log</div>
+            </div>
+
+            <h3 className="text-lg font-black text-zinc-100 mb-2 relative z-10 tracking-tight group-hover:text-emerald-100 transition-colors">Daily Tracker</h3>
+            <p className="text-[11px] text-zinc-500 font-medium leading-relaxed mb-6 flex-1 relative z-10">
+              See exactly what you completed each day, total lecture hours, your consistency, and every exam score in one place.
+            </p>
+
+            <div className="text-[9px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1.5 relative z-10">
+              Open Daily Report <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
           {/* Card 1: AI Auto Planner */}
           <Link href="/auto-planner" className="group bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-6 sm:p-8 transition-all duration-500 hover:ring-indigo-500/40 hover:-translate-y-1 relative overflow-hidden flex flex-col">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
