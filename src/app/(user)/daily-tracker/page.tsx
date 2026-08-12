@@ -63,6 +63,21 @@ type Sacrifice = {
   created_at: string;
 };
 
+type Resolution = {
+  id: string;
+  title: string;
+  description: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+type ResolutionCheck = {
+  id: string;
+  resolution_id: string;
+  date_str: string;
+  completed: boolean;
+};
+
 const formatMinutes = (mins: number) => {
   const total = Math.round(mins || 0);
   const h = Math.floor(total / 60);
@@ -133,6 +148,12 @@ export default function DailyTrackerPage() {
   const [monthlyTarget, setMonthlyTarget] = useState<MonthlyTarget | null>(null);
   const [weeklyTarget, setWeeklyTarget] = useState<WeeklyTarget | null>(null);
   const [sacrifices, setSacrifices] = useState<Sacrifice[]>([]);
+  const [resolutions, setResolutions] = useState<Resolution[]>([]);
+  const [resolutionChecks, setResolutionChecks] = useState<ResolutionCheck[]>([]);
+  const [resolutionText, setResolutionText] = useState('');
+  const [resolutionDescription, setResolutionDescription] = useState('');
+  const [showResolutionForm, setShowResolutionForm] = useState(false);
+  const [savingResolution, setSavingResolution] = useState(false);
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingNote, setSavingNote] = useState(false);
@@ -181,6 +202,8 @@ export default function DailyTrackerPage() {
       { data: monthData },
       { data: weekData },
       { data: sacrificeData },
+      { data: resolutionData },
+      { data: resolutionCheckData },
       { data: materialData },
       { data: progressData },
     ] = await Promise.all([
@@ -214,6 +237,16 @@ export default function DailyTrackerPage() {
         .order('date_str', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(100),
+      supabase.from('user_sacrifice_resolutions')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('active', true)
+        .order('created_at', { ascending: true }),
+      supabase.from('user_sacrifice_resolution_checks')
+        .select('*')
+        .eq('user_id', uid)
+        .gte('date_str', addDays(selectedDate, -30))
+        .lte('date_str', selectedDate),
       supabase.from('study_materials')
         .select('id,title,subject_name,topic_name,duration')
         .order('subject_name', { ascending: true })
@@ -237,6 +270,8 @@ export default function DailyTrackerPage() {
     setMonthlyTarget((monthData || null) as MonthlyTarget | null);
     setWeeklyTarget((weekData || null) as WeeklyTarget | null);
     setSacrifices((sacrificeData || []) as Sacrifice[]);
+    setResolutions((resolutionData || []) as Resolution[]);
+    setResolutionChecks((resolutionCheckData || []) as ResolutionCheck[]);
     setMaterials((materialData || []) as Material[]);
     setCompletedIds(new Set((progressData || []).map((row: any) => String(row.material_id))));
 
@@ -450,6 +485,100 @@ export default function DailyTrackerPage() {
     );
   };
 
+  const addResolution = async () => {
+    const title = resolutionText.trim();
+    if (!title) {
+      toast.error('Enter a resolution first.');
+      return;
+    }
+
+    setSavingResolution(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setSavingResolution(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('user_sacrifice_resolutions')
+      .insert({
+        user_id: session.user.id,
+        title,
+        description: resolutionDescription.trim() || null,
+        active: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      setResolutions(prev => [...prev, data as Resolution]);
+      setResolutionText('');
+      setResolutionDescription('');
+      setShowResolutionForm(false);
+      toast.success('Resolution added.');
+    }
+    setSavingResolution(false);
+  };
+
+  const toggleResolution = async (resolution: Resolution) => {
+    const existing = resolutionChecks.find(
+      check => check.resolution_id === resolution.id && check.date_str === selectedDate
+    );
+
+    if (existing) {
+      const { error } = await supabase
+        .from('user_sacrifice_resolution_checks')
+        .delete()
+        .eq('id', existing.id);
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setResolutionChecks(prev => prev.filter(check => check.id !== existing.id));
+      return;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await supabase
+      .from('user_sacrifice_resolution_checks')
+      .insert({
+        user_id: session.user.id,
+        resolution_id: resolution.id,
+        date_str: selectedDate,
+        completed: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    setResolutionChecks(prev => [...prev, data as ResolutionCheck]);
+  };
+
+  const deleteResolution = async (id: string) => {
+    const { error } = await supabase
+      .from('user_sacrifice_resolutions')
+      .update({ active: false })
+      .eq('id', id);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    setResolutions(prev => prev.filter(item => item.id !== id));
+    setResolutionChecks(prev => prev.filter(item => item.resolution_id !== id));
+    toast.success('Resolution removed.');
+  };
+
   const addSacrifice = async () => {
     if (!sacrificeText.trim()) return;
     setSavingSacrifice(true);
@@ -534,6 +663,42 @@ export default function DailyTrackerPage() {
     if (exam.score === null || exam.total_marks === null || !exam.total_marks) return null;
     return Math.round((Number(exam.score) / Number(exam.total_marks)) * 100);
   };
+
+  const selectedResolutionIds = new Set(
+    resolutionChecks
+      .filter(check => check.date_str === selectedDate && check.completed)
+      .map(check => check.resolution_id)
+  );
+
+  const resolutionStats = resolutions.map(resolution => {
+    const checks = resolutionChecks.filter(
+      check => check.resolution_id === resolution.id && check.completed
+    );
+    return {
+      ...resolution,
+      completedCount: checks.length,
+      last30Percent: Math.round((checks.length / 31) * 100),
+    };
+  });
+
+  const sacrificeGraphDays = Array.from({ length: 14 }, (_, i) => {
+    const date = addDays(selectedDate, -(13 - i));
+    const completed = resolutions.filter(resolution =>
+      resolutionChecks.some(
+        check =>
+          check.resolution_id === resolution.id &&
+          check.date_str === date &&
+          check.completed
+      )
+    ).length;
+    return {
+      date,
+      completed,
+      total: resolutions.length,
+    };
+  });
+
+  const maxSacrificeGraph = Math.max(1, ...sacrificeGraphDays.map(day => day.completed));
 
   const activeMeta = SECTION_NAV.find(s => s.id === activeSection)!;
   const activeAccent = ACCENT_STYLES[activeMeta.accent];
@@ -1253,68 +1418,264 @@ export default function DailyTrackerPage() {
         )}
 
         {activeSection === 'sacrifice' && (
-          <div className="grid lg:grid-cols-[1.1fr_.9fr] gap-6">
-            <section className="bg-gradient-to-br from-orange-500/10 via-zinc-900/50 to-rose-500/5 ring-1 ring-orange-500/15 rounded-[1.5rem] p-5 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck size={16} className="text-orange-400" />
-                    <h2 className="font-black text-zinc-100">Today's Sacrifice</h2>
+          <div className="space-y-6">
+            <section className="grid lg:grid-cols-[1.2fr_.8fr] gap-6">
+              <section className="bg-gradient-to-br from-orange-500/10 via-zinc-900/50 to-rose-500/5 ring-1 ring-orange-500/15 rounded-[1.5rem] p-5 sm:p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-orange-400" />
+                      <h2 className="font-black text-zinc-100">My Sacrifice Resolutions</h2>
+                    </div>
+                    <p className="text-[9px] text-zinc-600 mt-1">
+                      Create the habits you are deliberately giving up, then tick them every day you keep the promise.
+                    </p>
                   </div>
-                  <p className="text-[9px] text-zinc-600 mt-1">Write what you deliberately gave up for your study goal.</p>
+                  <button
+                    onClick={() => setShowResolutionForm(v => !v)}
+                    className="px-3 py-2 rounded-xl bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-orange-500/20 transition-colors"
+                  >
+                    {showResolutionForm ? <X size={12} /> : <Plus size={12} />}
+                    {showResolutionForm ? 'Close' : 'New Resolution'}
+                  </button>
                 </div>
-                <Sparkles size={17} className="text-orange-400" />
-              </div>
 
-              <textarea
-                value={sacrificeText}
-                onChange={e => setSacrificeText(e.target.value)}
-                placeholder="Today I sacrificed ______ because I wanted to study..."
-                className="mt-5 w-full min-h-[120px] bg-zinc-950/70 ring-1 ring-zinc-800 rounded-xl p-4 text-xs text-zinc-300 placeholder:text-zinc-700 outline-none resize-none focus:ring-orange-500/30"
-              />
+                {showResolutionForm && (
+                  <div className="mt-5 p-4 rounded-2xl bg-zinc-950/70 ring-1 ring-zinc-800 space-y-3">
+                    <input
+                      value={resolutionText}
+                      onChange={e => setResolutionText(e.target.value)}
+                      placeholder="e.g. No afternoon sleep"
+                      className="w-full bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-orange-500/40"
+                    />
+                    <input
+                      value={resolutionDescription}
+                      onChange={e => setResolutionDescription(e.target.value)}
+                      placeholder="Optional reason or rule"
+                      className="w-full bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-orange-500/40"
+                    />
+                    <button
+                      onClick={addResolution}
+                      disabled={savingResolution || !resolutionText.trim()}
+                      className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-zinc-950 text-[9px] font-black uppercase tracking-widest transition-colors"
+                    >
+                      {savingResolution ? 'Saving...' : 'Create Resolution'}
+                    </button>
+                  </div>
+                )}
 
-              <button
-                onClick={addSacrifice}
-                disabled={savingSacrifice || !sacrificeText.trim()}
-                className="mt-3 w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-zinc-950 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
-              >
-                <Plus size={13} /> {savingSacrifice ? 'Saving...' : 'Add to My Sacrifice Log'}
-              </button>
+                <div className="mt-5 space-y-2">
+                  {resolutions.length === 0 ? (
+                    <div className="py-10 text-center rounded-2xl bg-zinc-950/50 ring-1 ring-zinc-800">
+                      <FlameKindling size={22} className="text-orange-400/60 mx-auto mb-2" />
+                      <p className="text-xs font-bold text-zinc-500">No resolutions yet.</p>
+                      <p className="text-[9px] text-zinc-700 mt-1">Create your first rule and start building your record.</p>
+                    </div>
+                  ) : resolutions.map(resolution => {
+                    const checked = selectedResolutionIds.has(resolution.id);
+                    const stat = resolutionStats.find(item => item.id === resolution.id);
+                    return (
+                      <div key={resolution.id} className={`p-3 rounded-xl ring-1 transition-all ${
+                        checked ? 'bg-orange-500/10 ring-orange-500/30' : 'bg-zinc-950/60 ring-zinc-800'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => toggleResolution(resolution)}
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ring-1 transition-all ${
+                              checked
+                                ? 'bg-orange-500 text-zinc-950 ring-orange-400'
+                                : 'bg-zinc-900 text-zinc-600 ring-zinc-800 hover:text-orange-400 hover:ring-orange-500/30'
+                            }`}
+                            title={checked ? 'Undo today' : 'I kept this resolution today'}
+                          >
+                            <CheckCircle2 size={17} />
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-black text-zinc-200">{resolution.title}</div>
+                            {resolution.description && (
+                              <div className="text-[8px] text-zinc-600 mt-1 truncate">{resolution.description}</div>
+                            )}
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className="text-[8px] uppercase tracking-widest text-orange-400 font-black">
+                                {stat?.completedCount || 0} days kept
+                              </span>
+                              <span className="text-[8px] text-zinc-700">•</span>
+                              <span className="text-[8px] text-zinc-600">
+                                {checked ? 'Kept today' : 'Not checked today'}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => deleteResolution(resolution.id)}
+                            className="p-2 text-zinc-700 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
+                            title="Remove resolution"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-9 h-9 rounded-xl bg-orange-500/10 ring-1 ring-orange-500/20 flex items-center justify-center">
+                    <Flame size={15} className="text-orange-400" />
+                  </div>
+                  <div>
+                    <h2 className="font-black text-zinc-100 text-sm">Today's Score</h2>
+                    <p className="text-[9px] text-zinc-600">{getDateLabel(selectedDate)}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-end gap-3">
+                  <div className="text-4xl font-black text-orange-400">
+                    {resolutions.length ? Math.round((selectedResolutionIds.size / resolutions.length) * 100) : 0}%
+                  </div>
+                  <div className="text-[9px] text-zinc-600 pb-1">
+                    {selectedResolutionIds.size}/{resolutions.length} resolutions kept
+                  </div>
+                </div>
+
+                <div className="h-2 bg-zinc-950 rounded-full mt-4 overflow-hidden ring-1 ring-zinc-800">
+                  <div
+                    className="h-full bg-orange-500 rounded-full transition-all"
+                    style={{ width: `${resolutions.length ? (selectedResolutionIds.size / resolutions.length) * 100 : 0}%` }}
+                  />
+                </div>
+
+                <div className="mt-6 p-4 rounded-2xl bg-zinc-950/70 ring-1 ring-zinc-800">
+                  <div className="text-[8px] uppercase tracking-widest text-zinc-600">Your record</div>
+                  <div className="text-xl font-black text-zinc-100 mt-1">
+                    {resolutionStats.reduce((sum, item) => sum + item.completedCount, 0)} total kept days
+                  </div>
+                  <div className="text-[9px] text-zinc-700 mt-1">Across all active resolutions</div>
+                </div>
+              </section>
             </section>
 
             <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Flame size={16} className="text-orange-400" />
+              <div className="flex items-center justify-between mb-5">
                 <div>
-                  <h2 className="font-black text-zinc-100">Sacrifice History</h2>
-                  <p className="text-[9px] text-zinc-600">{getDateLabel(selectedDate)}</p>
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={16} className="text-orange-400" />
+                    <h2 className="font-black text-zinc-100">Sacrifice Graph</h2>
+                  </div>
+                  <p className="text-[9px] text-zinc-600 mt-1">
+                    How consistently you kept your resolutions over the last 14 days.
+                  </p>
+                </div>
+                <div className="text-[9px] text-zinc-600">
+                  {resolutions.length} active {resolutions.length === 1 ? 'resolution' : 'resolutions'}
                 </div>
               </div>
 
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {sacrifices.filter(item => item.date_str === selectedDate).map(item => (
-                  <div key={item.id} className="p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800 flex gap-3">
-                    <Flame size={14} className="text-orange-400 mt-0.5 shrink-0" />
-                    <div className="flex-1 text-[10px] leading-relaxed text-zinc-300">{item.content}</div>
-                    <button
-                      onClick={() => deleteSacrifice(item.id)}
-                      className="text-zinc-700 hover:text-red-400 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+              <div className="h-52 flex items-end gap-1 sm:gap-2 border-b border-zinc-800 pb-1">
+                {sacrificeGraphDays.map(day => (
+                  <button
+                    key={day.date}
+                    onClick={() => setSelectedDate(day.date)}
+                    title={`${day.date}: ${day.completed}/${day.total} resolutions kept`}
+                    className="flex-1 h-full flex flex-col justify-end gap-2 group"
+                  >
+                    <div className="text-[8px] text-zinc-600 opacity-0 group-hover:opacity-100">
+                      {day.completed}/{day.total}
+                    </div>
+                    <div
+                      className={`w-full max-w-10 mx-auto rounded-t-lg transition-all ${
+                        day.date === selectedDate ? 'bg-orange-400' : 'bg-orange-500/60 group-hover:bg-orange-400'
+                      }`}
+                      style={{
+                        height: `${Math.max(day.completed ? 8 : 2, (day.completed / maxSacrificeGraph) * 155)}px`,
+                      }}
+                    />
+                    <div className="text-[8px] uppercase font-black text-zinc-600">
+                      {dateObj(day.date).toLocaleDateString('en-IN', { weekday: 'short' })}
+                    </div>
+                  </button>
                 ))}
-
-                {sacrifices.filter(item => item.date_str === selectedDate).length === 0 && (
-                  <div className="text-[9px] text-zinc-700 text-center py-8">
-                    No sacrifice written for this day.
-                  </div>
-                )}
               </div>
+            </section>
+
+            <section className="grid lg:grid-cols-2 gap-6">
+              <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 sm:p-6">
+                <div className="flex items-center gap-2 mb-5">
+                  <ShieldCheck size={16} className="text-emerald-400" />
+                  <h2 className="font-black text-zinc-100">Resolution Records</h2>
+                </div>
+                <div className="space-y-3">
+                  {resolutionStats.length === 0 ? (
+                    <div className="text-[9px] text-zinc-700 text-center py-8">Create a resolution to see its record.</div>
+                  ) : resolutionStats.map(item => (
+                    <div key={item.id}>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-[10px] font-bold text-zinc-300 truncate pr-3">{item.title}</span>
+                        <span className="text-[9px] font-black text-orange-400">{item.completedCount} days</span>
+                      </div>
+                      <div className="h-2 bg-zinc-950 rounded-full overflow-hidden ring-1 ring-zinc-800">
+                        <div
+                          className="h-full bg-orange-500 rounded-full"
+                          style={{ width: `${Math.min(100, item.last30Percent)}%` }}
+                        />
+                      </div>
+                      <div className="text-[8px] text-zinc-700 mt-1">Last 31 days</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="bg-gradient-to-br from-orange-500/10 via-zinc-900/50 to-rose-500/5 ring-1 ring-orange-500/15 rounded-[1.5rem] p-5 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={16} className="text-orange-400" />
+                      <h2 className="font-black text-zinc-100">Today's Sacrifice Note</h2>
+                    </div>
+                    <p className="text-[9px] text-zinc-600 mt-1">Write the personal sacrifice behind today's checkmarks.</p>
+                  </div>
+                </div>
+
+                <textarea
+                  value={sacrificeText}
+                  onChange={e => setSacrificeText(e.target.value)}
+                  placeholder="Today I sacrificed ______ because I wanted to study..."
+                  className="mt-5 w-full min-h-[110px] bg-zinc-950/70 ring-1 ring-zinc-800 rounded-xl p-4 text-xs text-zinc-300 placeholder:text-zinc-700 outline-none resize-none focus:ring-orange-500/30"
+                />
+
+                <button
+                  onClick={addSacrifice}
+                  disabled={savingSacrifice || !sacrificeText.trim()}
+                  className="mt-3 w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-zinc-950 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Plus size={13} /> {savingSacrifice ? 'Saving...' : 'Add to My Sacrifice Log'}
+                </button>
+
+                <div className="mt-5 space-y-2 max-h-52 overflow-y-auto">
+                  {sacrifices.filter(item => item.date_str === selectedDate).map(item => (
+                    <div key={item.id} className="p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800 flex gap-3">
+                      <Flame size={14} className="text-orange-400 mt-0.5 shrink-0" />
+                      <div className="flex-1 text-[10px] leading-relaxed text-zinc-300">{item.content}</div>
+                      <button
+                        onClick={() => deleteSacrifice(item.id)}
+                        className="text-zinc-700 hover:text-red-400 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {sacrifices.filter(item => item.date_str === selectedDate).length === 0 && (
+                    <div className="text-[9px] text-zinc-700 text-center py-5">No written sacrifice for this day.</div>
+                  )}
+                </div>
+              </section>
             </section>
           </div>
         )}
+
+
 
         </div>
       </main>
