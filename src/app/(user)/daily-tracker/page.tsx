@@ -30,6 +30,7 @@ type Exam = {
   score: number | null;
   total_marks: number | null;
   notes: string | null;
+  duration_mins: number | null;
 };
 
 type Material = {
@@ -150,6 +151,10 @@ export default function DailyTrackerPage() {
   const [sacrifices, setSacrifices] = useState<Sacrifice[]>([]);
   const [resolutions, setResolutions] = useState<Resolution[]>([]);
   const [resolutionChecks, setResolutionChecks] = useState<ResolutionCheck[]>([]);
+  const [practiceMinutes, setPracticeMinutes] = useState(0);
+  const [allPractice, setAllPractice] = useState<{ date_str: string; practice_minutes: number }[]>([]);
+  const [practiceInput, setPracticeInput] = useState('');
+  const [savingPractice, setSavingPractice] = useState(false);
   const [resolutionText, setResolutionText] = useState('');
   const [resolutionDescription, setResolutionDescription] = useState('');
   const [showResolutionForm, setShowResolutionForm] = useState(false);
@@ -168,6 +173,7 @@ export default function DailyTrackerPage() {
     exam_date: today,
     score: '',
     total_marks: '',
+    duration_mins: '',
     notes: '',
   });
 
@@ -204,6 +210,7 @@ export default function DailyTrackerPage() {
       { data: sacrificeData },
       { data: resolutionData },
       { data: resolutionCheckData },
+      { data: practiceData },
       { data: materialData },
       { data: progressData },
     ] = await Promise.all([
@@ -247,6 +254,9 @@ export default function DailyTrackerPage() {
         .eq('user_id', uid)
         .gte('date_str', addDays(selectedDate, -30))
         .lte('date_str', selectedDate),
+      supabase.from('daily_practice_activity')
+        .select('*')
+        .eq('user_id', uid),
       supabase.from('study_materials')
         .select('id,title,subject_name,topic_name,duration')
         .order('subject_name', { ascending: true })
@@ -272,6 +282,11 @@ export default function DailyTrackerPage() {
     setSacrifices((sacrificeData || []) as Sacrifice[]);
     setResolutions((resolutionData || []) as Resolution[]);
     setResolutionChecks((resolutionCheckData || []) as ResolutionCheck[]);
+    const practiceRows = (practiceData || []) as { date_str: string; practice_minutes: number }[];
+    setAllPractice(practiceRows);
+    const selectedPractice = practiceRows.find(row => row.date_str === selectedDate);
+    setPracticeMinutes(Number(selectedPractice?.practice_minutes || 0));
+    setPracticeInput(selectedPractice ? String(selectedPractice.practice_minutes || '') : '');
     setMaterials((materialData || []) as Material[]);
     setCompletedIds(new Set((progressData || []).map((row: any) => String(row.material_id))));
 
@@ -304,6 +319,9 @@ export default function DailyTrackerPage() {
   const currentWeek = getWeekStart(selectedDate);
   const weekEnd = addDays(currentWeek, 6);
 
+  const weekPracticeMinutes = useMemo(() => allPractice.filter(row => row.date_str >= currentWeek && row.date_str < addDays(currentWeek, 7)).reduce((sum, row) => sum + Number(row.practice_minutes || 0), 0), [allPractice, currentWeek]);
+  const monthPracticeMinutes = useMemo(() => allPractice.filter(row => row.date_str.startsWith(currentMonth)).reduce((sum, row) => sum + Number(row.practice_minutes || 0), 0), [allPractice, currentMonth]);
+
   const monthLogs = useMemo(
     () => allLogs.filter(log => log.date_str.startsWith(currentMonth)),
     [allLogs, currentMonth]
@@ -311,7 +329,7 @@ export default function DailyTrackerPage() {
 
   const weekLogs = useMemo(
     () => allLogs.filter(log => log.date_str >= currentWeek && log.date_str < addDays(currentWeek, 7)),
-    [allLogs, currentWeek]
+    [allLogs, allPractice, exams, currentWeek]
   );
 
   const monthlyMinutes = useMemo(
@@ -356,13 +374,18 @@ export default function DailyTrackerPage() {
     () => Array.from({ length: 7 }, (_, i) => {
       const date = addDays(currentWeek, i);
       const dayLogs = allLogs.filter(log => log.date_str === date);
+      const dayPractice = Number(allPractice.find(row => row.date_str === date)?.practice_minutes || 0);
+      const dayExams = exams.filter(exam => exam.exam_date === date);
       return {
         date,
-        minutes: dayLogs.reduce((sum, log) => sum + Number(log.duration_mins || 0), 0),
+        lectureMinutes: dayLogs.reduce((sum, log) => sum + Number(log.duration_mins || 0), 0),
+        practiceMinutes: dayPractice,
+        minutes: dayLogs.reduce((sum, log) => sum + Number(log.duration_mins || 0), 0) + dayPractice,
         videos: dayLogs.length,
+        exams: dayExams,
       };
     }),
-    [allLogs, currentWeek]
+    [allLogs, allPractice, exams, currentWeek]
   );
 
   const monthSeries = useMemo(
@@ -401,6 +424,32 @@ export default function DailyTrackerPage() {
     });
   }, [allLogs, today]);
 
+
+  const savePractice = async () => {
+    const minutes = Math.max(0, Math.round(Number(practiceInput) || 0));
+    setSavingPractice(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setSavingPractice(false); return; }
+
+    const { data, error } = await supabase
+      .from('daily_practice_activity')
+      .upsert({
+        user_id: session.user.id,
+        date_str: selectedDate,
+        practice_minutes: minutes,
+      }, { onConflict: 'user_id,date_str' })
+      .select()
+      .single();
+
+    if (error) toast.error(error.message);
+    else {
+      setPracticeMinutes(Number(data.practice_minutes || 0));
+      setPracticeInput(String(data.practice_minutes || ''));
+      setAllPractice(prev => [...prev.filter(row => row.date_str !== selectedDate), { date_str: selectedDate, practice_minutes: Number(data.practice_minutes || 0) }]);
+      toast.success('Practice time saved.');
+    }
+    setSavingPractice(false);
+  };
 
   const saveNote = async () => {
     setSavingNote(true);
@@ -523,6 +572,11 @@ export default function DailyTrackerPage() {
   };
 
   const toggleResolution = async (resolution: Resolution) => {
+    if (selectedDate !== today) {
+      toast.error('Sacrifice resolutions can only be checked for today.');
+      return;
+    }
+
     const existing = resolutionChecks.find(
       check => check.resolution_id === resolution.id && check.date_str === selectedDate
     );
@@ -639,6 +693,7 @@ export default function DailyTrackerPage() {
       exam_date: examForm.exam_date,
       score: examForm.score === '' ? null : Number(examForm.score),
       total_marks: examForm.total_marks === '' ? null : Number(examForm.total_marks),
+      duration_mins: examForm.duration_mins === '' ? 0 : Math.max(0, Number(examForm.duration_mins)),
       notes: examForm.notes.trim() || null,
     });
 
@@ -647,7 +702,7 @@ export default function DailyTrackerPage() {
       return;
     }
 
-    setExamForm({ exam_name: '', exam_date: today, score: '', total_marks: '', notes: '' });
+    setExamForm({ exam_name: '', exam_date: today, score: '', total_marks: '', duration_mins: '', notes: '' });
     setShowExamForm(false);
     await loadData();
     toast.success('Exam result added.');
@@ -935,6 +990,26 @@ export default function DailyTrackerPage() {
               </div>
             </section>
 
+            {/* Practice */}
+            <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 ring-1 ring-cyan-500/20 flex items-center justify-center">
+                  <Brain size={15} className="text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="font-black text-zinc-100 text-sm">Practice Time</h2>
+                  <p className="text-[9px] text-zinc-600">Practice, problem solving, revision or PYQs for this day.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input type="number" min="0" value={practiceInput} onChange={e => setPracticeInput(e.target.value)} placeholder="Minutes" className="flex-1 bg-zinc-950/70 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-cyan-500/40" />
+                <button onClick={savePractice} disabled={savingPractice} className="px-4 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-widest">
+                  {savingPractice ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+              <div className="mt-3 text-[9px] text-cyan-400 font-black uppercase tracking-widest">{formatMinutes(practiceMinutes)} practice logged</div>
+            </section>
+
             {/* Notes */}
             <section className="bg-zinc-900/40 ring-1 ring-zinc-800 rounded-[1.5rem] p-5 flex flex-col min-h-[300px]">
               <div className="flex items-center gap-3 mb-4">
@@ -1214,33 +1289,52 @@ export default function DailyTrackerPage() {
                 </div>
 
                 <div className="h-64 flex items-end gap-2 sm:gap-4 border-b border-zinc-800 pb-1">
-                  {dailySeries.map(day => (
-                    <button
-                      key={day.date}
-                      onClick={() => setSelectedDate(day.date)}
-                      className="flex-1 h-full flex flex-col justify-end gap-2 group"
-                      title={`${day.date}: ${formatMinutes(day.minutes)} • ${day.videos} videos`}
-                    >
-                      <div className="text-[8px] text-zinc-600 opacity-0 group-hover:opacity-100">
-                        {formatMinutes(day.minutes)}
-                      </div>
-                      <div
-                        className={`w-full max-w-12 mx-auto rounded-t-lg transition-all ${
-                          day.date === selectedDate ? 'bg-emerald-400' : 'bg-indigo-500/70 group-hover:bg-indigo-400'
-                        }`}
-                        style={{ height: `${Math.max(day.minutes ? 4 : 1, (day.minutes / maxWeek) * 190)}px` }}
-                      />
-                      <div className="text-[8px] uppercase font-black text-zinc-600">
-                        {dateObj(day.date).toLocaleDateString('en-IN', { weekday: 'short' })}
-                      </div>
-                    </button>
-                  ))}
+                  {dailySeries.map(day => {
+                    const exam = day.exams[0];
+                    const barHeight = Math.max(day.minutes ? 6 : 2, (day.minutes / maxWeek) * 180);
+                    const lectureHeight = day.minutes ? (day.lectureMinutes / day.minutes) * barHeight : 0;
+                    const practiceHeight = day.minutes ? (day.practiceMinutes / day.minutes) * barHeight : 0;
+                    const examText = day.exams.length
+                      ? day.exams.map(item => `${item.exam_name}: ${item.duration_mins || 0}m, ${item.score ?? '—'} / ${item.total_marks ?? '—'}`).join(' | ')
+                      : 'No exam';
+                    return (
+                      <button
+                        key={day.date}
+                        onClick={() => setSelectedDate(day.date)}
+                        className="flex-1 h-full flex flex-col justify-end gap-1 group min-w-0"
+                        title={`${day.date} • Lecture ${formatMinutes(day.lectureMinutes)} • Practice ${formatMinutes(day.practiceMinutes)} • ${examText}`}
+                      >
+                        <div className="h-8 flex items-end justify-center">
+                          {exam && <span className="max-w-full truncate px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[7px] font-black ring-1 ring-amber-500/20">{exam.exam_name}</span>}
+                        </div>
+                        <div className="text-[8px] text-zinc-500 opacity-0 group-hover:opacity-100 truncate">
+                          {formatMinutes(day.minutes)}
+                        </div>
+                        <div className="w-full max-w-12 mx-auto flex flex-col justify-end rounded-t-lg overflow-hidden transition-all bg-zinc-950 ring-1 ring-zinc-800/80" style={{ height: `${barHeight}px` }}>
+                          <div className="bg-cyan-400/80" style={{ height: `${practiceHeight}px` }} />
+                          <div className={`${day.date === selectedDate ? 'bg-emerald-400' : 'bg-indigo-500/80 group-hover:bg-indigo-400'}`} style={{ height: `${lectureHeight}px` }} />
+                        </div>
+                        <div className="text-[8px] uppercase font-black text-zinc-600">
+                          {dateObj(day.date).toLocaleDateString('en-IN', { weekday: 'short' })}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-4 text-[8px] uppercase tracking-widest font-black text-zinc-600">
+                  <span><i className="inline-block w-2 h-2 rounded-sm bg-indigo-500 mr-1" />Lecture</span>
+                  <span><i className="inline-block w-2 h-2 rounded-sm bg-cyan-400 mr-1" />Practice</span>
+                  <span className="text-amber-400">Exam label = name • hover = duration + marks</span>
                 </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-3">
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
                     <div className="text-lg font-black text-white">{formatMinutes(weekMinutes)}</div>
                     <div className="text-[8px] uppercase tracking-widest text-zinc-600">study</div>
+                  </div>
+                  <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
+                    <div className="text-lg font-black text-white">{weekPracticeMinutes ? formatMinutes(weekPracticeMinutes) : '0m'}</div>
+                    <div className="text-[8px] uppercase tracking-widest text-zinc-600">practice</div>
                   </div>
                   <div className="rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800 p-3">
                     <div className="text-lg font-black text-white">{weekVideos}</div>
@@ -1380,6 +1474,7 @@ export default function DailyTrackerPage() {
                 <input type="date" value={examForm.exam_date} onChange={e => setExamForm({ ...examForm, exam_date: e.target.value })} className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
                 <input type="number" value={examForm.score} onChange={e => setExamForm({ ...examForm, score: e.target.value })} placeholder="Score" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
                 <input type="number" value={examForm.total_marks} onChange={e => setExamForm({ ...examForm, total_marks: e.target.value })} placeholder="Total marks" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
+                <input type="number" min="0" value={examForm.duration_mins} onChange={e => setExamForm({ ...examForm, duration_mins: e.target.value })} placeholder="Exam minutes" className="bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none focus:ring-amber-500/40" />
                 <textarea value={examForm.notes} onChange={e => setExamForm({ ...examForm, notes: e.target.value })} placeholder="Short note (optional)" className="sm:col-span-2 lg:col-span-4 bg-zinc-900 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-xs outline-none resize-none h-12 focus:ring-amber-500/40" />
                 <button onClick={addExam} className="bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors">Save Result</button>
               </div>
@@ -1405,6 +1500,7 @@ export default function DailyTrackerPage() {
                           {exam.score === null ? '—' : `${exam.score}${exam.total_marks !== null ? ` / ${exam.total_marks}` : ''}`}
                         </div>
                         {scorePct !== null && <div className="text-[8px] font-bold text-emerald-400">{scorePct}%</div>}
+                        {exam.duration_mins ? <div className="text-[8px] text-zinc-600 mt-1">{formatMinutes(Number(exam.duration_mins))} exam</div> : null}
                       </div>
                       <button onClick={() => deleteExam(exam.id)} className="p-2 text-zinc-600 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
                         <Trash2 size={13} />
@@ -1430,6 +1526,7 @@ export default function DailyTrackerPage() {
                     <p className="text-[9px] text-zinc-600 mt-1">
                       Create the habits you are deliberately giving up, then tick them every day you keep the promise.
                     </p>
+                    {selectedDate !== today && <div className="mt-2 text-[8px] font-black uppercase tracking-widest text-amber-400">Historical days are view-only. Resolution checks can only be recorded for today.</div>}
                   </div>
                   <button
                     onClick={() => setShowResolutionForm(v => !v)}
@@ -1481,7 +1578,8 @@ export default function DailyTrackerPage() {
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => toggleResolution(resolution)}
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ring-1 transition-all ${
+                            disabled={selectedDate !== today}
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ring-1 transition-all ${selectedDate !== today ? 'opacity-35 cursor-not-allowed' : ''} ${
                               checked
                                 ? 'bg-orange-500 text-zinc-950 ring-orange-400'
                                 : 'bg-zinc-900 text-zinc-600 ring-zinc-800 hover:text-orange-400 hover:ring-orange-500/30'
