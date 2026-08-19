@@ -1,30 +1,42 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { ShieldAlert, Database, Users, LayoutDashboard, LogOut } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [streamReady, setStreamReady] = useState(false);
 
   useEffect(() => {
     // Check if the secure admin override token exists
     const checkAdmin = localStorage.getItem('isAdmin');
-    if (checkAdmin === 'true') {
-      setIsAdmin(true);
-    } else {
+    if (checkAdmin !== 'true') {
       router.replace('/login');
+      return;
     }
-  }, [router]);
+    setIsAdmin(true);
+    if (pathname === '/admin/stream') {
+      setStreamReady(true);
+      return;
+    }
+    if (!sessionStorage.getItem('adminStream')) {
+      router.replace('/admin/stream');
+      return;
+    }
+    setStreamReady(true);
+  }, [router, pathname]);
 
   const handleLogout = () => {
     localStorage.removeItem('isAdmin');
+    sessionStorage.removeItem('adminStream');
     router.replace('/login');
   };
 
-  if (!isAdmin) {
+  if (!isAdmin || !streamReady) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-red-500">
         <ShieldAlert className="animate-pulse mb-4" size={48} />
@@ -32,6 +44,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
     );
   }
+
+  if (pathname === '/admin/stream') return <>{children}</>;
 
   // The Admin Sidebar Navigation
   return (
