@@ -7,7 +7,7 @@ import {
   Wand2, Play, FileText, Database, Plus, ChevronDown, ChevronRight, 
   Activity, CheckCircle2, Image as ImageIcon, Folder, FolderOpen, X, 
   LayoutGrid, Link as LinkIcon, Clock, ListVideo, Trash2, Edit2, Save,
-  Scissors, GripVertical, Lock, Unlock, Hash, Crown
+  Scissors, GripVertical, Lock, Unlock, Hash, Crown, ArrowRightLeft
 } from 'lucide-react';
 
 type ResourceNode = any;
@@ -15,6 +15,7 @@ type HierarchyTree = Record<string, Record<string, ResourceNode[]>>;
 
 export default function AdvancedResourceManager() {
   const [exam, setExam] = useState('GATE ECE');
+  const [stream, setStream] = useState<'ece' | 'cse' | null>(null);
   const [hierarchy, setHierarchy] = useState<HierarchyTree>({});
   const [isLoadingSystem, setIsLoadingSystem] = useState(true);
   
@@ -58,11 +59,20 @@ export default function AdvancedResourceManager() {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
-  useEffect(() => { fetchSystemData(); }, []);
+  useEffect(() => {
+    const selected = sessionStorage.getItem('adminStream') as 'ece' | 'cse' | null;
+    setStream(selected);
+    if (selected) {
+      setExam(`GATE ${selected.toUpperCase()}`);
+      fetchSystemData(selected);
+    }
+  }, []);
 
-  const fetchSystemData = async () => {
+  const fetchSystemData = async (selectedStream = stream) => {
     setIsLoadingSystem(true);
-    const { data: materials } = await supabase.from('study_materials').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('study_materials').select('*').order('created_at', { ascending: false });
+    if (selectedStream) query = query.eq('stream', selectedStream);
+    const { data: materials } = await query;
     if (materials) {
       const builtTree: HierarchyTree = {};
       materials.forEach(item => {
@@ -392,6 +402,7 @@ export default function AdvancedResourceManager() {
         exam_name: exam,
         subject_name: selectedSubject,
         topic_name: selectedTopic,
+        stream: stream || 'ece',
         title: item.snippet.title,
         url: `https://www.youtube.com/watch?v=${item.snippet.resourceId.videoId}`,
         resource_type: 'video',
@@ -440,6 +451,7 @@ export default function AdvancedResourceManager() {
       exam_name: exam, 
       subject_name: selectedSubject, 
       topic_name: selectedTopic, 
+      stream: stream || 'ece',
       title: title.trim(), 
       url: url.trim() || null, 
       resource_type: type, 
@@ -460,6 +472,27 @@ export default function AdvancedResourceManager() {
       setLectureNo(String((parsedLectureNo || 0) + 1 || (hierarchy[selectedSubject]?.[selectedTopic]?.length || 0) + 2));
     }
     setLoading(false);
+  };
+
+  const moveMaterialToStream = async (item: any, target: 'ece' | 'cse') => {
+    if (item.stream === target) return;
+    const targetLabel = target.toUpperCase();
+    if (!window.confirm(`Move "${item.title}" to ${targetLabel}? It will disappear from this stream.`)) return;
+    const toastId = toast.loading(`Moving lecture to ${targetLabel}...`);
+    const { error } = await supabase.from('study_materials').update({ stream: target }).eq('id', item.id);
+    if (error) {
+      toast.error(`Move failed: ${error.message}`, { id: toastId });
+      return;
+    }
+    setHierarchy(prev => {
+      const next = { ...prev };
+      if (selectedSubject && selectedTopic) {
+        next[selectedSubject] = { ...next[selectedSubject] };
+        next[selectedSubject][selectedTopic] = (next[selectedSubject][selectedTopic] || []).filter(v => v.id !== item.id);
+      }
+      return next;
+    });
+    toast.success(`Moved to ${targetLabel}`, { id: toastId });
   };
 
   const activeResources = useMemo(() => {
@@ -807,6 +840,7 @@ export default function AdvancedResourceManager() {
                               <button onClick={() => togglePaidStatus(item)} title={item.is_paid ? 'Mark as Free' : 'Mark as Paid'} className={`p-1.5 hover:bg-zinc-700 rounded ${item.is_paid ? 'text-amber-400' : 'text-zinc-500 hover:text-amber-400'}`}>
                                 {item.is_paid ? <Lock size={12}/> : <Unlock size={12}/>}
                               </button>
+                              <button onClick={(e) => { e.stopPropagation(); moveMaterialToStream(item, stream === 'ece' ? 'cse' : 'ece'); }} title={`Move to ${stream === 'ece' ? 'CSE' : 'ECE'}`} className="p-1.5 hover:bg-zinc-700 text-zinc-500 hover:text-emerald-400 rounded"><ArrowRightLeft size={12}/></button>
                               <button onClick={(e) => startEdit(e, 'video', item.title, item.id)} className="p-1.5 hover:bg-zinc-700 text-zinc-500 hover:text-indigo-400 rounded"><Edit2 size={12}/></button>
                               <button onClick={(e) => handleDelete(e, 'video', item.title, item.id)} className="p-1.5 hover:bg-zinc-700 text-zinc-500 hover:text-red-400 rounded"><Trash2 size={12}/></button>
                             </div>
