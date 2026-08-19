@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { ShieldAlert, Database, Users, LayoutDashboard, LogOut } from 'lucide-react';
+import { ShieldAlert, Database, Users, LayoutDashboard, LogOut, ArrowLeftRight } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -66,6 +66,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Link href="/admin/users" className="flex items-center gap-3 text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800">
             <Users size={20} /> Candidate Data
           </Link>
+          <button
+            onClick={() => router.push('/admin/stream')}
+            className="w-full flex items-center gap-3 text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800 text-left"
+          >
+            <ArrowLeftRight size={20} /> Switch Stream
+          </button>
         </nav>
 
         <button onClick={handleLogout} className="flex items-center gap-3 text-gray-500 hover:text-red-500 transition-colors p-2 mt-auto">
