@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
-import { LayoutDashboard, BookOpen, User, LogOut, Hexagon, Target, Activity, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, BookOpen, User, LogOut, Hexagon, Target, Activity, ClipboardCheck, ArrowLeftRight } from 'lucide-react';
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -111,7 +111,13 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
         </nav>
 
         {/* Footer Actions */}
-        <div className="p-5 border-t border-white/5 bg-white/[0.01]">
+        <div className="p-5 border-t border-white/5 bg-white/[0.01] space-y-2">
+          <button
+            onClick={() => router.push('/branch-selection?change=1')}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all duration-300 text-[11px] uppercase tracking-widest text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 ring-1 ring-transparent hover:ring-emerald-500/20"
+          >
+            <ArrowLeftRight size={16} /> Switch Branch
+          </button>
           <button 
             onClick={handleLogout} 
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all duration-300 text-[11px] uppercase tracking-widest text-zinc-500 hover:text-red-400 hover:bg-red-500/10 ring-1 ring-transparent hover:ring-red-500/20"
@@ -131,9 +137,14 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
           </div>
           <span className="text-sm font-black text-zinc-100 tracking-tight">Target Gate</span>
         </div>
-        <button onClick={handleLogout} className="p-2 text-zinc-500 hover:text-red-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors">
-          <LogOut size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/branch-selection?change=1')} title="Switch Branch" className="p-2 text-zinc-500 hover:text-emerald-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors">
+            <ArrowLeftRight size={16} />
+          </button>
+          <button onClick={handleLogout} title="Disconnect" className="p-2 text-zinc-500 hover:text-red-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors">
+            <LogOut size={16} />
+          </button>
+        </div>
       </div>
 
       {/* ========================================================= */}
