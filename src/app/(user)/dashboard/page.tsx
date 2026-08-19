@@ -67,7 +67,7 @@ export default function UserDashboard() {
 
       const todayStr = getISTDateString(getISTNow());
 
-      const { data: userProfileData } = await supabase.from('user_profiles').select('streak, syllabus_progress, target_exam_date').eq('user_id', session.user.id).single();
+      const { data: userProfileData } = await supabase.from('user_profiles').select('streak, syllabus_progress, target_exam_date, branch').eq('user_id', session.user.id).single();
       const xpData = await getUserProfile(session.user.id);
       const { data: trackingData } = await supabase.from('daily_tracking').select('xp_earned').eq('user_id', session.user.id).eq('date_str', todayStr).maybeSingle();
       const { data: progData } = await supabase.from('user_progress').select('material_id').eq('user_id', session.user.id);
@@ -96,7 +96,9 @@ export default function UserDashboard() {
           const matIds: string[] = [];
           blocks.forEach((b:any) => b.tasks.forEach((t:any) => { if (t.originalId) matIds.push(t.originalId); }));
           if (matIds.length > 0) {
-            const { data: mats } = await supabase.from('study_materials').select('id, url').in('id', matIds);
+            let matQuery = supabase.from('study_materials').select('id, url').in('id', matIds);
+            if (userProfileData?.branch) matQuery = matQuery.eq('stream', userProfileData.branch);
+            const { data: mats } = await matQuery;
             if (mats) {
               const urlMap: Record<string, string> = {};
               mats.forEach(m => { urlMap[m.id] = m.url; });
