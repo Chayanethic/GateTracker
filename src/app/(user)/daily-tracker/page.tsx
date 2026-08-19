@@ -211,6 +211,7 @@ export default function DailyTrackerPage() {
       { data: resolutionData },
       { data: resolutionCheckData },
       { data: practiceData },
+      { data: branchData },
       { data: materialData },
       { data: progressData },
     ] = await Promise.all([
@@ -257,8 +258,9 @@ export default function DailyTrackerPage() {
       supabase.from('daily_practice_activity')
         .select('*')
         .eq('user_id', uid),
+      supabase.from('user_profiles').select('branch').eq('user_id', uid).maybeSingle(),
       supabase.from('study_materials')
-        .select('id,title,subject_name,topic_name,duration')
+        .select('id,title,subject_name,topic_name,duration,stream')
         .order('subject_name', { ascending: true })
         .order('title', { ascending: true }),
       supabase.from('user_progress')
@@ -287,7 +289,9 @@ export default function DailyTrackerPage() {
     const selectedPractice = practiceRows.find(row => row.date_str === selectedDate);
     setPracticeMinutes(Number(selectedPractice?.practice_minutes || 0));
     setPracticeInput(selectedPractice ? String(selectedPractice.practice_minutes || '') : '');
-    setMaterials((materialData || []) as Material[]);
+    const branch = (branchData as any)?.branch;
+    const branchMaterials = branch ? (materialData || []).filter((m: any) => m.stream === branch) : (materialData || []);
+    setMaterials(branchMaterials as Material[]);
     setCompletedIds(new Set((progressData || []).map((row: any) => String(row.material_id))));
 
     setTargetForm(monthData
