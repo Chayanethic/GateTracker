@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
-import { getUserProfile, getUserProgress, getUniqueSubjects, getSubjectSyllabus, syncDailyLectureCompletion } from '../../../lib/dataService';
+import { getUserProfile, getUserProgress, getUniqueSubjects, getSubjectSyllabus, getCurrentUserBranch, syncDailyLectureCompletion } from '../../../lib/dataService';
 import { 
   Flame, Zap, Activity, ChevronRight, ArrowLeft, BookOpen, 
   LayoutGrid, CheckCircle2, CircleDashed, Play, Clock, 
@@ -151,6 +151,7 @@ export default function ResourcesHub() {
   const [activeSubjectMaterials, setActiveSubjectMaterials] = useState<any[]>([]);
   const [studyHours, setStudyHours] = useState<number>(4);
   const [playbackSpeed, setPlaybackSpeed] = useState<number | string>(1.25);
+  const [branch, setBranch] = useState<string | null>(null);
 
   // --- THEME STATE (default = DARK / NIGHT MODE) ---
   const [isDark, setIsDark] = useState(true);
@@ -180,13 +181,16 @@ export default function ResourcesHub() {
         getUserProfile(session.user.id),
         supabase.from('user_profiles').select('streak').eq('user_id', session.user.id).maybeSingle(),
         getUserProgress(session.user.id),
-        getUniqueSubjects() 
+        getCurrentUserBranch(session.user.id)
       ]);
       
       if (isMounted) {
+        const userBranch = subjs;
+        setBranch(userBranch);
+        const subjectsForBranch = await getUniqueSubjects(userBranch || undefined);
         setProfile({ xp: xpData?.xp || 0, streak: dbProfile?.streak || 0 });
         setProgress(progData || []);
-        setSubjects(subjs);
+        setSubjects(subjectsForBranch);
         setIsLoading(false);
       }
     };
@@ -203,7 +207,7 @@ export default function ResourcesHub() {
       setActiveSubjectMaterials(syllabusCache[subject]);
     } else {
       setIsFetchingSyllabus(true);
-      const materials = await getSubjectSyllabus(subject);
+      const materials = await getSubjectSyllabus(subject, branch || undefined);
       setSyllabusCache(prev => ({ ...prev, [subject]: materials }));
       setActiveSubjectMaterials(materials);
       setIsFetchingSyllabus(false);
