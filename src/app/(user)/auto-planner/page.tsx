@@ -42,7 +42,12 @@ export default function AutoPlanner() {
 
   useEffect(() => {
     const fetchSyllabus = async () => {
-      const { data } = await supabase.from('study_materials').select('*');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data: profile } = await supabase.from('user_profiles').select('branch').eq('user_id', session.user.id).maybeSingle();
+      let query = supabase.from('study_materials').select('*');
+      if (profile?.branch) query = query.eq('stream', profile.branch);
+      const { data } = await query;
       if (data) {
         const parsed = data.map(m => ({ ...m, parsedMins: parseMins(m.duration) }));
         setRawSyllabus(parsed);
