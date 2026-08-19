@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Cpu, Radio, ArrowRight, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function BranchSelectionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isChanging = searchParams.get('change') === '1';
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export default function BranchSelectionPage() {
     localStorage.setItem('gateTrackerBranch', branch);
     toast.success(`${branch.toUpperCase()} stream selected.`);
     router.replace('/dashboard');
+    router.refresh();
   };
 
   return (
@@ -44,8 +47,8 @@ export default function BranchSelectionPage() {
           <div className="inline-flex p-4 rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/20 mb-5">
             <ArrowRight className="text-emerald-400" size={30} />
           </div>
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight">Choose Your Branch</h1>
-          <p className="text-zinc-500 mt-3">Your subjects, topics and lectures will be filtered to this stream.</p>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight">{isChanging ? 'Switch Your Branch' : 'Choose Your Branch'}</h1>
+          <p className="text-zinc-500 mt-3">{isChanging ? 'Choose a different stream and your dashboard will update immediately.' : 'Your subjects, topics and lectures will be filtered to this stream.'}</p>
         </div>
         <div className="grid md:grid-cols-2 gap-5">
           <button disabled={loading} onClick={() => chooseBranch('ece')} className="text-left p-7 rounded-3xl bg-zinc-900/70 ring-1 ring-white/10 hover:ring-emerald-500/50 hover:bg-emerald-500/[0.05] transition-all group">
