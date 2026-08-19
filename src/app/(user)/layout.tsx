@@ -16,12 +16,27 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.replace('/login');
-      } else {
-        setIsAuthorized(true);
+        return;
       }
+
+      if (pathname !== '/branch-selection') {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('branch')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (!profile?.branch) {
+          router.replace('/branch-selection');
+          return;
+        }
+        localStorage.setItem('gateTrackerBranch', profile.branch);
+      }
+
+      setIsAuthorized(true);
     };
     verifyUser();
-  }, [router]);
+  }, [router, pathname]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
