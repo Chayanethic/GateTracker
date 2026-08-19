@@ -51,7 +51,12 @@ export default function FocusRoom() {
       const pData = await getUserProfile(session.user.id);
       if (pData) setProfile(pData);
 
+      const { data: profile } = await supabase.from('user_profiles').select('branch').eq('user_id', session.user.id).maybeSingle();
       const { data: matData } = await supabase.from('study_materials').select('*').eq('id', videoId).single();
+      if (matData && profile?.branch && matData.stream !== profile.branch) {
+        router.replace('/resources');
+        return;
+      }
       if (matData) setMaterial(matData);
 
       const { data: progData } = await supabase.from('user_progress').select('*').eq('user_id', session.user.id).eq('material_id', videoId).single();
