@@ -107,8 +107,9 @@ export default function Gateway() {
 
     if (adminEmail === envEmail && adminPassword === envPassword) {
       toast.success('Admin Override Accepted.');
-      localStorage.setItem('isAdmin', 'true'); 
-      router.push('/admin/dashboard');
+      localStorage.setItem('isAdmin', 'true');
+      sessionStorage.removeItem('adminStream');
+      router.push('/admin/stream');
     } else {
       toast.error('Access Denied. Incorrect Admin Credentials.');
     }
