@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
-import { LayoutDashboard, BookOpen, User, LogOut, Hexagon, Target, Activity, ClipboardCheck, ArrowLeftRight } from 'lucide-react';
+import { LayoutDashboard, BookOpen, User, LogOut, Hexagon, Target, Activity, ClipboardCheck, ArrowLeftRight, Trophy } from 'lucide-react';
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -54,6 +54,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
 
   const navLinks = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
     { name: 'Daily HUD', href: '/daily-goal', icon: Target },
     { name: 'Daily Tracker', href: '/daily-tracker', icon: ClipboardCheck },
     { name: 'Curriculum', href: '/resources', icon: BookOpen },
@@ -128,6 +129,17 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
       </aside>
 
       {/* ========================================================= */}
+      {/* GLOBAL LEADERBOARD SHORTCUT */}
+      {/* ========================================================= */}
+      <Link
+        href="/leaderboard"
+        className="hidden lg:flex fixed top-5 right-6 z-40 items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-950/90 backdrop-blur-xl border border-white/10 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/30 shadow-[0_10px_35px_rgba(0,0,0,0.45)] transition-all"
+      >
+        <Trophy size={16} className="text-amber-400" />
+        <span className="text-[10px] font-black uppercase tracking-widest">Leaderboard</span>
+      </Link>
+
+      {/* ========================================================= */}
       {/* MOBILE TOP HEADER (< lg) */}
       {/* ========================================================= */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950/80 backdrop-blur-xl border-b border-white/5 z-40 flex items-center justify-between px-4">
@@ -138,6 +150,9 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
           <span className="text-sm font-black text-zinc-100 tracking-tight">Target Gate</span>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/leaderboard')} title="Leaderboard" className="p-2 text-zinc-500 hover:text-amber-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors">
+            <Trophy size={16} />
+          </button>
           <button onClick={() => router.push('/branch-selection?change=1')} title="Switch Branch" className="p-2 text-zinc-500 hover:text-emerald-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors">
             <ArrowLeftRight size={16} />
           </button>
