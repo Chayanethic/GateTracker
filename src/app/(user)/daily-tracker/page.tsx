@@ -166,6 +166,8 @@ export default function DailyTrackerPage() {
   const [showTargetForm, setShowTargetForm] = useState(false);
   const [showWeeklyForm, setShowWeeklyForm] = useState(false);
   const [showCurriculum, setShowCurriculum] = useState(false);
+  const [expandedTargetSubjects, setExpandedTargetSubjects] = useState<Set<string>>(new Set());
+  const [expandedTargetTopics, setExpandedTargetTopics] = useState<Set<string>>(new Set());
   const [sacrificeText, setSacrificeText] = useState('');
   const [savingSacrifice, setSavingSacrifice] = useState(false);
   const [examForm, setExamForm] = useState({
@@ -536,6 +538,53 @@ export default function DailyTrackerPage() {
           selected_material_ids: Array.from(next),
         }
     );
+  };
+
+  const updateTargetSelection = (ids: string[], selected: boolean) => {
+    const next = new Set(selectedTargetIds);
+    ids.forEach(id => selected ? next.add(id) : next.delete(id));
+    setMonthlyTarget(prev => prev
+      ? { ...prev, selected_material_ids: Array.from(next) }
+      : {
+          id: '',
+          month_str: currentMonth,
+          target_minutes: Number(targetForm.target_minutes) || 0,
+          target_videos: Number(targetForm.target_videos) || 0,
+          selected_material_ids: Array.from(next),
+        }
+    );
+  };
+
+  const targetGroups = useMemo(() => {
+    const groups = new Map<string, Map<string, Material[]>>();
+    materials.forEach(material => {
+      const subject = material.subject_name || 'Other';
+      const topic = material.topic_name || 'General';
+      if (!groups.has(subject)) groups.set(subject, new Map());
+      const topicMap = groups.get(subject)!;
+      if (!topicMap.has(topic)) topicMap.set(topic, []);
+      topicMap.get(topic)!.push(material);
+    });
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [materials]);
+
+  const targetSubjectIds = (subject: string) => {
+    const group = targetGroups.find(([name]) => name === subject);
+    return group ? Array.from(group[1].values()).flat().map(m => String(m.id)) : [];
+  };
+
+  const targetTopicIds = (subject: string, topic: string) => {
+    const group = targetGroups.find(([name]) => name === subject);
+    return group?.[1].get(topic)?.map(m => String(m.id)) || [];
+  };
+
+  const toggleTargetGroup = (key: string, type: 'subject' | 'topic') => {
+    const setter = type === 'subject' ? setExpandedTargetSubjects : setExpandedTargetTopics;
+    setter(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
   };
 
   const addResolution = async () => {
@@ -1132,36 +1181,71 @@ export default function DailyTrackerPage() {
                   </div>
 
                   {showCurriculum && (
-                    <div className="max-h-72 overflow-y-auto rounded-xl ring-1 ring-zinc-800 bg-zinc-950/70 p-2 space-y-1">
-                      {materials.map(material => (
-                        <label
-                          key={material.id}
-                          className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedTargetIds.has(String(material.id))}
-                            onChange={() => toggleMaterial(String(material.id))}
-                            className="accent-emerald-500"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[10px] font-bold text-zinc-200 truncate">{material.title}</div>
-                            <div className="text-[8px] text-zinc-600">
-                              {material.subject_name}
-                              {material.topic_name ? ` • ${material.topic_name}` : ''}
-                              {material.duration ? ` • ${material.duration}` : ''}
+                    <div className="max-h-[30rem] overflow-y-auto rounded-xl ring-1 ring-zinc-800 bg-zinc-950/70 p-2 space-y-2">
+                      {targetGroups.map(([subject, topics]) => {
+                        const subjectIds = targetSubjectIds(subject);
+                        const subjectSelected = subjectIds.length > 0 && subjectIds.every(id => selectedTargetIds.has(id));
+                        const subjectSome = subjectIds.some(id => selectedTargetIds.has(id));
+                        const subjectOpen = expandedTargetSubjects.has(subject);
+                        return (
+                          <div key={subject} className="rounded-xl ring-1 ring-zinc-800/80 overflow-hidden">
+                            <div className="flex items-center gap-2 px-3 py-2.5 bg-zinc-900/80">
+                              <button type="button" onClick={() => toggleTargetGroup(subject, 'subject')} className="p-1 text-zinc-400 hover:text-white" aria-label={`Toggle ${subject}`}>
+                                {subjectOpen ? <ChevronLeft size={14} className="-rotate-90" /> : <ChevronRight size={14} />}
+                              </button>
+                              <input type="checkbox" checked={subjectSelected} ref={el => { if (el) el.indeterminate = !subjectSelected && subjectSome; }} onChange={e => updateTargetSelection(subjectIds, e.target.checked)} className="accent-emerald-500" />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[10px] font-black text-zinc-100">{subject}</div>
+                                <div className="text-[8px] text-zinc-600">{subjectIds.length} lectures • {subjectIds.filter(id => selectedTargetIds.has(id)).length} selected</div>
+                              </div>
+                              <button type="button" onClick={() => updateTargetSelection(subjectIds, !subjectSelected)} className="text-[8px] font-black uppercase tracking-wider text-emerald-400 hover:text-emerald-300">{subjectSelected ? 'Clear' : 'Select all'}</button>
                             </div>
+
+                            {subjectOpen && (
+                              <div className="p-2 space-y-1 bg-zinc-950/40">
+                                {Array.from(topics.entries()).map(([topic, topicMaterials]) => {
+                                  const topicKey = `${subject}::${topic}`;
+                                  const topicIds = targetTopicIds(subject, topic);
+                                  const topicSelected = topicIds.length > 0 && topicIds.every(id => selectedTargetIds.has(id));
+                                  const topicSome = topicIds.some(id => selectedTargetIds.has(id));
+                                  const topicOpen = expandedTargetTopics.has(topicKey);
+                                  return (
+                                    <div key={topicKey} className="rounded-lg ring-1 ring-zinc-800/70 overflow-hidden">
+                                      <div className="flex items-center gap-2 px-2.5 py-2 hover:bg-white/[0.03]">
+                                        <button type="button" onClick={() => toggleTargetGroup(topicKey, 'topic')} className="p-1 text-zinc-500 hover:text-zinc-200" aria-label={`Toggle ${topic}`}>
+                                          {topicOpen ? <ChevronLeft size={13} className="-rotate-90" /> : <ChevronRight size={13} />}
+                                        </button>
+                                        <input type="checkbox" checked={topicSelected} ref={el => { if (el) el.indeterminate = !topicSelected && topicSome; }} onChange={e => updateTargetSelection(topicIds, e.target.checked)} className="accent-indigo-500" />
+                                        <div className="min-w-0 flex-1">
+                                          <div className="text-[9px] font-bold text-zinc-200 truncate">{topic}</div>
+                                          <div className="text-[8px] text-zinc-600">{topicIds.length} lectures • {topicIds.filter(id => selectedTargetIds.has(id)).length} selected</div>
+                                        </div>
+                                        <button type="button" onClick={() => updateTargetSelection(topicIds, !topicSelected)} className="text-[8px] font-black uppercase tracking-wider text-indigo-300 hover:text-indigo-200">{topicSelected ? 'Clear' : 'Select all'}</button>
+                                      </div>
+
+                                      {topicOpen && (
+                                        <div className="px-2 pb-2 space-y-1">
+                                          {topicMaterials.map((material, index) => (
+                                            <label key={material.id} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-white/5 cursor-pointer">
+                                              <input type="checkbox" checked={selectedTargetIds.has(String(material.id))} onChange={() => toggleMaterial(String(material.id))} className="accent-emerald-500" />
+                                              <div className="min-w-0 flex-1">
+                                                <div className="text-[9px] font-bold text-zinc-300 truncate">Lecture {index + 1}: {material.title}</div>
+                                                <div className="text-[8px] text-zinc-600">{material.duration ? `${material.duration} • ` : ''}{selectedTargetIds.has(String(material.id)) ? 'Targeted' : 'Not targeted'}</div>
+                                              </div>
+                                              {completedIds.has(String(material.id)) && <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />}
+                                            </label>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                          {completedIds.has(String(material.id)) && (
-                            <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-                          )}
-                        </label>
-                      ))}
-                      {materials.length === 0 && (
-                        <div className="py-8 text-center text-[9px] text-zinc-700">
-                          No curriculum videos found.
-                        </div>
-                      )}
+                        );
+                      })}
+                      {materials.length === 0 && <div className="py-8 text-center text-[9px] text-zinc-700">No curriculum videos found.</div>}
                     </div>
                   )}
 
