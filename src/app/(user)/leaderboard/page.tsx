@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { Trophy, Medal, Crown, ArrowLeft, Flame, Clock3, CalendarDays, Users } from 'lucide-react';
+import { Trophy, Medal, Crown, ArrowLeft, Flame, Clock3, CalendarDays, Users, GitCompareArrows } from 'lucide-react';
 import Link from 'next/link';
 
-type LeaderboardRow = {
+ type LeaderboardRow = {
   rank: number;
   user_id: string;
   display_name: string;
@@ -13,7 +13,6 @@ type LeaderboardRow = {
   daily_minutes: number;
   week_minutes: number;
   month_minutes: number;
-  rank1_days: number;
 };
 
 type SortMode = 'daily' | 'week' | 'month';
@@ -36,7 +35,10 @@ export default function LeaderboardPage() {
     const load = async () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        setLoading(false);
+        return;
+      }
       setMyUserId(session.user.id);
 
       const { data, error } = await supabase.rpc('get_study_leaderboard');
@@ -54,7 +56,7 @@ export default function LeaderboardPage() {
   const sortedRows = useMemo(() => {
     const key = sortMode === 'daily' ? 'daily_minutes' : sortMode === 'week' ? 'week_minutes' : 'month_minutes';
     return [...rows]
-      .sort((a, b) => Number(b[key]) - Number(a[key]))
+      .sort((a, b) => Number(b[key]) - Number(a[key]) || Number(b.daily_minutes) - Number(a.daily_minutes))
       .map((row, index) => ({ ...row, rank: index + 1 }));
   }, [rows, sortMode]);
 
@@ -110,8 +112,8 @@ export default function LeaderboardPage() {
                 <Crown size={19} className="text-amber-400" />
               </div>
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-amber-400">#1 Rank • Most #1 Days</p>
-                <p className="font-black mt-1">{firstRank.display_name} <span className="text-zinc-600 font-normal">• #1 on {firstRank.rank1_days} days</span></p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-amber-400">#1 Rank • Highest study time</p>
+                <p className="font-black mt-1">{firstRank.display_name} <span className="text-zinc-600 font-normal">• {formatHours(firstRank.daily_minutes)} today</span></p>
               </div>
             </div>
             <div className="flex gap-5 text-xs">
@@ -137,8 +139,8 @@ export default function LeaderboardPage() {
         )}
 
         <div className="rounded-2xl border border-white/5 bg-zinc-950/70 overflow-hidden shadow-2xl">
-          <div className="hidden sm:grid grid-cols-[70px_minmax(180px,1fr)_100px_130px_130px] gap-3 px-5 py-4 border-b border-white/5 text-[9px] font-black uppercase tracking-widest text-zinc-600">
-            <span>Rank</span><span>Student</span><span>Branch</span><span>#1 Days</span><span>Study Time</span>
+          <div className="hidden sm:grid grid-cols-[70px_minmax(180px,1fr)_100px_140px_130px] gap-3 px-5 py-4 border-b border-white/5 text-[9px] font-black uppercase tracking-widest text-zinc-600">
+            <span>Rank</span><span>Student</span><span>Branch</span><span>Study Time</span><span>Compare</span>
           </div>
 
           {loading ? (
@@ -153,12 +155,19 @@ export default function LeaderboardPage() {
                 const isMe = row.user_id === myUserId;
                 const rankIcon = row.rank === 1 ? <Crown size={17} className="text-amber-400" /> : row.rank === 2 ? <Medal size={17} className="text-zinc-300" /> : row.rank === 3 ? <Medal size={17} className="text-orange-400" /> : <span className="text-xs font-black text-zinc-600">#{row.rank}</span>;
                 return (
-                  <div key={row.user_id} className={`grid grid-cols-1 sm:grid-cols-[70px_minmax(180px,1fr)_100px_130px_130px] gap-2 sm:gap-3 px-5 py-4 items-center ${isMe ? 'bg-emerald-500/[0.06]' : 'hover:bg-white/[0.02]'}`}>
+                  <div key={row.user_id} className={`grid grid-cols-1 sm:grid-cols-[70px_minmax(180px,1fr)_100px_140px_130px] gap-3 px-5 py-4 items-center ${isMe ? 'bg-emerald-500/[0.06]' : 'hover:bg-white/[0.02]'}`}>
                     <div className="flex items-center gap-2">{rankIcon}<span className="sm:hidden text-[9px] text-zinc-600 uppercase tracking-widest">Rank {row.rank}</span></div>
                     <div className="min-w-0"><p className={`text-sm font-black truncate ${isMe ? 'text-emerald-400' : 'text-zinc-200'}`}>{row.display_name}{isMe ? ' (You)' : ''}</p><p className="text-[9px] text-zinc-600 mt-0.5">All-stream ranking</p></div>
                     <div><span className={`inline-flex px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider ${row.branch === 'cse' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{(row.branch || '—').toUpperCase()}</span></div>
-                    <div><p className="text-sm font-black">{row.rank1_days}</p><p className="text-[9px] text-zinc-600">times ranked #1</p></div>
                     <div><p className="text-xs font-bold">{formatHours(row.daily_minutes)}</p><p className="text-[9px] text-zinc-600">today • {formatHours(row.week_minutes)} week • {formatHours(row.month_minutes)} month</p></div>
+                    <div>
+                      <Link
+                        href={`/leaderboard/compare?userId=${encodeURIComponent(row.user_id)}`}
+                        className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-[10px] font-black uppercase tracking-widest text-zinc-300 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-400 transition-colors"
+                      >
+                        <GitCompareArrows size={14} /> Compare
+                      </Link>
+                    </div>
                   </div>
                 );
               })}
