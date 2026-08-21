@@ -13,6 +13,7 @@ type LeaderboardRow = {
   daily_minutes: number;
   week_minutes: number;
   month_minutes: number;
+  rank1_days: number;
 };
 
 type SortMode = 'daily' | 'week' | 'month';
@@ -58,6 +59,7 @@ export default function LeaderboardPage() {
   }, [rows, sortMode]);
 
   const myRow = sortedRows.find(r => r.user_id === myUserId);
+  const firstRank = sortedRows[0];
 
   return (
     <div className="min-h-full bg-[#050505] text-zinc-200 px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
@@ -101,6 +103,25 @@ export default function LeaderboardPage() {
           </button>
         </div>
 
+        {firstRank && (
+          <div className="rounded-2xl bg-amber-500/[0.06] border border-amber-500/20 p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <Crown size={19} className="text-amber-400" />
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-amber-400">#1 Rank • Most #1 Days</p>
+                <p className="font-black mt-1">{firstRank.display_name} <span className="text-zinc-600 font-normal">• #1 on {firstRank.rank1_days} days</span></p>
+              </div>
+            </div>
+            <div className="flex gap-5 text-xs">
+              <span><b>{formatHours(firstRank.daily_minutes)}</b><span className="text-zinc-600 ml-1">today</span></span>
+              <span><b>{formatHours(firstRank.week_minutes)}</b><span className="text-zinc-600 ml-1">week</span></span>
+              <span><b>{formatHours(firstRank.month_minutes)}</b><span className="text-zinc-600 ml-1">month</span></span>
+            </div>
+          </div>
+        )}
+
         {myRow && (
           <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -117,7 +138,7 @@ export default function LeaderboardPage() {
 
         <div className="rounded-2xl border border-white/5 bg-zinc-950/70 overflow-hidden shadow-2xl">
           <div className="hidden sm:grid grid-cols-[70px_minmax(180px,1fr)_100px_130px_130px] gap-3 px-5 py-4 border-b border-white/5 text-[9px] font-black uppercase tracking-widest text-zinc-600">
-            <span>Rank</span><span>Student</span><span>Branch</span><span>Today</span><span>Week / Month</span>
+            <span>Rank</span><span>Student</span><span>Branch</span><span>#1 Days</span><span>Study Time</span>
           </div>
 
           {loading ? (
@@ -136,8 +157,8 @@ export default function LeaderboardPage() {
                     <div className="flex items-center gap-2">{rankIcon}<span className="sm:hidden text-[9px] text-zinc-600 uppercase tracking-widest">Rank {row.rank}</span></div>
                     <div className="min-w-0"><p className={`text-sm font-black truncate ${isMe ? 'text-emerald-400' : 'text-zinc-200'}`}>{row.display_name}{isMe ? ' (You)' : ''}</p><p className="text-[9px] text-zinc-600 mt-0.5">All-stream ranking</p></div>
                     <div><span className={`inline-flex px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider ${row.branch === 'cse' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{(row.branch || '—').toUpperCase()}</span></div>
-                    <div><p className="text-sm font-black">{formatHours(row.daily_minutes)}</p><p className="text-[9px] text-zinc-600">daily</p></div>
-                    <div><p className="text-xs font-bold">{formatHours(row.week_minutes)}</p><p className="text-[9px] text-zinc-600">week • {formatHours(row.month_minutes)} month</p></div>
+                    <div><p className="text-sm font-black">{row.rank1_days}</p><p className="text-[9px] text-zinc-600">times ranked #1</p></div>
+                    <div><p className="text-xs font-bold">{formatHours(row.daily_minutes)}</p><p className="text-[9px] text-zinc-600">today • {formatHours(row.week_minutes)} week • {formatHours(row.month_minutes)} month</p></div>
                   </div>
                 );
               })}
