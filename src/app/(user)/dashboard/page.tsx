@@ -136,6 +136,13 @@ export default function UserDashboard() {
     return { daysRemaining: days, isUrgent: days < 150 && remainingPercentage > 40 }; 
   }, [targetDate, remainingPercentage]);
 
+  const gateExamDaysRemaining = useMemo(() => {
+    const today = getISTNow();
+    const exam = new Date('2027-02-07T00:00:00');
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return Math.max(0, Math.ceil((exam.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24)));
+  }, []);
+
   const allTodayTasks = useMemo(() => {
     const tasks: any[] = [];
     todayBlocks.forEach(block => {
@@ -249,6 +256,17 @@ export default function UserDashboard() {
                   <div className="w-1 h-1 rounded-full bg-zinc-800 mx-0.5"></div>
                   <span className={isTodaySecured ? 'text-orange-400' : 'text-zinc-500'}>{profile.streak} Days</span>
                 </div>
+              </div>
+            </div>
+
+            {/* FIXED GATE 2027 COUNTDOWN */}
+            <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-red-500/[0.06] ring-1 ring-red-500/20 shrink-0 whitespace-nowrap">
+              <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+                <Calendar size={14} className="text-red-400" />
+              </div>
+              <div>
+                <div className="text-[8px] uppercase tracking-widest text-red-400/80 font-bold mb-0.5">GATE 2027 • FEB 7</div>
+                <div className="text-sm font-black text-zinc-100 leading-none">{gateExamDaysRemaining} <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Days Remaining</span></div>
               </div>
             </div>
 
