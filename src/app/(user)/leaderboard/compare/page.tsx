@@ -26,11 +26,13 @@ type CompareRow = {
 type RangeKey = '30d' | '3m' | '6m' | '1y';
 
 const SERIES_CLASSES = [
-  { line: 'stroke-emerald-400', dot: 'fill-emerald-400', text: 'text-emerald-400' },
-  { line: 'stroke-sky-400', dot: 'fill-sky-400', text: 'text-sky-400' },
+  // High-contrast colors so each student's line is easy to distinguish.
   { line: 'stroke-amber-400', dot: 'fill-amber-400', text: 'text-amber-400' },
-  { line: 'stroke-violet-400', dot: 'fill-violet-400', text: 'text-violet-400' },
   { line: 'stroke-rose-400', dot: 'fill-rose-400', text: 'text-rose-400' },
+  { line: 'stroke-cyan-400', dot: 'fill-cyan-400', text: 'text-cyan-400' },
+  { line: 'stroke-violet-400', dot: 'fill-violet-400', text: 'text-violet-400' },
+  { line: 'stroke-orange-400', dot: 'fill-orange-400', text: 'text-orange-400' },
+  { line: 'stroke-lime-400', dot: 'fill-lime-400', text: 'text-lime-400' },
 ];
 
 const formatHours = (minutes: number) => {
