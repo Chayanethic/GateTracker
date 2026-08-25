@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { 
   Target, Activity, Zap, Flame, ArrowRight, 
   CalendarPlus, CheckCircle2, ShieldCheck, AlertTriangle, X, Edit3, Calendar,
-  Play, Link as LinkIcon, CheckSquare, Clock, ChevronDown, BookOpen, Layers, Sparkles, HelpCircle, Network, Save
+  Play, Link as LinkIcon, CheckSquare, Clock, ChevronDown, BookOpen, Layers, Sparkles, HelpCircle, Network, Save, Moon, BedDouble, SunMedium
 } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
@@ -45,6 +45,16 @@ export default function UserDashboard() {
   const [expandedSubjects, setExpandedSubjects] = useState<string[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [sleepEnabled, setSleepEnabled] = useState(false);
+  const [trackMasturbation, setTrackMasturbation] = useState(false);
+  const [sleepMastPrompted, setSleepMastPrompted] = useState(false);
+  const [sleepRow, setSleepRow] = useState<any | null>(null);
+  const [sleepModal, setSleepModal] = useState<'setup' | 'morning' | 'afternoon' | null>(null);
+  const [sleepBed, setSleepBed] = useState('');
+  const [sleepWake, setSleepWake] = useState('');
+  const [sleepNap, setSleepNap] = useState('');
+  const [sleepMast, setSleepMast] = useState('');
+  const [savingSleep, setSavingSleep] = useState(false);
 
   const getISTNow = () => new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
   const getISTDateString = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -67,9 +77,10 @@ export default function UserDashboard() {
 
       const todayStr = getISTDateString(getISTNow());
 
-      const { data: userProfileData } = await supabase.from('user_profiles').select('streak, syllabus_progress, target_exam_date, branch').eq('user_id', session.user.id).single();
+      const { data: userProfileData } = await supabase.from('user_profiles').select('streak, syllabus_progress, target_exam_date, branch, sleep_tracking_enabled, track_masturbation, sleep_masturbation_prompted').eq('user_id', session.user.id).single();
       const xpData = await getUserProfile(session.user.id);
       const { data: trackingData } = await supabase.from('daily_tracking').select('xp_earned').eq('user_id', session.user.id).eq('date_str', todayStr).maybeSingle();
+      const { data: todaySleep } = await supabase.from('sleep_tracking').select('date_str, bed_time, wake_time, night_sleep_minutes, afternoon_sleep_minutes, masturbation').eq('user_id', session.user.id).eq('date_str', todayStr).maybeSingle();
       const { data: progData } = await supabase.from('user_progress').select('material_id').eq('user_id', session.user.id);
 
       const { data: goalData } = await supabase.from('study_goals')
@@ -82,6 +93,20 @@ export default function UserDashboard() {
 
       if (isMounted) {
         setProfile({ xp: xpData?.xp || 0, streak: userProfileData?.streak || 0 });
+        setSleepEnabled(Boolean(userProfileData?.sleep_tracking_enabled));
+        setTrackMasturbation(Boolean(userProfileData?.track_masturbation));
+        setSleepMastPrompted(Boolean(userProfileData?.sleep_masturbation_prompted));
+        setSleepRow(todaySleep || null);
+        if (todaySleep) {
+          setSleepBed((todaySleep.bed_time || '').slice(0, 5));
+          setSleepWake((todaySleep.wake_time || '').slice(0, 5));
+          setSleepNap(String(todaySleep.afternoon_sleep_minutes || ''));
+          setSleepMast(todaySleep.masturbation == null ? '' : todaySleep.masturbation ? 'yes' : 'no');
+        }
+        const istHour = getISTNow().getHours();
+        if (userProfileData?.sleep_tracking_enabled && !userProfileData?.sleep_masturbation_prompted) setSleepModal('setup');
+        else if (userProfileData?.sleep_tracking_enabled && !todaySleep) setSleepModal('morning');
+        else if (userProfileData?.sleep_tracking_enabled && istHour >= 18 && !localStorage.getItem(`gate_sleep_afternoon_${todayStr}`)) setSleepModal('afternoon');
         if (userProfileData?.syllabus_progress) setCompletedTopics(userProfileData.syllabus_progress);
         if (userProfileData?.target_exam_date) {
           setTargetDate(userProfileData.target_exam_date);
@@ -197,6 +222,55 @@ export default function UserDashboard() {
   if (isLoading) return <div className="min-h-screen bg-[#050505] flex flex-col gap-4 items-center justify-center text-emerald-500 font-bold tracking-widest text-[10px] uppercase animate-pulse"><Activity size={32} className="animate-spin text-emerald-500"/>Compiling Command Center...</div>;
   
   const isOvercharged = todayXp > 200;
+  const calculateSleepMinutes = (bed: string, wake: string) => {
+    if (!bed || !wake) return 0;
+    const [bh, bm] = bed.split(':').map(Number);
+    const [wh, wm] = wake.split(':').map(Number);
+    let start = bh * 60 + bm;
+    let end = wh * 60 + wm;
+    if (end <= start) end += 1440;
+    return Math.max(0, end - start);
+  };
+
+  const saveSleepPreference = async (value: boolean) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { error } = await supabase.from('user_profiles').update({ track_masturbation: value, sleep_masturbation_prompted: true }).eq('user_id', session.user.id);
+    if (error) { toast.error(error.message); return; }
+    setTrackMasturbation(value);
+    setSleepMastPrompted(true);
+    setSleepModal('morning');
+  };
+
+  const saveSleepCheckIn = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const todayStr = getISTDateString(getISTNow());
+    setSavingSleep(true);
+    const existing = sleepRow || {};
+    const night = sleepModal === 'afternoon' ? Number(existing.night_sleep_minutes || 0) : calculateSleepMinutes(sleepBed, sleepWake);
+    const afternoon = sleepModal === 'morning' ? Number(existing.afternoon_sleep_minutes || 0) : Math.max(0, Math.round(Number(sleepNap) || 0));
+    if (sleepModal === 'morning' && (!sleepBed || !sleepWake)) {
+      toast.error('Please enter your sleep and wake time.');
+      setSavingSleep(false);
+      return;
+    }
+    const { data, error } = await supabase.from('sleep_tracking').upsert({
+      user_id: session.user.id, date_str: todayStr,
+      bed_time: sleepModal === 'morning' ? sleepBed : (existing.bed_time || null),
+      wake_time: sleepModal === 'morning' ? sleepWake : (existing.wake_time || null),
+      night_sleep_minutes: night,
+      afternoon_sleep_minutes: afternoon,
+      masturbation: trackMasturbation ? (sleepModal === 'morning' ? (sleepMast === '' ? null : sleepMast === 'yes') : (existing.masturbation ?? null)) : null,
+    }, { onConflict: 'user_id,date_str' }).select().single();
+    setSavingSleep(false);
+    if (error) { toast.error(error.message); return; }
+    setSleepRow(data);
+    if (sleepModal === 'afternoon') localStorage.setItem(`gate_sleep_afternoon_${todayStr}`, '1');
+    setSleepModal(null);
+    toast.success(sleepModal === 'morning' ? 'Sleep record saved.' : 'Afternoon sleep saved.');
+  };
+
   const xpPercent = Math.min(100, (todayXp / 200) * 100);
   const ringOffset = 138.16 - (138.16 * xpPercent) / 100;
 
@@ -401,6 +475,28 @@ export default function UserDashboard() {
         </div>
 
         {/* ======================================================== */}
+        {/* SLEEP TRACKER */}
+        {/* ======================================================== */}
+        <section className="mb-10 bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-5 sm:p-6 relative z-10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20 flex items-center justify-center"><Moon size={19} className="text-indigo-400"/></div>
+              <div><h2 className="text-lg font-black text-zinc-100">Sleep & Recovery</h2><p className="text-[10px] text-zinc-600 mt-1">{sleepEnabled ? 'Daily sleep tracking is enabled.' : 'Enable sleep tracking to record bedtime, wake time and afternoon sleep.'}</p></div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={async()=>{const {data:{session}}=await supabase.auth.getSession(); if(!session)return; const next=!sleepEnabled; const {error}=await supabase.from('user_profiles').update({sleep_tracking_enabled:next, ...(next ? {sleep_masturbation_prompted:false} : {})}).eq('user_id',session.user.id); if(error)toast.error(error.message); else {setSleepEnabled(next); if(next){setSleepMastPrompted(false); setSleepModal('setup');} toast.success(next?'Sleep tracking enabled.':'Sleep tracking disabled.');}}} className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest ${sleepEnabled?'bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/30':'bg-zinc-950 text-zinc-400 ring-1 ring-zinc-800'}`}>{sleepEnabled?'Enabled':'Enable Sleep'}</button>
+              {sleepEnabled && <Link href="/sleep-tracker" className="px-3 py-2 rounded-xl bg-zinc-950 text-zinc-400 ring-1 ring-zinc-800 hover:text-white text-[9px] font-black uppercase tracking-widest">Open Sleep Graph</Link>}
+            </div>
+          </div>
+          {sleepEnabled && <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800"><div className="text-[8px] uppercase tracking-widest text-zinc-600">Night</div><div className="text-sm font-black text-zinc-200 mt-1">{sleepRow ? `${Math.floor(Number(sleepRow.night_sleep_minutes||0)/60)}h ${Number(sleepRow.night_sleep_minutes||0)%60}m` : 'Not recorded'}</div></div>
+            <div className="p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800"><div className="text-[8px] uppercase tracking-widest text-zinc-600">Afternoon</div><div className="text-sm font-black text-zinc-200 mt-1">{sleepRow ? `${Math.floor(Number(sleepRow.afternoon_sleep_minutes||0)/60)}h ${Number(sleepRow.afternoon_sleep_minutes||0)%60}m` : 'Not recorded'}</div></div>
+            <div className="p-3 rounded-xl bg-zinc-950/70 ring-1 ring-zinc-800"><div className="text-[8px] uppercase tracking-widest text-zinc-600">Total Sleep</div><div className="text-sm font-black text-indigo-300 mt-1">{sleepRow ? `${Math.floor((Number(sleepRow.night_sleep_minutes||0)+Number(sleepRow.afternoon_sleep_minutes||0))/60)}h ${(Number(sleepRow.night_sleep_minutes||0)+Number(sleepRow.afternoon_sleep_minutes||0))%60}m` : '—'}</div></div>
+            <div className="p-3 rounded-xl bg-amber-500/[0.05] ring-1 ring-amber-500/20"><div className="text-[8px] uppercase tracking-widest text-amber-400">GATE Focus</div><div className="text-[10px] font-bold text-zinc-400 mt-1">{gateExamDaysRemaining} days left • protect sleep, then add focused study.</div></div>
+          </div>}
+        </section>
+
+        {/* ======================================================== */}
         {/* LOWER SECTION: SPLIT MATRIX PLANNERS */}
         {/* ======================================================== */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-10 w-full xl:w-5/6 mx-auto mt-auto">
@@ -471,8 +567,22 @@ export default function UserDashboard() {
         </div>
       </div>
 
+      {sleepModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-lg bg-[#0a0a0b] ring-1 ring-zinc-800 rounded-[2rem] p-6 sm:p-8 shadow-2xl">
+            <div className="flex items-center gap-3 mb-6"><div className="w-11 h-11 rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20 flex items-center justify-center"><Moon size={19} className="text-indigo-400"/></div><div><div className="text-[8px] uppercase tracking-widest text-indigo-400 font-black">Daily Sleep Check-in</div><h2 className="text-xl font-black text-zinc-100">{sleepModal === 'setup' ? 'Sleep tracking setup' : sleepModal === 'morning' ? 'Good morning. Log last night.' : 'Afternoon sleep check'}</h2></div></div>
+            {sleepModal === 'setup' ? <div className="space-y-5"><p className="text-xs text-zinc-500">Sleep tracking is enabled. Do you also want the app to ask a private masturbation question in your morning sleep check-in?</p><div className="grid grid-cols-2 gap-3"><button onClick={()=>saveSleepPreference(true)} className="py-4 rounded-2xl bg-rose-500/10 ring-1 ring-rose-500/30 text-rose-300 text-xs font-black">Yes, track it</button><button onClick={()=>saveSleepPreference(false)} className="py-4 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 text-zinc-300 text-xs font-black">No, skip it</button></div></div> : sleepModal === 'morning' ? <div className="space-y-4">
+              <p className="text-xs text-zinc-500">Enter the times yourself. The app will calculate your night sleep automatically.</p>
+              <div className="grid grid-cols-2 gap-3"><label className="text-[9px] uppercase tracking-widest text-zinc-500">When did you go to sleep?<input type="time" value={sleepBed} onChange={e=>setSleepBed(e.target.value)} className="mt-1 w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-zinc-100"/></label><label className="text-[9px] uppercase tracking-widest text-zinc-500">When did you wake up?<input type="time" value={sleepWake} onChange={e=>setSleepWake(e.target.value)} className="mt-1 w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-zinc-100"/></label></div>
+              {trackMasturbation && <label className="block text-[9px] uppercase tracking-widest text-zinc-500">Did you masturbate last night?<select value={sleepMast} onChange={e=>setSleepMast(e.target.value)} className="mt-1 w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-zinc-100"><option value="">Choose</option><option value="yes">Yes</option><option value="no">No</option></select></label>}
+            </div> : <div className="space-y-4"><p className="text-xs text-zinc-500">Did you sleep this afternoon? Enter the total nap duration. Use 0 if you did not sleep.</p><label className="block text-[9px] uppercase tracking-widest text-zinc-500">Afternoon sleep (minutes)<input type="number" min="0" value={sleepNap} onChange={e=>setSleepNap(e.target.value)} placeholder="0" className="mt-1 w-full bg-zinc-950 ring-1 ring-zinc-800 rounded-xl px-3 py-3 text-zinc-100"/></label></div>}
+            <div className="flex items-center justify-end gap-2 mt-7"><button onClick={()=>{if(sleepModal==='afternoon'){localStorage.setItem(`gate_sleep_afternoon_${getISTDateString(getISTNow())}`,'1')}setSleepModal(null)}} className="px-4 py-2.5 rounded-xl bg-zinc-900 text-zinc-500 ring-1 ring-zinc-800 text-[9px] font-black uppercase tracking-widest">Later</button><button onClick={saveSleepCheckIn} disabled={savingSleep} className="px-5 py-2.5 rounded-xl bg-indigo-500 text-white text-[9px] font-black uppercase tracking-widest">{savingSleep?'Saving...':'Save Sleep'}</button></div>
+          </div>
+        </div>
+      )}
+
       {/* ======================================================== */}
-      {/* PREMIUM OPTIMIZED MODAL (SYLLABUS) */}
+      {/* PREMIUM OPTIMIZED MODAL (SYLLABUS) */
       {/* ======================================================== */}
       {showSyllabusModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-[#050505]/80 backdrop-blur-lg animate-in fade-in duration-200">
