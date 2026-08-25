@@ -78,10 +78,10 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const navLinks = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
-    { name: 'Daily HUD', href: '/daily-goal', icon: Target },
     { name: 'Daily Tracker', href: '/daily-tracker', icon: ClipboardCheck },
-    { name: 'Sleep Tracker', href: '/sleep-tracker', icon: Moon },
     { name: 'Curriculum', href: '/resources', icon: BookOpen },
+    { name: 'Daily HUD', href: '/daily-goal', icon: Target },
+    { name: 'Sleep Tracker', href: '/sleep-tracker', icon: Moon },
   ];
 
   return (
