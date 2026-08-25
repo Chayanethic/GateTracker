@@ -582,7 +582,7 @@ export default function UserDashboard() {
       )}
 
       {/* ======================================================== */}
-      {/* PREMIUM OPTIMIZED MODAL (SYLLABUS) */
+      {/* PREMIUM OPTIMIZED MODAL (SYLLABUS) */}
       {/* ======================================================== */}
       {showSyllabusModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-[#050505]/80 backdrop-blur-lg animate-in fade-in duration-200">
