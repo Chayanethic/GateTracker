@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 type Material = { id: string; title?: string; subject_name?: string; topic_name?: string; duration?: string | number; lecture_no?: number };
 type Progress = { material_id: string; completed?: boolean };
-type Tracking = { subject_name: string; topic_name: string; enabled: boolean; started_at: string | null; completed_at: string | null };
+type Tracking = { subject_name: string; topic_name: string; enabled: boolean; started_at: string | null; completed_at: string | null; best_elapsed_minutes?: number | null; best_lecture_minutes?: number | null; best_pace_hours_per_day?: number | null; record_at?: string | null };
 type Activity = { material_id: string; date_str: string; topic_name?: string; subject_name?: string; duration_mins?: number };
 
 type TopicRow = Tracking & {
@@ -20,6 +20,11 @@ type TopicRow = Tracking & {
   elapsedMins: number;
   studyDates: string[];
   lastStudyDate: string | null;
+  remainingLectureMins: number;
+  bestElapsedMins: number | null;
+  bestPaceHoursPerDay: number | null;
+  projectedRemainingDays: number | null;
+  isRecord: boolean;
 };
 
 const mins = (v: string | number | null | undefined) => {
@@ -54,11 +59,23 @@ const elapsed = (start: string | null, end: string | null) => {
   return Math.max(0, (b - a) / 60000);
 };
 
+const paceHoursPerDay = (lectureMins: number, elapsedMins: number) => {
+  if (lectureMins <= 0 || elapsedMins <= 0) return 0;
+  return lectureMins / (elapsedMins / 1440) / 60;
+};
+
+const fmtDays = (days: number | null) => {
+  if (days == null || !Number.isFinite(days)) return '—';
+  if (days < 1) return `${Math.max(1, Math.ceil(days * 24))}h`;
+  return `${Math.max(1, Math.ceil(days))}d`;
+};
+
 export default function TopicTrackerPage() {
   const [rows, setRows] = useState<TopicRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<'longest' | 'shortest' | 'recent'>('longest');
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [, setNow] = useState(Date.now());
 
   const load = async () => {
     setLoading(true);
@@ -94,6 +111,21 @@ export default function TopicTrackerPage() {
         await supabase.from('topic_tracking').update({ completed_at: completedAt }).eq('user_id', session.user.id).eq('subject_name', tr.subject_name).eq('topic_name', tr.topic_name);
       }
 
+      const totalLectureMins = topicMats.reduce((s, m) => s + mins(m.duration), 0);
+      const completedLectureMins = completedMats.reduce((s, m) => s + mins(m.duration), 0);
+      const elapsedMins = elapsed(tr.started_at, completedAt);
+      const remainingLectureMins = Math.max(0, totalLectureMins - completedLectureMins);
+      const bestElapsedMins = tr.best_elapsed_minutes == null ? null : Number(tr.best_elapsed_minutes);
+      const bestPaceHoursPerDay = tr.best_pace_hours_per_day == null ? null : Number(tr.best_pace_hours_per_day);
+      const currentPace = paceHoursPerDay(totalLectureMins, elapsedMins);
+      const benchmarkPace = bestPaceHoursPerDay || currentPace || null;
+      const projectedRemainingDays = benchmarkPace && remainingLectureMins > 0
+        ? (remainingLectureMins / 60) / benchmarkPace
+        : null;
+      const isRecord = !!completedAt &&
+        !!bestElapsedMins &&
+        elapsedMins <= bestElapsedMins;
+
       next.push({
         ...tr,
         completed_at: completedAt,
@@ -101,11 +133,16 @@ export default function TopicTrackerPage() {
         completedIds,
         completedCount: completedMats.length,
         totalCount: topicMats.length,
-        totalLectureMins: topicMats.reduce((s, m) => s + mins(m.duration), 0),
-        completedLectureMins: completedMats.reduce((s, m) => s + mins(m.duration), 0),
-        elapsedMins: elapsed(tr.started_at, completedAt),
+        totalLectureMins,
+        completedLectureMins,
+        elapsedMins,
         studyDates: dates,
         lastStudyDate: dates[dates.length - 1] || null,
+        remainingLectureMins,
+        bestElapsedMins,
+        bestPaceHoursPerDay: benchmarkPace,
+        projectedRemainingDays,
+        isRecord,
       });
     }
 
@@ -114,6 +151,12 @@ export default function TopicTrackerPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Refresh active timers without changing their persisted start time.
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const visible = useMemo(() => rows
     .filter(r => filter === 'all' || (filter === 'active' ? !r.completed_at : !!r.completed_at))
@@ -172,6 +215,53 @@ export default function TopicTrackerPage() {
                       <div className="p-3 rounded-xl bg-black/30 ring-1 ring-white/5"><div className="text-[8px] uppercase font-black text-zinc-600">Lecture time</div><div className="text-lg font-black text-indigo-300 mt-1">{fmt(r.completedLectureMins)}</div></div>
                       <div className="p-3 rounded-xl bg-black/30 ring-1 ring-white/5"><div className="text-[8px] uppercase font-black text-zinc-600">Study days</div><div className="text-lg font-black text-emerald-400 mt-1">{r.studyDates.length}</div></div>
                     </div>
+                  </div>
+
+                  <div className={`mt-6 rounded-2xl p-4 ring-1 ${r.completed_at ? (r.isRecord ? 'bg-yellow-500/10 ring-yellow-400/30' : 'bg-zinc-950/60 ring-white/10') : 'bg-rose-500/10 ring-rose-400/25'}`}>
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                          <Trophy size={13} className={r.isRecord ? 'text-yellow-300' : 'text-amber-400'} />
+                          {r.completed_at ? (r.isRecord ? 'New personal record' : 'Topic record') : 'Your power pace'}
+                        </div>
+                        <p className="mt-2 text-sm sm:text-base font-black text-zinc-100">
+                          {r.completed_at
+                            ? (r.isRecord
+                              ? `🔥 Record! You finished ${r.topic_name} in ${fmt(r.elapsedMins)}.`
+                              : `Your current record is ${fmt(r.bestElapsedMins || r.elapsedMins)}.`)
+                            : (r.bestPaceHoursPerDay
+                              ? `You can target about ${fmtDays(r.projectedRemainingDays)} for the remaining lectures.`
+                              : 'Finish this topic once to create your first personal pace record.')}
+                        </p>
+                        {!r.completed_at && r.remainingLectureMins > 0 && (
+                          <p className="text-[10px] text-zinc-500 mt-1">
+                            {fmt(r.remainingLectureMins)} of lecture time remains. {r.bestPaceHoursPerDay
+                              ? `Your best pace is ${r.bestPaceHoursPerDay.toFixed(1)} lecture h/day — use that pace now.`
+                              : 'Push consistently and make this your benchmark.'}
+                          </p>
+                        )}
+                        {r.completed_at && r.isRecord && (
+                          <p className="text-[10px] text-yellow-200/70 mt-1">
+                            Beat this record on your next attempt and the record moves again.
+                          </p>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 shrink-0">
+                        <div className="px-3 py-2 rounded-xl bg-black/30 ring-1 ring-white/5">
+                          <div className="text-[8px] uppercase font-black text-zinc-600">Remaining</div>
+                          <div className="text-sm font-black text-rose-300">{fmt(r.remainingLectureMins)}</div>
+                        </div>
+                        <div className="px-3 py-2 rounded-xl bg-black/30 ring-1 ring-white/5">
+                          <div className="text-[8px] uppercase font-black text-zinc-600">Target pace</div>
+                          <div className="text-sm font-black text-yellow-300">{r.bestPaceHoursPerDay ? `${r.bestPaceHoursPerDay.toFixed(1)}h/day` : '—'}</div>
+                        </div>
+                      </div>
+                    </div>
+                    {!r.completed_at && r.elapsedMins > 0 && r.bestPaceHoursPerDay && r.projectedRemainingDays != null && (
+                      <div className="mt-3 pt-3 border-t border-white/5 text-[10px] font-bold text-zinc-400">
+                        ⚡ You have already used <span className="text-amber-300">{fmt(r.elapsedMins)}</span>. At your fastest pace, the remaining <span className="text-rose-300">{fmt(r.remainingLectureMins)}</span> can be finished in about <span className="text-yellow-300">{fmtDays(r.projectedRemainingDays)}</span>. Hurry — turn your best pace into your normal pace.
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-6">
