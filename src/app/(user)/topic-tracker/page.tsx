@@ -172,8 +172,13 @@ export default function TopicTrackerPage() {
       const elapsedMins = elapsed(tr.started_at, completedAt);
       const bestElapsedMins = tr.best_elapsed_minutes == null ? null : Number(tr.best_elapsed_minutes);
       const bestLectureMins = tr.best_lecture_minutes == null ? null : Number(tr.best_lecture_minutes);
-      const bestPaceHoursPerDay = bestElapsedMins && bestElapsedMins > 0
-        ? (bestLectureMins || totalLectureMins) / 60 / (bestElapsedMins / 1440)
+      const bestRecordDays = bestElapsedMins && bestElapsedMins > 0
+        ? Math.max(1, Math.round(bestElapsedMins / 1440))
+        : null;
+      // Best pace = total lecture hours / total days taken.
+      // It never uses the current running timer or remaining time.
+      const bestPaceHoursPerDay = bestRecordDays
+        ? ((bestLectureMins || totalLectureMins) / 60) / bestRecordDays
         : (tr.best_pace_hours_per_day == null ? null : Number(tr.best_pace_hours_per_day));
       const projectedRemainingDays = bestPaceHoursPerDay && remainingLectureMins > 0
         ? (remainingLectureMins / 60) / bestPaceHoursPerDay
@@ -246,7 +251,8 @@ export default function TopicTrackerPage() {
               {records.slice(0, 6).map(r => {
                 const recordMins = r.bestElapsedMins || 0;
                 const lectureMins = r.bestLectureMins || r.totalLectureMins || 0;
-                const dailyHours = r.bestPaceHoursPerDay || (recordMins > 0 ? (lectureMins / 60) / (recordMins / 1440) : 0);
+                const recordDays = recordMins > 0 ? Math.max(1, Math.round(recordMins / 1440)) : 0;
+                const dailyHours = r.bestPaceHoursPerDay || (recordDays > 0 ? (lectureMins / 60) / recordDays : 0);
                 return (
                   <div key={`${r.subject_name}::${r.topic_name}`} className="rounded-2xl bg-black/30 ring-1 ring-white/10 p-4">
                     <div className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{r.subject_name}</div>
