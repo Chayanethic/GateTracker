@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
-import { getUserProfile, getUserProgress, getUniqueSubjects, getSubjectSyllabus, getCurrentUserBranch, syncDailyLectureCompletion } from '../../../lib/dataService';
+import { getUserProfile, getUserProgress, getUniqueSubjects, getSubjectSyllabus, getCurrentUserBranch, syncDailyLectureCompletion, syncTopicTrackingCompletion } from '../../../lib/dataService';
 import { 
   Flame, Zap, Activity, ChevronRight, ArrowLeft, BookOpen, 
   LayoutGrid, CheckCircle2, CircleDashed, Play, Clock, 
@@ -152,6 +152,7 @@ export default function ResourcesHub() {
   const [studyHours, setStudyHours] = useState<number>(4);
   const [playbackSpeed, setPlaybackSpeed] = useState<number | string>(1.25);
   const [branch, setBranch] = useState<string | null>(null);
+  const [trackedTopics, setTrackedTopics] = useState<Set<string>>(new Set());
 
   // --- THEME STATE (default = DARK / NIGHT MODE) ---
   const [isDark, setIsDark] = useState(true);
@@ -177,11 +178,12 @@ export default function ResourcesHub() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session || !isMounted) return;
       
-      const [xpData, { data: dbProfile }, progData, subjs] = await Promise.all([
+      const [xpData, { data: dbProfile }, progData, subjs, topicTrackingData] = await Promise.all([
         getUserProfile(session.user.id),
         supabase.from('user_profiles').select('streak').eq('user_id', session.user.id).maybeSingle(),
         getUserProgress(session.user.id),
-        getCurrentUserBranch(session.user.id)
+        getCurrentUserBranch(session.user.id),
+        supabase.from('topic_tracking').select('subject_name,topic_name').eq('user_id', session.user.id).eq('enabled', true)
       ]);
       
       if (isMounted) {
@@ -190,6 +192,8 @@ export default function ResourcesHub() {
         const subjectsForBranch = await getUniqueSubjects(userBranch || undefined);
         setProfile({ xp: xpData?.xp || 0, streak: dbProfile?.streak || 0 });
         setProgress(progData || []);
+        const tracked = new Set<string>((topicTrackingData?.data || []).map((r: any) => `${r.subject_name}::${r.topic_name}`));
+        setTrackedTopics(tracked);
         setSubjects(subjectsForBranch);
         setIsLoading(false);
       }
@@ -197,6 +201,35 @@ export default function ResourcesHub() {
     loadCoreSystem();
     return () => { isMounted = false; };
   }, []);
+
+  // --- TOPIC FOCUS TRACKING ---
+  const toggleTopicTracking = async (e: React.MouseEvent, subject: string, topic: string) => {
+    e.stopPropagation();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const key = `${subject}::${topic}`;
+    const enabled = !trackedTopics.has(key);
+    setTrackedTopics(prev => {
+      const next = new Set(prev);
+      enabled ? next.add(key) : next.delete(key);
+      return next;
+    });
+    const { error } = await supabase.from('topic_tracking').upsert({
+      user_id: session.user.id, subject_name: subject, topic_name: topic, enabled,
+      started_at: enabled ? new Date().toISOString() : null,
+      completed_at: null,
+    }, { onConflict: 'user_id,subject_name,topic_name' });
+    if (error) {
+      console.error(error);
+      setTrackedTopics(prev => { const next = new Set(prev); enabled ? next.delete(key) : next.add(key); return next; });
+      toast.error('Could not update topic tracking');
+      return;
+    }
+    toast(enabled ? 'Topic tracking ON — finish this topic before moving on.' : 'Topic tracking OFF', {
+      icon: enabled ? '🎯' : '↩️',
+      style: { background: '#121214', color: '#e4e4e7', border: '1px solid #27272a', fontSize: '12px' }
+    });
+  };
 
   // --- OPTIMIZED DATA FETCHING ---
   const handleSubjectSelect = async (subject: string) => {
@@ -285,10 +318,10 @@ export default function ResourcesHub() {
 
       if (currentlyDone) {
         await supabase.from('user_progress').delete().match({ user_id: session.user.id, material_id: matId });
-        if (material) await syncDailyLectureCompletion(session.user.id, material, false);
+        if (material) { await syncDailyLectureCompletion(session.user.id, material, false); await syncTopicTrackingCompletion(session.user.id, material); }
       } else {
         await supabase.from('user_progress').upsert({ user_id: session.user.id, material_id: matId, completed: true });
-        if (material) await syncDailyLectureCompletion(session.user.id, material, true);
+        if (material) { await syncDailyLectureCompletion(session.user.id, material, true); await syncTopicTrackingCompletion(session.user.id, material); }
         toast.success('Module Mastered!', { icon: '🔥', style: { background: '#121214', color: '#10b981', border: '1px solid #059669', fontSize: '12px' }});
       }
     } catch (err) { console.error("Progress Sync Error", err); }
@@ -473,6 +506,18 @@ export default function ResourcesHub() {
                                  </span>
                                )}
                             </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 mr-2">
+                            {trackedTopics.has(`${activeSubject}::${topic}`) && (
+                              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20 text-[8px] font-black uppercase tracking-wider">🎯 Tracking</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => toggleTopicTracking(e, activeSubject || '', topic)}
+                              className={`px-2.5 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-wider transition-colors ${trackedTopics.has(`${activeSubject}::${topic}`) ? 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20'}`}
+                            >
+                              {trackedTopics.has(`${activeSubject}::${topic}`) ? 'Tracking ON' : 'Track Topic'}
+                            </button>
                           </div>
                           <div className={`p-1 sm:p-1.5 rounded-full transition-all duration-300 ${activeTopic === topic ? `rotate-90 ${T.chevronBgActive}` : `bg-transparent ${T.chevronBg}`}`}>
                              <ChevronRight size={16} className="w-4 h-4 sm:w-5 sm:h-5" />
