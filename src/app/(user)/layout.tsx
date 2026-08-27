@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
-import { LayoutDashboard, BookOpen, User, LogOut, Hexagon, Target, Activity, ClipboardCheck, ArrowLeftRight, Trophy, Moon } from 'lucide-react';
+import { LayoutDashboard, BookOpen, User, LogOut, Hexagon, Target, Activity, ClipboardCheck, ArrowLeftRight, Trophy, Moon, Timer } from 'lucide-react';
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -78,10 +78,11 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const navLinks = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
-    { name: 'Daily Tracker', href: '/daily-tracker', icon: ClipboardCheck },
-    { name: 'Curriculum', href: '/resources', icon: BookOpen },
     { name: 'Daily HUD', href: '/daily-goal', icon: Target },
+    { name: 'Daily Tracker', href: '/daily-tracker', icon: ClipboardCheck },
     { name: 'Sleep Tracker', href: '/sleep-tracker', icon: Moon },
+    { name: 'Topic Time Mirror', href: '/topic-tracker', icon: Timer },
+    { name: 'Curriculum', href: '/resources', icon: BookOpen },
   ];
 
   return (
