@@ -52,6 +52,18 @@ const fmt = (m: number) => {
   return `${mm}m`;
 };
 
+const fmtRecordDays = (m: number) => {
+  const total = Math.max(0, Math.round(m));
+  const days = Math.floor(total / 1440);
+  const hours = Math.floor((total % 1440) / 60);
+  const minutes = total % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days} day${days === 1 ? '' : 's'}`);
+  if (hours) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  if (minutes && parts.length < 2) parts.push(`${minutes} min`);
+  return parts.length ? parts.join(' ') : '0 min';
+};
+
 const fmtHours = (m: number) => {
   const h = m / 60;
   if (h >= 10) return `${h.toFixed(0)}h`;
@@ -231,17 +243,34 @@ export default function TopicTrackerPage() {
           <section className="mb-6 rounded-3xl bg-gradient-to-br from-yellow-500/10 via-zinc-900/60 to-rose-500/10 ring-1 ring-yellow-400/20 p-5 sm:p-6">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em] text-yellow-300"><Trophy size={14}/> Your best chapter records</div>
             <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
-              {records.slice(0, 6).map(r => (
-                <div key={`${r.subject_name}::${r.topic_name}`} className="rounded-2xl bg-black/30 ring-1 ring-white/10 p-4">
-                  <div className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{r.subject_name}</div>
-                  <div className="mt-1 font-black text-zinc-100 truncate">{r.topic_name}</div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-bold">
-                    <span className="px-2 py-1 rounded-lg bg-yellow-500/10 text-yellow-300">🏆 {fmt(r.bestElapsedMins || 0)}</span>
-                    <span className="px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-300">{fmtHours(r.bestLectureMins || 0)} lectures</span>
+              {records.slice(0, 6).map(r => {
+                const recordMins = r.bestElapsedMins || 0;
+                const lectureMins = r.bestLectureMins || r.totalLectureMins || 0;
+                const dailyHours = r.bestPaceHoursPerDay || (recordMins > 0 ? (lectureMins / 60) / (recordMins / 1440) : 0);
+                return (
+                  <div key={`${r.subject_name}::${r.topic_name}`} className="rounded-2xl bg-black/30 ring-1 ring-white/10 p-4">
+                    <div className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{r.subject_name}</div>
+                    <div className="mt-1 font-black text-zinc-100 truncate">{r.topic_name}</div>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div className="rounded-xl bg-yellow-500/10 ring-1 ring-yellow-400/15 p-2.5">
+                        <div className="text-[7px] font-black uppercase tracking-wider text-yellow-300/70">Record</div>
+                        <div className="mt-1 text-[11px] font-black text-yellow-300">{fmtRecordDays(recordMins)}</div>
+                      </div>
+                      <div className="rounded-xl bg-cyan-500/10 ring-1 ring-cyan-400/15 p-2.5">
+                        <div className="text-[7px] font-black uppercase tracking-wider text-cyan-300/70">Lectures</div>
+                        <div className="mt-1 text-[11px] font-black text-cyan-300">{fmtHours(lectureMins)}</div>
+                      </div>
+                      <div className="rounded-xl bg-emerald-500/10 ring-1 ring-emerald-400/15 p-2.5">
+                        <div className="text-[7px] font-black uppercase tracking-wider text-emerald-300/70">Daily pace</div>
+                        <div className="mt-1 text-[11px] font-black text-emerald-300">{dailyHours ? `${dailyHours.toFixed(1)}h` : '—'}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[9px] text-zinc-500">
+                      🏆 Fastest completion: <b className="text-zinc-300">{fmtRecordDays(recordMins)}</b> · <b className="text-yellow-300">{dailyHours ? `${dailyHours.toFixed(1)} lecture h/day` : '—'}</b>
+                    </div>
                   </div>
-                  <div className="mt-2 text-[9px] text-zinc-500">Best pace: <b className="text-zinc-300">{r.bestPaceHoursPerDay ? `${r.bestPaceHoursPerDay.toFixed(1)}h/day` : '—'}</b></div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
@@ -298,8 +327,8 @@ export default function TopicTrackerPage() {
                       <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-rose-300"><Zap size={13}/> Your fastest pace is the target</div>
                       {r.bestElapsedMins && r.bestPaceHoursPerDay ? (
                         <>
-                          <p className="mt-2 text-base sm:text-lg font-black text-zinc-100">{r.remainingLectureMins > 0 ? `You have ${fmtHours(r.remainingLectureMins)} of lecture left. Your best record for ${r.topic_name} is ${fmt(r.bestElapsedMins)} — ${r.bestPaceHoursPerDay.toFixed(1)} lecture h/day.` : `You are at the finish line for ${r.topic_name}.`}</p>
-                          <p className="mt-1 text-[10px] text-zinc-500">At that pace, you can finish the remaining lectures in about <b className="text-cyan-300">{targetDays} day{targetDays === 1 ? '' : 's'}</b>. Don't match the slow version of you — chase the fastest version.</p>
+                          <p className="mt-2 text-base sm:text-lg font-black text-zinc-100">{r.remainingLectureMins > 0 ? `You have ${fmtHours(r.remainingLectureMins)} of lecture left. Your previous fastest record is ${fmtRecordDays(r.bestElapsedMins)} for ${fmtHours(r.bestLectureMins || r.totalLectureMins)} of lectures.` : `You are at the finish line for ${r.topic_name}.`}</p>
+                          <p className="mt-1 text-[10px] text-zinc-500">Your best pace is <b className="text-yellow-300">{r.bestPaceHoursPerDay.toFixed(1)} lecture h/day</b>. At that pace, you can finish the remaining lectures in about <b className="text-cyan-300">{targetDays} day{targetDays === 1 ? '' : 's'}</b> — roughly <b className="text-emerald-300">{dailyHours?.toFixed(1)}h/day</b>. Don't match the slow version of you — chase the fastest version.</p>
                         </>
                       ) : (
                         <p className="mt-2 text-sm font-black text-zinc-200">Finish this chapter once to create your first shortest-time record. Then every future run has a real target to beat.</p>
