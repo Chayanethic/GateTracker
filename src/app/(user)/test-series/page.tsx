@@ -16,7 +16,11 @@ export default function TestSeriesPage() {
     const s = (access?.status || 'none') as any; setStatus(s);
     if (s === 'approved') { const { data } = await supabase.from('test_series').select('id,title,exam_name,duration_minutes,max_marks,question_count,created_at').eq('is_published',true).order('created_at',{ascending:false}); setTests(data || []); }
   };
-  useEffect(()=>{load()},[]);
+  useEffect(()=>{
+    load();
+    const timer = window.setInterval(load, 10000);
+    return () => window.clearInterval(timer);
+  },[]);
   const request = async () => { setRequesting(true); const r=await fetch('/api/test-series/request-access',{method:'POST'}); const d=await r.json(); if(!r.ok) toast.error(d.error||'Request failed'); else {toast.success('Access request sent to admin.'); setStatus('pending');} setRequesting(false); };
 
   if (status === 'loading') return <div className="min-h-full flex items-center justify-center text-emerald-400">Checking test-series clearance...</div>;
