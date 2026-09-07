@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, ChevronRight, Flag, Send, Clock3, XCircle, MinusCircle, PlayCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, Send, Clock3, XCircle, MinusCircle, PlayCircle, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type Q={id:string;number:number;type:string;questionHtml:string;options:{key:string;html:string}[];answer:string[];solutionHtml:string;videoUrl?:string};
