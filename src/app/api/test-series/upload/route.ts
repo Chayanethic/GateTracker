@@ -68,8 +68,8 @@ export async function POST(req: Request) {
       id_in_test: String(q.id),
       number: Number(q.number),
       answer: (q.answer || []).map(String),
-      solutionHtml: clean(String(q.solutionHtml || '')),
-      videoUrl: q.videoUrl ? String(q.videoUrl) : null,
+      solution_html: clean(String(q.solutionHtml || '')),
+      video_url: q.videoUrl ? String(q.videoUrl) : null,
     }));
 
     const { data, error } = await db()
@@ -98,8 +98,8 @@ export async function POST(req: Request) {
               id_in_test: string;
               number: number;
               answer: string[];
-              solutionHtml: string;
-              videoUrl: string | null;
+              solution_html: string;
+              video_url: string | null;
             }
           ) => ({
             ...k,
