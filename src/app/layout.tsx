@@ -2,9 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { LayoutDashboard, BookOpen, User, LogOut, Hexagon, Target, Activity, ClipboardCheck, ArrowLeftRight, Trophy, FileQuestion } from 'lucide-react';
+import {
+  LayoutDashboard,
+  BookOpen,
+  User,
+  LogOut,
+  Hexagon,
+  Target,
+  Activity,
+  ClipboardCheck,
+  ArrowLeftRight,
+  Trophy,
+  FileQuestion,
+} from 'lucide-react';
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
