@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Clock3, FileUp, Loader2, ShieldCheck, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -36,6 +36,7 @@ export default function AdminTestSeries() {
   const [uploading, setUploading] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
   const [tests, setTests] = useState<any[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const adminHeaders = { 'Content-Type': 'application/json', 'x-admin-email': process.env.NEXT_PUBLIC_ADMIN_EMAIL || '', 'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '' };
   const load = async () => {
@@ -64,9 +65,19 @@ export default function AdminTestSeries() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       toast.success(`Test published with ${questions.length} questions.`);
-      setTitle(''); setExamName(''); setFile(null); load();
+      setTitle(''); setExamName(''); setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      load();
     } catch (err: any) { toast.error(err.message); }
     finally { setUploading(false); }
+  };
+
+  const deleteTest = async (id: string, title: string) => {
+    if (!window.confirm(`Delete \"${title}\"? This also removes its questions, answer keys and attempts.`)) return;
+    const res = await fetch('/api/test-series/admin', { method: 'DELETE', headers: adminHeaders, body: JSON.stringify({ id }) });
+    const data = await res.json();
+    if (!res.ok) toast.error(data.error || 'Delete failed.');
+    else { toast.success('Test series deleted.'); load(); }
   };
 
   return <div className="max-w-6xl mx-auto space-y-10">
@@ -77,7 +88,7 @@ export default function AdminTestSeries() {
       <input required value={examName} onChange={e=>setExamName(e.target.value)} placeholder="Exam name (e.g. GATE ECE)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
       <input required type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} placeholder="Time in minutes" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
       <input required type="number" min="1" value={marks} onChange={e=>setMarks(e.target.value)} placeholder="Maximum marks" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
-      <input required type="file" accept=".html,text/html" onChange={e=>setFile(e.target.files?.[0] || null)} className="md:col-span-2 bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
+      <input ref={fileInputRef} required type="file" accept=".html,text/html" onChange={e=>setFile(e.target.files?.[0] || null)} className="md:col-span-2 bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
       <button disabled={uploading} className="md:col-span-2 flex items-center justify-center gap-2 bg-emerald-500 text-black font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Parsing & Publishing...' : 'Publish Test Series'}</button>
       <p className="md:col-span-2 text-xs text-gray-500">The importer reads the <code>questionCard</code>, MCQ/MSQ/NAT, answer key and solution/video structure used by your supplied export.</p>
     </form>
@@ -86,6 +97,6 @@ export default function AdminTestSeries() {
       {requests.length === 0 ? <p className="p-5 text-gray-500">No access requests.</p> : <div className="divide-y divide-gray-800">{requests.map(r=><div key={r.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-mono text-sm text-white">{r.user_id}</div><div className="text-xs text-gray-500 flex items-center gap-1 mt-1"><Clock3 size={12}/> {new Date(r.requested_at).toLocaleString()}</div></div><div className="flex items-center gap-2">{r.status === 'pending' ? <><button onClick={()=>updateRequest(r.id,'approved')} className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-bold flex items-center gap-1"><Check size={16}/> Approve</button><button onClick={()=>updateRequest(r.id,'rejected')} className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold flex items-center gap-1"><X size={16}/> Reject</button></> : <span className="text-xs font-black uppercase text-gray-400">{r.status}</span>}</div></div>)}</div>}
     </section>
 
-    <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden"><div className="p-5 border-b border-gray-800 font-bold text-white">Published Tests</div><div className="divide-y divide-gray-800">{tests.map(t=><div key={t.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-bold text-white">{t.title}</div><div className="text-xs text-gray-500 mt-1">{t.exam_name} • {t.question_count} questions • {t.duration_minutes} min • {t.max_marks} marks</div></div><span className="text-xs text-emerald-400 font-bold">PUBLISHED</span></div>)}{!tests.length && <p className="p-5 text-gray-500">No tests published yet.</p>}</div></section>
+    <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden"><div className="p-5 border-b border-gray-800 font-bold text-white">Published Tests</div><div className="divide-y divide-gray-800">{tests.map(t=><div key={t.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-bold text-white">{t.title}</div><div className="text-xs text-gray-500 mt-1">{t.exam_name} • {t.question_count} questions • {t.duration_minutes} min • {t.max_marks} marks</div></div><div className="flex items-center gap-3"><span className="text-xs text-emerald-400 font-bold">{t.is_published ? 'PUBLISHED' : 'DRAFT'}</span><button type="button" onClick={()=>deleteTest(t.id,t.title)} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold hover:bg-red-500/20">Delete</button></div></div>)}{!tests.length && <p className="p-5 text-gray-500">No tests published yet.</p>}</div></section>
   </div>;
 }
