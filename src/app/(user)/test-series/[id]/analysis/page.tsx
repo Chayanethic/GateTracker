@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import {
   ArrowLeft, CheckCircle2, XCircle, MinusCircle, PlayCircle, Clock3,
   Trophy, Target, Percent, BarChart3, ChevronDown, ChevronUp, Flag,
-  ListChecks, CircleDot, Sun, Moon
+  ListChecks, CircleDot, Sun, Moon, FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -241,51 +241,33 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
   const currentSolution = solutionData?.[r.id] || {};
 
   const toggleSolution = () => {
-    const nextOpen = !open;
-
-    // Reveal the correct option immediately from the attempt payload.
-    // Do not wait for the solution API just to show the answer.
+    // Show only the correct option/answer immediately. Do NOT fetch the
+    // written solution or video URL here. The video is fetched only when
+    // the user explicitly presses the Video Solution button.
     onToggle();
+  };
 
-    // Written/image solution is loaded in the background only after the
-    // user explicitly opens the solution. The UI does not wait for it.
-    if (nextOpen && !currentSolution?.solutionLoaded && !currentSolution?.solutionLoading) {
-      setSolutionData((prev: any) => ({
-        ...prev,
-        [r.id]: { ...(prev?.[r.id] || {}), solutionLoading: true, solutionLoaded: false },
-      }));
-
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session) throw new Error('Please sign in again.');
-        return fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=answer`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          cache: 'no-store',
-        });
-      })
-        .then(async (res) => {
-          const d = await res.json();
-          if (!res.ok) throw new Error(d.error || 'Unable to load written solution.');
-          setSolutionData((prev: any) => ({
-            ...prev,
-            [r.id]: {
-              ...(prev?.[r.id] || {}),
-              solutionHtml: d.solution?.solutionHtml || '',
-              solutionLoaded: true,
-              solutionLoading: false,
-            },
-          }));
-        })
-        .catch((e: any) => {
-          setSolutionData((prev: any) => ({
-            ...prev,
-            [r.id]: {
-              ...(prev?.[r.id] || {}),
-              solutionLoaded: true,
-              solutionLoading: false,
-            },
-          }));
-          console.error('Written solution load failed:', e);
-        });
+  const fetchWrittenSolution = async () => {
+    if (currentSolution?.solutionLoading || currentSolution?.solutionLoaded) return;
+    if (!(currentSolution?.hasWrittenSolution ?? r.hasWrittenSolution)) {
+      toast.error('No written or image solution is available for this question.');
+      return;
+    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { toast.error('Please sign in again.'); return; }
+      setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev?.[r.id] || {}), solutionLoading: true, hasWrittenSolution: true } }));
+      const res = await fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=answer`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store',
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Unable to load solution.');
+      const solutionHtml = d.solution?.solutionHtml || '';
+      setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev?.[r.id] || {}), solutionLoading: false, solutionLoaded: true, solutionHtml, hasWrittenSolution: Boolean(solutionHtml), hasVideo: Boolean(d.solution?.hasVideo) } }));
+    } catch (e: any) {
+      setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev?.[r.id] || {}), solutionLoading: false } }));
+      toast.error(e?.message || 'Unable to load solution.');
     }
   };
 
@@ -376,12 +358,6 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                   <div className={`text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Correct Option</div>
                   <div className="text-lg font-black text-emerald-500">{r.answer?.length ? r.answer.join(', ') : '—'}</div>
                 </div>
-                {currentSolution?.solutionHtml ? (
-                  <div className={`mt-3 rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#1b1b1b]'}`}>
-                    <div className={`text-xs font-black uppercase tracking-widest mb-3 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Image / Written Solution</div>
-                    <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: currentSolution.solutionHtml }} />
-                  </div>
-                ) : null}
                 {(currentSolution?.hasVideo ?? Boolean(r.hasVideo)) ? (
                   <div className="mt-4">
                     {!currentSolution?.videoUrl ? (
@@ -391,30 +367,30 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                     ) : (
                       <div>
                         <div className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}><PlayCircle size={15} className="text-emerald-500"/> Video Solution</div>
-                        <video
-                          controls
-                          playsInline
-                          preload="metadata"
-                          className="w-full max-h-[650px] rounded-xl bg-black"
-                          src={currentSolution.videoUrl}
-                          onError={() => toast.error('The video URL was fetched, but this browser could not play the video. Use Open Video below.')}
-                        >
+                        <video controls playsInline preload="none" className="w-full max-h-[650px] rounded-xl bg-black" src={currentSolution.videoUrl} onError={() => toast.error('The video URL was fetched, but this browser could not play the video. Use Open Video below.')}>
                           <source src={currentSolution.videoUrl} type="video/mp4" />
                         </video>
-                        <a
-                          href={currentSolution.videoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 px-3 py-2 text-xs font-black text-emerald-500 hover:bg-emerald-500/10"
-                        >
+                        <a href={currentSolution.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 px-3 py-2 text-xs font-black text-emerald-500 hover:bg-emerald-500/10">
                           <PlayCircle size={14} /> Open Video
                         </a>
                       </div>
                     )}
                   </div>
-                ) : null}
-                {!currentSolution?.solutionHtml && !(currentSolution?.hasVideo ?? Boolean(r.hasVideo)) ? (
-                  <div className={`mt-3 rounded-lg border p-4 text-sm ${lightMode ? 'border-slate-200 text-slate-500' : 'border-white/10 text-zinc-500'}`}>No additional solution is available for this question.</div>
+                ) : (currentSolution?.hasWrittenSolution ?? Boolean(r.hasWrittenSolution)) ? (
+                  <div className="mt-4">
+                    {!currentSolution?.solutionLoaded ? (
+                      <button onClick={fetchWrittenSolution} disabled={currentSolution?.solutionLoading} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-black text-black hover:bg-emerald-400 disabled:opacity-60">
+                        <FileText size={16}/>{currentSolution?.solutionLoading ? 'Loading Solution…' : 'Written / Image Solution'}
+                      </button>
+                    ) : currentSolution?.solutionHtml ? (
+                      <div className={`rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#1b1b1b]'}`}>
+                        <div className={`text-xs font-black uppercase tracking-widest mb-3 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Written / Image Solution</div>
+                        <div className="prose max-w-none text-sm leading-6 dark:prose-invert" dangerouslySetInnerHTML={{ __html: currentSolution.solutionHtml }} />
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-white/10 p-4 text-sm text-zinc-500">No written or image solution content was found.</div>
+                    )}
+                  </div>
                 ) : null}
               </>
             )}
