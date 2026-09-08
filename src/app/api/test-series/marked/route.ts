@@ -61,16 +61,17 @@ export async function GET(req: Request) {
       perTestCounts[testId] = list.length;
     }
 
-    // Keep one card per test/question, using the most recent attempt that marked it.
+    // This page is a bookmark bank, not the exam's "Mark for Review" list.
+    // Only questions explicitly bookmarked with the Bookmark button are included.
     const seen = new Set<string>();
     const markedQuestions: any[] = [];
     for (const a of attempts || []) {
-      const marked = a.answers?.__markedForReview;
-      if (!marked || typeof marked !== 'object') continue;
+      const bookmarks = a.answers?.__bookmarked;
+      if (!bookmarks || typeof bookmarks !== 'object') continue;
       const test = testMap.get(String(a.test_series_id));
       if (!test) continue;
       const questions = Array.isArray(test.questions) ? test.questions : [];
-      for (const [qid, value] of Object.entries(marked)) {
+      for (const [qid, value] of Object.entries(bookmarks)) {
         if (!value) continue;
         const unique = `${test.id}:${qid}`;
         if (seen.has(unique)) continue;
