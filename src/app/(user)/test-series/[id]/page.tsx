@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
   ChevronLeft, ChevronRight, Flag, Send, Clock3, XCircle, MinusCircle,
@@ -41,6 +41,7 @@ export default function TestRunner() {
   const params = useParams<{ id?: string }>();
   const id = typeof params?.id === 'string' ? params.id : '';
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [test, setTest] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
@@ -54,6 +55,7 @@ export default function TestRunner() {
   const [lightMode, setLightMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showQuestionPaper, setShowQuestionPaper] = useState(false);
+  const [requestedQuestion, setRequestedQuestion] = useState<number | null>(null);
   const activeQuestionRef = useRef<string | null>(null);
   const questionStartedAtRef = useRef<number | null>(null);
   const questionTimeRef = useRef<Record<string, number>>({});
@@ -91,6 +93,11 @@ export default function TestRunner() {
         }
 
         setTest(d.test);
+        const requested = Number(searchParams.get('question') || '');
+        if (Number.isFinite(requested) && requested > 0) {
+          const idx = (d.test.questions || []).findIndex((item: Q) => Number(item.number) === requested);
+          if (idx >= 0) { setCurrent(idx); setRequestedQuestion(requested); }
+        }
         setRemaining(Number(d.test.duration_minutes || 0) * 60);
       } catch (error) {
         console.error('Examination load failed:', error);
@@ -98,7 +105,7 @@ export default function TestRunner() {
         router.replace('/test-series');
       }
     })();
-  }, [id, router]);
+  }, [id, router, searchParams]);
 
   const enterFullscreen = useCallback(async () => {
     try {
@@ -308,7 +315,7 @@ export default function TestRunner() {
                 <Instruction icon={<Clock3 size={17} />} text="The countdown starts immediately after you start." />
                 <Instruction icon={<Maximize2 size={17} />} text="The exam opens in browser fullscreen mode." />
                 <Instruction icon={<Eye size={17} />} text="Your time on every question is recorded." />
-                <Instruction icon={<Flag size={17} />} text="Use Mark for Review and the question palette to navigate." />
+                <Instruction icon={<Flag size={17} />} text={requestedQuestion ? `You will start on Question ${requestedQuestion}. Use Mark for Review and the question palette to navigate.` : 'Use Mark for Review and the question palette to navigate.'} />
               </div>
               <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-200">
                 MCQ negative marking: 1-mark questions = −0.33 and 2-mark questions = −0.66. MSQ/NAT have no negative marking.
@@ -658,6 +665,7 @@ function MiniStat({ label, value }: { label: string; value: number }) {
 
 function Result({ test, result }: { test: any; result: any }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   return (
     <div className="min-h-screen bg-[#171717] text-white flex items-center justify-center p-5">
