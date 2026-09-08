@@ -61,6 +61,8 @@ export async function POST(req: Request) {
         key: String(o.key),
         html: clean(String(o.html || '')),
       })),
+      marks: Number(q.marks),
+      negativeMarks: Number(q.negativeMarks || 0),
     }));
 
     const keys = b.questions.map((q: any) => ({
@@ -70,6 +72,9 @@ export async function POST(req: Request) {
       answer: (q.answer || []).map(String),
       solution_html: clean(String(q.solutionHtml || '')),
       video_url: q.videoUrl ? String(q.videoUrl) : null,
+      question_type: String(q.type || 'MCQ').toUpperCase(),
+      marks: Number(q.marks),
+      negative_marks: Number(q.negativeMarks || 0),
     }));
 
     const { data, error } = await db()
@@ -100,6 +105,9 @@ export async function POST(req: Request) {
               answer: string[];
               solution_html: string;
               video_url: string | null;
+              question_type: string;
+              marks: number;
+              negative_marks: number;
             }
           ) => ({
             ...k,
