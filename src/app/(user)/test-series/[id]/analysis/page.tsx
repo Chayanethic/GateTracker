@@ -34,6 +34,7 @@ export default function AnalysisPage() {
   const [filter, setFilter] = useState<Filter>('overview');
   const [openSolution, setOpenSolution] = useState<Record<string, boolean>>({});
   const [lightMode, setLightMode] = useState(false);
+  const [solutionData, setSolutionData] = useState<Record<string, any>>({});
 
   useEffect(() => {
     (async () => {
@@ -201,13 +202,13 @@ export default function AnalysisPage() {
               <SectionTitle icon={<ListChecks size={18}/>} title="Question-wise Analysis" />
               <button onClick={() => setFilter('all')} className="text-sm font-bold text-emerald-400 hover:text-emerald-300">View All Questions →</button>
             </div>
-            <QuestionList review={attempt.review} openSolution={openSolution} setOpenSolution={setOpenSolution} lightMode={lightMode} />
+            <QuestionList testId={id} review={attempt.review} openSolution={openSolution} setOpenSolution={setOpenSolution} solutionData={solutionData} setSolutionData={setSolutionData} lightMode={lightMode} />
           </>
         ) : (
           <>
             <SectionTitle icon={<ListChecks size={18}/>} title={`${tabs.find(t => t.key === filter)?.label || 'Questions'} Questions`} />
             {filteredReview.length ? (
-              <QuestionList review={filteredReview} openSolution={openSolution} setOpenSolution={setOpenSolution} lightMode={lightMode} />
+              <QuestionList testId={id} review={filteredReview} openSolution={openSolution} setOpenSolution={setOpenSolution} solutionData={solutionData} setSolutionData={setSolutionData} lightMode={lightMode} />
             ) : (
               <div className="rounded-2xl border border-white/10 bg-[#222] p-12 text-center text-zinc-500">No questions in this category.</div>
             )}
@@ -218,18 +219,47 @@ export default function AnalysisPage() {
   );
 }
 
-function QuestionList({ review, openSolution, setOpenSolution, lightMode }: any) {
-  return <div className="space-y-4">{review.map((r: any) => <QuestionCard key={r.id} r={r} open={!!openSolution[r.id]} lightMode={lightMode} onToggle={() => setOpenSolution((s: any) => ({ ...s, [r.id]: !s[r.id] }))} />)}</div>;
+function QuestionList({ testId, review, openSolution, setOpenSolution, solutionData, setSolutionData, lightMode }: any) {
+  return (
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_220px] gap-5 items-start">
+      <div className="space-y-4">{review.map((r: any) => <QuestionCard key={r.id} testId={testId} r={r} open={!!openSolution[r.id]} lightMode={lightMode} solutionData={solutionData[r.id]} setSolutionData={setSolutionData} onToggle={() => setOpenSolution((s: any) => ({ ...s, [r.id]: !s[r.id] }))} />)}</div>
+      <QuestionNavigator review={review} lightMode={lightMode} />
+    </div>
+  );
 }
 
-function QuestionCard({ r, open, onToggle, lightMode }: any) {
+function QuestionNavigator({ review, lightMode }: any) {
+  const scrollTo = (id: string) => document.getElementById(`analysis-question-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return <aside className="hidden lg:block sticky top-5"><div className={`rounded-2xl border p-4 ${lightMode ? 'border-slate-200 bg-white shadow-sm' : 'border-white/10 bg-[#0f172a]'}`}><div className="flex items-center justify-between mb-3"><span className={`text-sm font-black ${lightMode ? 'text-slate-900' : 'text-white'}`}>Navigator</span><span className={`text-xs font-black ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>{review.length}</span></div><div className="grid grid-cols-5 gap-2">{review.map((r: any) => <button key={r.id} onClick={() => scrollTo(r.id)} className={`h-8 rounded-lg border text-xs font-black transition ${r.result === 'correct' ? (lightMode ? 'border-emerald-300 text-emerald-700 bg-emerald-50' : 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10') : r.result === 'incorrect' ? (lightMode ? 'border-red-300 text-red-700 bg-red-50' : 'border-red-500/40 text-red-300 bg-red-500/10') : (lightMode ? 'border-slate-300 text-slate-600 bg-slate-50' : 'border-white/15 text-zinc-400 bg-white/[.02]')} ${r.markedForReview ? 'ring-1 ring-violet-400' : ''}`}>{r.number}</button>)}</div></div></aside>;
+}
+
+function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setSolutionData }: any) {
   const resultClass = r.result === 'correct' ? (lightMode ? 'border-emerald-500/30' : 'border-emerald-500/20') : r.result === 'incorrect' ? (lightMode ? 'border-red-500/30' : 'border-red-500/20') : (lightMode ? 'border-slate-200' : 'border-white/10');
   const statusClass = r.result === 'correct' ? 'text-emerald-600 bg-emerald-500/10' : r.result === 'incorrect' ? 'text-red-600 bg-red-500/10' : (lightMode ? 'text-slate-500 bg-slate-200' : 'text-zinc-400 bg-zinc-500/10');
   const selected = new Set((r.selected || []).map(String));
   const answer = new Set((r.answer || []).map(String));
 
+  const toggleSolution = async () => {
+    if (!open && !solutionData) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { toast.error('Please sign in again.'); return; }
+        setSolutionData((prev: any) => ({ ...prev, [r.id]: { loading: true } }));
+        const res = await fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}`, { headers: { Authorization: `Bearer ${session.access_token}` }, cache: 'no-store' });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Unable to load solution.');
+        setSolutionData((prev: any) => ({ ...prev, [r.id]: d.solution || {} }));
+      } catch (e: any) {
+        setSolutionData((prev: any) => { const next = { ...prev }; delete next[r.id]; return next; });
+        toast.error(e?.message || 'Unable to load solution.');
+        return;
+      }
+    }
+    onToggle();
+  };
+
   return (
-    <div className={`rounded-2xl border ${resultClass} ${lightMode ? 'bg-white' : 'bg-[#222]'} overflow-hidden shadow-sm`}>
+    <div id={`analysis-question-${r.id}`} className={`scroll-mt-5 rounded-2xl border ${resultClass} ${lightMode ? 'bg-white' : 'bg-[#222]'} overflow-hidden shadow-sm`}>
       <div className={`px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3 ${lightMode ? 'border-slate-200' : 'border-white/10'}`}>
         <div className="flex items-center gap-3">
           <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-sm ${lightMode ? 'bg-slate-100 text-slate-800' : 'bg-white/5'}`}>Q{r.number}</div>
@@ -277,7 +307,7 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
           <div className={`text-sm ${lightMode ? 'text-slate-600' : 'text-zinc-400'}`}>
             {open ? <>Correct answer: <b className="text-emerald-500">{r.answer?.length ? r.answer.join(', ') : '—'}</b>{r.selected?.length ? <span className="ml-3">Your answer: <b className={r.result === 'correct' ? 'text-emerald-500' : 'text-red-500'}>{r.selected.join(', ')}</b></span> : null}</> : <span>Answer hidden · Press <b className={lightMode ? 'text-slate-900' : 'text-white'}>Show Solution</b> to reveal the correct option.</span>}
           </div>
-          <button onClick={onToggle} className="inline-flex items-center gap-2 rounded-lg bg-white text-zinc-900 px-4 py-2.5 text-sm font-black hover:bg-emerald-300 transition">{open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} {open ? 'Hide Solution' : 'Show Solution'}</button>
+          <button onClick={toggleSolution} className="inline-flex items-center gap-2 rounded-lg bg-white text-zinc-900 px-4 py-2.5 text-sm font-black hover:bg-emerald-300 transition">{open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} {open ? 'Hide Solution' : 'Show Solution'}</button>
         </div>
 
         {open && (
@@ -286,13 +316,20 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
               <div className="font-black text-sm text-emerald-500">Solution</div>
               <div className={`text-xs ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>Answer: <b className="text-emerald-500">{r.answer?.join(', ') || '—'}</b></div>
             </div>
-            {r.videoUrl ? (
+            {solutionData?.loading ? (
+              <div className="rounded-lg border border-white/10 p-5 text-sm text-zinc-500">Loading solution…</div>
+            ) : solutionData?.videoUrl ? (
               <div>
                 <div className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}><PlayCircle size={15} className="text-emerald-500"/> Video Solution</div>
-                <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={r.videoUrl}/>
+                <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={solutionData.videoUrl}/>
+              </div>
+            ) : solutionData?.solutionHtml ? (
+              <div className={`rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#1b1b1b]'}`}>
+                <div className={`text-xs font-black uppercase tracking-widest mb-3 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Image / Written Solution</div>
+                <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: solutionData.solutionHtml }} />
               </div>
             ) : (
-              <div className={`rounded-lg border p-4 text-sm ${lightMode ? 'border-slate-200 text-slate-500' : 'border-white/10 text-zinc-500'}`}>No video solution is available for this question.</div>
+              <div className={`rounded-lg border p-4 text-sm ${lightMode ? 'border-slate-200 text-slate-500' : 'border-white/10 text-zinc-500'}`}>No solution is available for this question.</div>
             )}
           </div>
         )}
