@@ -51,7 +51,8 @@ function parseTestHtml(html: string): { questions: DraftQuestion[]; allMarksPres
     }));
     const answerText = article.querySelector('.answerValue')?.textContent?.trim() || '';
     const answer = answerText.split(',').map(s => s.trim()).filter(Boolean);
-    const solution = cleanHtml(article.querySelector('.solutionText')?.innerHTML || '');
+    const solutionNode = article.querySelector('.solutionText, .solution, .solutionContent, [class*='solution']');
+    const solution = cleanHtml(solutionNode?.innerHTML || '');
     const videoUrl = (article.querySelector('video.solutionVideo') as HTMLVideoElement | null)?.getAttribute('src') || undefined;
     const marks = readNumber(article, ['data-marks', 'data-positive-marks', 'data-positive-marks-value']);
     const negative = readNumber(article, ['data-negative-marks', 'data-negative']);
