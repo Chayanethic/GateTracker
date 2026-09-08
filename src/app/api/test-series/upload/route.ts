@@ -71,7 +71,7 @@ export async function POST(req: Request) {
       number: Number(q.number),
       answer: (q.answer || []).map(String),
       solution_html: clean(String(q.solutionHtml || '')),
-      video_url: q.videoUrl ? String(q.videoUrl) : null,
+      video_url: q.videoUrl ? String(q.videoUrl).trim() : null,
       question_type: String(q.type || 'MCQ').toUpperCase(),
       marks: Number(q.marks),
       negative_marks: Number(q.negativeMarks || 0),
