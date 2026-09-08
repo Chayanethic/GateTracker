@@ -76,8 +76,8 @@ export async function GET(req: Request) {
         const ok = selected.length > 0 && selected.length === expected.length &&
           [...selected].sort().join(',') === [...expected].sort().join(',');
         const type = String(k.question_type || k.type || 'MCQ').toUpperCase();
-        const positive = Number(k.marks ?? defaultMarks);
-        const negative = k.negative_marks != null ? Number(k.negative_marks) : type === 'MCQ' ? positive / 3 : 0;
+        const positive = k.marks != null && Number(k.marks) > 0 ? Number(k.marks) : defaultMarks;
+        const negative = k.negative_marks != null ? Math.max(0, Number(k.negative_marks)) : type === 'MCQ' ? Math.floor((positive / 3) * 100) / 100 : 0;
         const marks = !selected.length ? 0 : ok ? positive : -negative;
         total += marks;
         return {
