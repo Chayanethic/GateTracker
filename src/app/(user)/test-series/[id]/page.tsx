@@ -176,7 +176,9 @@ export default function TestRunner() {
 
       setResult(d);
       await exitFullscreen();
-      router.replace(`/test-series/${id}/analysis?attempt=${d.attemptId}`);
+      // Use a full navigation after submission so the completed attempt
+      // is immediately loaded by the analysis page and no exam state leaks.
+      window.location.assign(`/test-series/${encodeURIComponent(id)}/analysis?attempt=${encodeURIComponent(d.attemptId)}`);
     } catch (error) {
       console.error('Submission failed:', error);
       toast.error('Submission failed. Please try again.');
@@ -259,8 +261,11 @@ export default function TestRunner() {
   };
 
   const startExam = async () => {
+    const now = Date.now();
+    setStartAt(now);
     setStarted(true);
-    setStartAt(Date.now());
+    activeQuestionRef.current = questions[0]?.id || null;
+    questionStartedAtRef.current = now;
     await enterFullscreen();
   };
 
