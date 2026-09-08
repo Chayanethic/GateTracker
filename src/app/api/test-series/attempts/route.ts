@@ -113,6 +113,9 @@ export async function GET(req: Request) {
           // Only expose whether a video exists. The actual video URL is
           // fetched later when the user presses "Video Solution".
           hasVideo: Boolean(k.video_url),
+          // Only expose whether a written/image solution exists. The actual
+          // solution HTML is fetched only when the user clicks its button.
+          hasWrittenSolution: Boolean(k.solution_html),
           markedForReview: Boolean(markedMap?.[k.id_in_test]),
           timeSpentSeconds: Math.max(0, Math.floor(Number(a.question_time_seconds?.[k.id_in_test] || 0))),
         };
