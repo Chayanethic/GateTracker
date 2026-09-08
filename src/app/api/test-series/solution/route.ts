@@ -38,7 +38,7 @@ export async function GET(req: Request) {
         .maybeSingle();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       if (!key) return NextResponse.json({ error: 'Question not found.' }, { status: 404 });
-      return NextResponse.json({ solution: { videoUrl: key.video_url ? String(key.video_url).trim() : null } }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({ solution: { videoUrl: key.video_url || null } });
     }
 
     // Answer/solution mode deliberately does NOT return the video URL.
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     // video retrieval until the user explicitly asks for it.
     const { data: key, error } = await database
       .from('test_series_keys')
-      .select('id_in_test,solution_html,video_url')
+      .select('id_in_test,solution_html')
       .eq('test_series_id', testId)
       .eq('id_in_test', questionId)
       .maybeSingle();
@@ -56,7 +56,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       solution: {
         solutionHtml: key.solution_html || '',
-        hasVideo: Boolean(key.video_url),
+        hasVideo: false,
       },
     });
   } catch (e: any) {
