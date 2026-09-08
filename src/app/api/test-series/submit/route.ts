@@ -84,12 +84,14 @@ export async function POST(req: Request) {
       const ok = selected.length > 0 && same(selected, expected);
       const type = String(k.question_type || k.type || 'MCQ').toUpperCase();
 
-      const marks = Number(k.marks ?? defaultMarks);
+      const marks = k.marks !== null && k.marks !== undefined && Number(k.marks) > 0
+        ? Number(k.marks)
+        : defaultMarks;
       const negativeMarks =
         k.negative_marks !== null && k.negative_marks !== undefined
-          ? Number(k.negative_marks)
+          ? Math.max(0, Number(k.negative_marks))
           : type === 'MCQ'
-            ? marks / 3
+            ? Math.floor((marks / 3) * 100) / 100
             : 0;
 
       let questionMarks = 0;
