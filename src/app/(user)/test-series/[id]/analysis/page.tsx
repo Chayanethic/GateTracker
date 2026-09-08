@@ -239,30 +239,33 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
   const selected = new Set((r.selected || []).map(String));
   const answer = new Set((r.answer || []).map(String));
 
-  const toggleSolution = async () => {
-    if (open) {
-      onToggle();
-      return;
-    }
-    if (!solutionData) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) { toast.error('Please sign in again.'); return; }
-        setSolutionData((prev: any) => ({ ...prev, [r.id]: { loading: true } }));
-        const res = await fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=answer`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          cache: 'no-store',
-        });
-        const d = await res.json();
-        if (!res.ok) throw new Error(d.error || 'Unable to load solution.');
-        setSolutionData((prev: any) => ({ ...prev, [r.id]: d.solution || {} }));
-      } catch (e: any) {
-        setSolutionData((prev: any) => { const next = { ...prev }; delete next[r.id]; return next; });
-        toast.error(e?.message || 'Unable to load solution.');
-        return;
-      }
-    }
+  const toggleSolution = () => {
+    // Opening the solution is instant: the correct answer/options already
+    // come with the attempt payload. Do not wait for any network request.
+    const nextOpen = !open;
     onToggle();
+
+    // Written/image solution is optional and is loaded in the background.
+    // It must never block the correct answer from appearing immediately.
+    if (nextOpen && !solutionData?.loading && !solutionData?.solutionHtml) {
+      setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev[r.id] || {}), loading: true, hasVideo: Boolean(r.hasVideo) } }));
+      fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=answer`, {
+        cache: 'no-store',
+        credentials: 'include',
+      })
+        .then(async (res) => {
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error || 'Unable to load written solution.');
+          setSolutionData((prev: any) => ({
+            ...prev,
+            [r.id]: { ...(d.solution || {}), loading: false, hasVideo: Boolean(r.hasVideo || d.solution?.hasVideo) },
+          }));
+        })
+        .catch((e: any) => {
+          setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev[r.id] || {}), loading: false, hasVideo: Boolean(r.hasVideo) } }));
+          console.error('Written solution load failed:', e);
+        });
+    }
   };
 
   const fetchVideo = async () => {
@@ -358,7 +361,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                     <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: solutionData.solutionHtml }} />
                   </div>
                 ) : null}
-                {solutionData?.hasVideo ? (
+                {(solutionData?.hasVideo || r.hasVideo) ? (
                   <div className="mt-4">
                     {!solutionData?.videoUrl ? (
                       <button
