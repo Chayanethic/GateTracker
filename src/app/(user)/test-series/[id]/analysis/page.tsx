@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import {
   ArrowLeft, CheckCircle2, XCircle, MinusCircle, PlayCircle, Clock3,
   Trophy, Target, Percent, BarChart3, ChevronDown, ChevronUp, Flag,
-  ListChecks, CircleDot, Sun, Moon, FileText
+  ListChecks, CircleDot, Sun, Moon, FileText, Bookmark
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -202,13 +202,13 @@ export default function AnalysisPage() {
               <SectionTitle icon={<ListChecks size={18}/>} title="Question-wise Analysis" />
               <button onClick={() => setFilter('all')} className="text-sm font-bold text-emerald-400 hover:text-emerald-300">View All Questions →</button>
             </div>
-            <QuestionList testId={id} review={attempt.review} openSolution={openSolution} setOpenSolution={setOpenSolution} solutionData={solutionData} setSolutionData={setSolutionData} lightMode={lightMode} />
+            <QuestionList testId={id} attemptId={attempt.attemptId} review={attempt.review} openSolution={openSolution} setOpenSolution={setOpenSolution} solutionData={solutionData} setSolutionData={setSolutionData} lightMode={lightMode} />
           </>
         ) : (
           <>
             <SectionTitle icon={<ListChecks size={18}/>} title={`${tabs.find(t => t.key === filter)?.label || 'Questions'} Questions`} />
             {filteredReview.length ? (
-              <QuestionList testId={id} review={filteredReview} openSolution={openSolution} setOpenSolution={setOpenSolution} solutionData={solutionData} setSolutionData={setSolutionData} lightMode={lightMode} />
+              <QuestionList testId={id} attemptId={attempt.attemptId} review={filteredReview} openSolution={openSolution} setOpenSolution={setOpenSolution} solutionData={solutionData} setSolutionData={setSolutionData} lightMode={lightMode} />
             ) : (
               <div className="rounded-2xl border border-white/10 bg-[#222] p-12 text-center text-zinc-500">No questions in this category.</div>
             )}
@@ -219,10 +219,10 @@ export default function AnalysisPage() {
   );
 }
 
-function QuestionList({ testId, review, openSolution, setOpenSolution, solutionData, setSolutionData, lightMode }: any) {
+function QuestionList({ testId, attemptId, review, openSolution, setOpenSolution, solutionData, setSolutionData, lightMode }: any) {
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_220px] gap-5 items-start">
-      <div className="space-y-4">{review.map((r: any) => <QuestionCard key={r.id} testId={testId} r={r} open={!!openSolution[r.id]} lightMode={lightMode} solutionData={solutionData} setSolutionData={setSolutionData} onToggle={() => setOpenSolution((s: any) => ({ ...s, [r.id]: !s[r.id] }))} />)}</div>
+      <div className="space-y-4">{review.map((r: any) => <QuestionCard key={r.id} testId={testId} attemptId={attemptId} r={r} open={!!openSolution[r.id]} lightMode={lightMode} solutionData={solutionData} setSolutionData={setSolutionData} onToggle={() => setOpenSolution((s: any) => ({ ...s, [r.id]: !s[r.id] }))} />)}</div>
       <QuestionNavigator review={review} lightMode={lightMode} />
     </div>
   );
@@ -233,12 +233,42 @@ function QuestionNavigator({ review, lightMode }: any) {
   return <aside className="hidden lg:block sticky top-5"><div className={`rounded-2xl border p-4 ${lightMode ? 'border-slate-200 bg-white shadow-sm' : 'border-white/10 bg-[#0f172a]'}`}><div className="flex items-center justify-between mb-3"><span className={`text-sm font-black ${lightMode ? 'text-slate-900' : 'text-white'}`}>Navigator</span><span className={`text-xs font-black ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>{review.length}</span></div><div className="grid grid-cols-5 gap-2">{review.map((r: any) => <button key={r.id} onClick={() => scrollTo(r.id)} className={`h-8 rounded-lg border text-xs font-black transition ${r.result === 'correct' ? (lightMode ? 'border-emerald-300 text-emerald-700 bg-emerald-50' : 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10') : r.result === 'incorrect' ? (lightMode ? 'border-red-300 text-red-700 bg-red-50' : 'border-red-500/40 text-red-300 bg-red-500/10') : (lightMode ? 'border-slate-300 text-slate-600 bg-slate-50' : 'border-white/15 text-zinc-400 bg-white/[.02]')} ${r.markedForReview ? 'ring-1 ring-violet-400' : ''}`}>{r.number}</button>)}</div></div></aside>;
 }
 
-function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setSolutionData }: any) {
+function QuestionCard({ testId, attemptId, r, open, onToggle, lightMode, solutionData, setSolutionData }: any) {
   const resultClass = r.result === 'correct' ? (lightMode ? 'border-emerald-500/30' : 'border-emerald-500/20') : r.result === 'incorrect' ? (lightMode ? 'border-red-500/30' : 'border-red-500/20') : (lightMode ? 'border-slate-200' : 'border-white/10');
   const statusClass = r.result === 'correct' ? 'text-emerald-600 bg-emerald-500/10' : r.result === 'incorrect' ? 'text-red-600 bg-red-500/10' : (lightMode ? 'text-slate-500 bg-slate-200' : 'text-zinc-400 bg-zinc-500/10');
   const selected = new Set((r.selected || []).map(String));
   const answer = new Set((r.answer || []).map(String));
   const currentSolution = solutionData?.[r.id] || {};
+  const [bookmarked, setBookmarked] = useState(Boolean(r.bookmarked));
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+
+  useEffect(() => {
+    setBookmarked(Boolean(r.bookmarked));
+  }, [r.bookmarked]);
+
+  const toggleBookmark = async () => {
+    if (bookmarkLoading || !attemptId) return;
+    const next = !bookmarked;
+    setBookmarked(next);
+    setBookmarkLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Please sign in again.');
+      const res = await fetch('/api/test-series/bookmark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ attemptId, questionId: r.id, bookmarked: next }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Unable to update bookmark.');
+      toast.success(next ? 'Question bookmarked.' : 'Bookmark removed.');
+    } catch (e: any) {
+      setBookmarked(!next);
+      toast.error(e?.message || 'Unable to update bookmark.');
+    } finally {
+      setBookmarkLoading(false);
+    }
+  };
 
   const toggleSolution = () => {
     // Show only the correct option/answer immediately. Do NOT fetch the
@@ -305,6 +335,16 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
         <div className="flex items-center gap-3 text-xs">
           <span className={`rounded-full px-3 py-1.5 font-black ${statusClass}`}>{r.result === 'correct' ? '✓ Correct' : r.result === 'incorrect' ? '× Incorrect' : '— Unattempted'}</span>
           {r.markedForReview && <span className="rounded-full px-3 py-1.5 bg-violet-500/10 text-violet-600 font-bold"><Flag size={12} className="inline mr-1"/>Review</span>}
+          <button
+            type="button"
+            onClick={toggleBookmark}
+            disabled={bookmarkLoading}
+            aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark this question'}
+            title={bookmarked ? 'Remove bookmark' : 'Bookmark question'}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-black border transition disabled:opacity-60 ${bookmarked ? 'border-amber-500/30 bg-amber-500/15 text-amber-500' : (lightMode ? 'border-slate-200 bg-slate-100 text-slate-500 hover:text-amber-500' : 'border-white/10 bg-white/5 text-zinc-400 hover:text-amber-400')}`}
+          >
+            <Bookmark size={13} fill={bookmarked ? 'currentColor' : 'none'} /> {bookmarked ? 'Bookmarked' : 'Bookmark'}
+          </button>
           <span className={lightMode ? 'text-slate-500' : 'text-zinc-500'}><Clock3 size={13} className="inline mr-1"/>{fmt(r.timeSpentSeconds)}</span>
           <b className={Number(r.marks) >= 0 ? 'text-emerald-500' : 'text-red-500'}>{Number(r.marks) > 0 ? '+' : ''}{Number(r.marks).toFixed(2)}</b>
         </div>
