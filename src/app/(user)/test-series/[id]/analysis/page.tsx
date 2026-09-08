@@ -222,7 +222,7 @@ export default function AnalysisPage() {
 function QuestionList({ testId, review, openSolution, setOpenSolution, solutionData, setSolutionData, lightMode }: any) {
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_220px] gap-5 items-start">
-      <div className="space-y-4">{review.map((r: any) => <QuestionCard key={r.id} testId={testId} r={r} open={!!openSolution[r.id]} lightMode={lightMode} solutionData={solutionData[r.id]} setSolutionData={setSolutionData} onToggle={() => setOpenSolution((s: any) => ({ ...s, [r.id]: !s[r.id] }))} />)}</div>
+      <div className="space-y-4">{review.map((r: any) => <QuestionCard key={r.id} testId={testId} r={r} open={!!openSolution[r.id]} lightMode={lightMode} solutionData={solutionData} setSolutionData={setSolutionData} onToggle={() => setOpenSolution((s: any) => ({ ...s, [r.id]: !s[r.id] }))} />)}</div>
       <QuestionNavigator review={review} lightMode={lightMode} />
     </div>
   );
@@ -255,8 +255,12 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
         [r.id]: { ...(prev?.[r.id] || {}), solutionLoading: true, solutionLoaded: false },
       }));
 
-      fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=answer`, {
-        credentials: 'include',
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) throw new Error('Please sign in again.');
+        return fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=answer`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: 'no-store',
+        });
       })
         .then(async (res) => {
           const d = await res.json();
@@ -375,7 +379,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                 {currentSolution?.solutionHtml ? (
                   <div className={`mt-3 rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#1b1b1b]'}`}>
                     <div className={`text-xs font-black uppercase tracking-widest mb-3 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Image / Written Solution</div>
-                    <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: solutionData.solutionHtml }} />
+                    <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: currentSolution.solutionHtml }} />
                   </div>
                 ) : null}
                 {(currentSolution?.hasVideo ?? Boolean(r.hasVideo)) ? (
@@ -387,7 +391,24 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                     ) : (
                       <div>
                         <div className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}><PlayCircle size={15} className="text-emerald-500"/> Video Solution</div>
-                        <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={currentSolution.videoUrl}/>
+                        <video
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="w-full max-h-[650px] rounded-xl bg-black"
+                          src={currentSolution.videoUrl}
+                          onError={() => toast.error('The video URL was fetched, but this browser could not play the video. Use Open Video below.')}
+                        >
+                          <source src={currentSolution.videoUrl} type="video/mp4" />
+                        </video>
+                        <a
+                          href={currentSolution.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 px-3 py-2 text-xs font-black text-emerald-500 hover:bg-emerald-500/10"
+                        >
+                          <PlayCircle size={14} /> Open Video
+                        </a>
                       </div>
                     )}
                   </div>
