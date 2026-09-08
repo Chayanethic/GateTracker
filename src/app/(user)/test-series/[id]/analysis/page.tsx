@@ -234,6 +234,7 @@ function QuestionNavigator({ review, lightMode }: any) {
 }
 
 function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setSolutionData }: any) {
+  const currentSolution = solutionData?.[r.id] || {};
   const resultClass = r.result === 'correct' ? (lightMode ? 'border-emerald-500/30' : 'border-emerald-500/20') : r.result === 'incorrect' ? (lightMode ? 'border-red-500/30' : 'border-red-500/20') : (lightMode ? 'border-slate-200' : 'border-white/10');
   const statusClass = r.result === 'correct' ? 'text-emerald-600 bg-emerald-500/10' : r.result === 'incorrect' ? 'text-red-600 bg-red-500/10' : (lightMode ? 'text-slate-500 bg-slate-200' : 'text-zinc-400 bg-zinc-500/10');
   const selected = new Set((r.selected || []).map(String));
@@ -248,7 +249,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
 
     // Written/image solution is loaded in the background only after the
     // user explicitly opens the solution. The UI does not wait for it.
-    if (nextOpen && !solutionData?.solutionLoaded && !solutionData?.loading) {
+    if (nextOpen && !currentSolution?.solutionLoaded && !currentSolution?.loading) {
       setSolutionData((prev: any) => ({
         ...prev,
         [r.id]: { ...(prev?.[r.id] || {}), solutionLoading: true, solutionLoaded: false },
@@ -285,7 +286,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
   };
 
   const fetchVideo = async () => {
-    if (solutionData?.videoLoading || solutionData?.videoUrl || !(solutionData?.hasVideo ?? r.hasVideo)) return;
+    if (currentSolution?.videoLoading || currentSolution?.videoUrl || !(currentSolution?.hasVideo ?? r.hasVideo)) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { toast.error('Please sign in again.'); return; }
@@ -296,7 +297,9 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Unable to load video solution.');
-      setSolutionData((prev: any) => ({ ...prev, videoLoading: false, videoUrl: d.solution?.videoUrl || null }));
+      const videoUrl = d.solution?.videoUrl || null;
+       if (!videoUrl) throw new Error('No video solution is available for this question.');
+       setSolutionData((prev: any) => ({ ...prev, videoLoading: false, videoUrl, hasVideo: true }));
     } catch (e: any) {
       setSolutionData((prev: any) => ({ ...prev, videoLoading: false }));
       toast.error(e?.message || 'Unable to load video solution.');
@@ -361,7 +364,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
               <div className="font-black text-sm text-emerald-500">Solution</div>
               <div className={`text-xs ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>Answer: <b className="text-emerald-500">{r.answer?.join(', ') || '—'}</b></div>
             </div>
-            {solutionData?.loading ? (
+            {currentSolution?.loading ? (
               <div className="rounded-lg border border-white/10 p-5 text-sm text-zinc-500">Loading answer…</div>
             ) : (
               <>
@@ -369,17 +372,17 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                   <div className={`text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Correct Option</div>
                   <div className="text-lg font-black text-emerald-500">{r.answer?.length ? r.answer.join(', ') : '—'}</div>
                 </div>
-                {solutionData?.solutionHtml ? (
+                {currentSolution?.solutionHtml ? (
                   <div className={`mt-3 rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#1b1b1b]'}`}>
                     <div className={`text-xs font-black uppercase tracking-widest mb-3 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Image / Written Solution</div>
                     <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: solutionData.solutionHtml }} />
                   </div>
                 ) : null}
-                {solutionData?.hasVideo ? (
+                {(currentSolution?.hasVideo ?? Boolean(r.hasVideo)) ? (
                   <div className="mt-4">
-                    {!solutionData?.videoUrl ? (
-                      <button onClick={fetchVideo} disabled={solutionData?.videoLoading} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-black text-black hover:bg-emerald-400 disabled:opacity-60">
-                        <PlayCircle size={16}/>{solutionData?.videoLoading ? 'Loading Video…' : 'Video Solution'}
+                    {!currentSolution?.videoUrl ? (
+                      <button onClick={fetchVideo} disabled={currentSolution?.videoLoading} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-black text-black hover:bg-emerald-400 disabled:opacity-60">
+                        <PlayCircle size={16}/>{currentSolution?.videoLoading ? 'Loading Video…' : 'Video Solution'}
                       </button>
                     ) : (
                       <div>
@@ -389,7 +392,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                     )}
                   </div>
                 ) : null}
-                {!solutionData?.solutionHtml && !solutionData?.hasVideo ? (
+                {!currentSolution?.solutionHtml && !(currentSolution?.hasVideo ?? Boolean(r.hasVideo)) ? (
                   <div className={`mt-3 rounded-lg border p-4 text-sm ${lightMode ? 'border-slate-200 text-slate-500' : 'border-white/10 text-zinc-500'}`}>No additional solution is available for this question.</div>
                 ) : null}
               </>
