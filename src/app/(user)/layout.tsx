@@ -35,7 +35,7 @@ export default function UserLayout({
 
   // The examination route is rendered as a dedicated full-screen app.
   // Do not show the normal dashboard/sidebar/mobile navigation while an exam is open.
-  const isExamRoute = /^\/test-series\/[^/]+$/.test(pathname || '');
+  const isExamRoute = /^\/test-series\/[^/]+(?:\/analysis)?$/.test(pathname || '');
 
   useEffect(() => {
     const verifyUser = async () => {
