@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }, { status: 500 });
 
     const body = await req.json();
-    const { testId, answers, timeSpentSeconds, questionTimeSeconds } = body;
+    const { testId, answers, timeSpentSeconds, questionTimeSeconds, markedForReview } = body;
 
     if (!testId) return NextResponse.json({ error: 'Test id is required.' }, { status: 400 });
 
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
       .insert({
         user_id: user.id,
         test_series_id: testId,
-        answers: answers || {},
+        answers: { ...(answers || {}), __markedForReview: markedForReview || {} },
         correct_count: correct,
         incorrect_count: incorrect,
         not_answered_count: notAnswered,
