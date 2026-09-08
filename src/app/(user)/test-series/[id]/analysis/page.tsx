@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import {
   ArrowLeft, CheckCircle2, XCircle, MinusCircle, PlayCircle, Clock3,
   Trophy, Target, Percent, BarChart3, ChevronDown, ChevronUp, Flag,
-  ListChecks, CircleDot
+  ListChecks, CircleDot, Sun, Moon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -33,6 +33,7 @@ export default function AnalysisPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('overview');
   const [openSolution, setOpenSolution] = useState<Record<string, boolean>>({});
+  const [lightMode, setLightMode] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -97,12 +98,12 @@ export default function AnalysisPage() {
   ];
 
   return (
-    <div className="min-h-full bg-[#181818] text-white">
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-7">
+    <div className={lightMode ? 'min-h-screen bg-slate-100 text-slate-900' : 'min-h-screen bg-[#181818] text-white'}>
+      <div className="w-full min-h-screen px-4 sm:px-6 lg:px-8 py-5 lg:py-7">
         <div className="flex items-center justify-between gap-4 mb-4">
           <button
             onClick={() => router.push('/test-series/')}
-            className="inline-flex items-center gap-2 text-sm font-bold text-zinc-300 hover:text-white transition"
+            className={lightMode ? 'inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition' : 'inline-flex items-center gap-2 text-sm font-bold text-zinc-300 hover:text-white transition'}
           >
             <ArrowLeft size={18}/> Results
           </button>
@@ -112,18 +113,25 @@ export default function AnalysisPage() {
           >
             Reattempt Test
           </button>
+          <button
+            onClick={() => setLightMode((v) => !v)}
+            aria-label="Toggle analysis theme"
+            className={lightMode ? 'inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50' : 'inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-black text-white hover:bg-white/10'}
+          >
+            {lightMode ? <Moon size={16}/> : <Sun size={16}/>} {lightMode ? 'Dark' : 'Light'}
+          </button>
         </div>
 
-        <div className="border-b border-white/10 flex items-end gap-1 overflow-x-auto scrollbar-none">
+        <div className={lightMode ? 'border-b border-slate-300 flex items-end gap-1 overflow-x-auto scrollbar-none' : 'border-b border-white/10 flex items-end gap-1 overflow-x-auto scrollbar-none'}>
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setFilter(tab.key)}
-              className={`relative whitespace-nowrap px-4 py-3 text-sm font-bold transition ${filter === tab.key ? 'text-white' : 'text-zinc-500 hover:text-zinc-200'}`}
+              className={`relative whitespace-nowrap px-4 py-3 text-sm font-bold transition ${filter === tab.key ? (lightMode ? 'text-slate-900' : 'text-white') : (lightMode ? 'text-slate-500 hover:text-slate-800' : 'text-zinc-500 hover:text-zinc-200')}`}
             >
               {tab.label}
               {typeof tab.count === 'number' && tab.key !== 'all' && tab.key !== 'overview' ? <span className="ml-1.5 text-xs opacity-60">{tab.count}</span> : null}
-              {filter === tab.key && <span className="absolute left-0 right-0 bottom-0 h-0.5 bg-white" />}
+              {filter === tab.key && <span className={`absolute left-0 right-0 bottom-0 h-0.5 ${lightMode ? 'bg-slate-900' : 'bg-white'}`} />}
             </button>
           ))}
         </div>
@@ -138,7 +146,7 @@ export default function AnalysisPage() {
             <select
               value={attempt?.attemptId || ''}
               onChange={(e) => setSelectedId(e.target.value)}
-              className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs font-bold text-white outline-none"
+              className={lightMode ? 'rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 outline-none' : 'rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs font-bold text-white outline-none'}
             >
               {(data.attempts || []).map((a: any) => <option key={a.attemptId} value={a.attemptId}>Attempt {a.attemptNumber} · {a.score}/{a.maxMarks}</option>)}
             </select>
@@ -149,17 +157,17 @@ export default function AnalysisPage() {
           <>
             <SectionTitle icon={<BarChart3 size={18}/>} title="Question Stats" />
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-              <Stat icon={<Trophy size={17}/>} label="Your Score" value={`${Number(attempt.score).toFixed(2)}`} sub={`/${attempt.maxMarks}`} tone="amber" />
-              <Stat icon={<Target size={17}/>} label="Rank" value={`${attempt.rank ?? '—'}`} sub={attempt.totalRanked ? `/${attempt.totalRanked}` : ''} tone="purple" />
-              <Stat icon={<Percent size={17}/>} label="Percentile" value={pct(attempt.percentile)} sub="" tone="blue" />
-              <Stat icon={<CheckCircle2 size={17}/>} label="Correct" value={String(attempt.correct)} sub="" tone="green" />
-              <Stat icon={<XCircle size={17}/>} label="Incorrect" value={String(attempt.incorrect)} sub="" tone="red" />
-              <Stat icon={<MinusCircle size={17}/>} label="Unattempted" value={String(attempt.notAnswered)} sub="" tone="gray" />
-              <Stat icon={<CircleDot size={17}/>} label="Accuracy" value={pct(attempt.accuracy)} sub="" tone="cyan" />
+              <Stat lightMode={lightMode} icon={<Trophy size={17}/>} label="Your Score" value={`${Number(attempt.score).toFixed(2)}`} sub={`/${attempt.maxMarks}`} tone="amber" />
+              <Stat lightMode={lightMode} icon={<Target size={17}/>} label="Rank" value={`${attempt.rank ?? '—'}`} sub={attempt.totalRanked ? `/${attempt.totalRanked}` : ''} tone="purple" />
+              <Stat lightMode={lightMode} icon={<Percent size={17}/>} label="Percentile" value={pct(attempt.percentile)} sub="" tone="blue" />
+              <Stat lightMode={lightMode} icon={<CheckCircle2 size={17}/>} label="Correct" value={String(attempt.correct)} sub="" tone="green" />
+              <Stat lightMode={lightMode} icon={<XCircle size={17}/>} label="Incorrect" value={String(attempt.incorrect)} sub="" tone="red" />
+              <Stat lightMode={lightMode} icon={<MinusCircle size={17}/>} label="Unattempted" value={String(attempt.notAnswered)} sub="" tone="gray" />
+              <Stat lightMode={lightMode} icon={<CircleDot size={17}/>} label="Accuracy" value={pct(attempt.accuracy)} sub="" tone="cyan" />
             </div>
 
             <div className="mt-8 grid lg:grid-cols-[1.4fr_.6fr] gap-4">
-              <div className="rounded-2xl border border-white/10 bg-[#222] p-5">
+              <div className={lightMode ? 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' : 'rounded-2xl border border-white/10 bg-[#222] p-5'}>
                 <div className="flex items-center justify-between gap-4 mb-5">
                   <div>
                     <h2 className="font-black text-lg">Performance Breakdown</h2>
@@ -171,20 +179,20 @@ export default function AnalysisPage() {
                     <Legend dot="bg-zinc-500" text="Unattempted" />
                   </div>
                 </div>
-                <div className="h-52 flex items-end justify-around gap-8 px-5 border-b border-white/5">
+                <div className={lightMode ? 'h-52 flex items-end justify-around gap-8 px-5 border-b border-slate-200' : 'h-52 flex items-end justify-around gap-8 px-5 border-b border-white/5'}>
                   <Bar value={attempt.correct} total={attempt.review.length} label="Correct" pct={attempt.correct / Math.max(1, attempt.review.length) * 100} tone="green" />
                   <Bar value={attempt.incorrect} total={attempt.review.length} label="Incorrect" pct={attempt.incorrect / Math.max(1, attempt.review.length) * 100} tone="red" />
                   <Bar value={attempt.notAnswered} total={attempt.review.length} label="Unattempted" pct={attempt.notAnswered / Math.max(1, attempt.review.length) * 100} tone="gray" />
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-[#222] p-5">
+              <div className={lightMode ? 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' : 'rounded-2xl border border-white/10 bg-[#222] p-5'}>
                 <h2 className="font-black text-lg">Attempt Summary</h2>
                 <div className="mt-4 space-y-3 text-sm">
-                  <SummaryRow label="Total time" value={fmt(attempt.totalTimeSeconds)} />
-                  <SummaryRow label="Questions" value={String(attempt.review.length)} />
-                  <SummaryRow label="Marks gained" value={`+${attempt.positiveGained.toFixed(2)}`} good />
-                  <SummaryRow label="Negative marks" value={`−${attempt.negativeLost.toFixed(2)}`} bad={attempt.negativeLost > 0} />
-                  <SummaryRow label="Accuracy" value={pct(attempt.accuracy)} />
+                  <SummaryRow lightMode={lightMode} label="Total time" value={fmt(attempt.totalTimeSeconds)} />
+                  <SummaryRow lightMode={lightMode} label="Questions" value={String(attempt.review.length)} />
+                  <SummaryRow lightMode={lightMode} label="Marks gained" value={`+${attempt.positiveGained.toFixed(2)}`} good />
+                  <SummaryRow lightMode={lightMode} label="Negative marks" value={`−${attempt.negativeLost.toFixed(2)}`} bad={attempt.negativeLost > 0} />
+                  <SummaryRow lightMode={lightMode} label="Accuracy" value={pct(attempt.accuracy)} />
                 </div>
               </div>
             </div>
@@ -193,13 +201,13 @@ export default function AnalysisPage() {
               <SectionTitle icon={<ListChecks size={18}/>} title="Question-wise Analysis" />
               <button onClick={() => setFilter('all')} className="text-sm font-bold text-emerald-400 hover:text-emerald-300">View All Questions →</button>
             </div>
-            <QuestionList review={attempt.review} openSolution={openSolution} setOpenSolution={setOpenSolution} />
+            <QuestionList review={attempt.review} openSolution={openSolution} setOpenSolution={setOpenSolution} lightMode={lightMode} />
           </>
         ) : (
           <>
             <SectionTitle icon={<ListChecks size={18}/>} title={`${tabs.find(t => t.key === filter)?.label || 'Questions'} Questions`} />
             {filteredReview.length ? (
-              <QuestionList review={filteredReview} openSolution={openSolution} setOpenSolution={setOpenSolution} />
+              <QuestionList review={filteredReview} openSolution={openSolution} setOpenSolution={setOpenSolution} lightMode={lightMode} />
             ) : (
               <div className="rounded-2xl border border-white/10 bg-[#222] p-12 text-center text-zinc-500">No questions in this category.</div>
             )}
@@ -210,83 +218,81 @@ export default function AnalysisPage() {
   );
 }
 
-function QuestionList({ review, openSolution, setOpenSolution }: any) {
-  return <div className="space-y-4">{review.map((r: any) => <QuestionCard key={r.id} r={r} open={!!openSolution[r.id]} onToggle={() => setOpenSolution((s: any) => ({ ...s, [r.id]: !s[r.id] }))} />)}</div>;
+function QuestionList({ review, openSolution, setOpenSolution, lightMode }: any) {
+  return <div className="space-y-4">{review.map((r: any) => <QuestionCard key={r.id} r={r} open={!!openSolution[r.id]} lightMode={lightMode} onToggle={() => setOpenSolution((s: any) => ({ ...s, [r.id]: !s[r.id] }))} />)}</div>;
 }
 
-function QuestionCard({ r, open, onToggle }: any) {
-  const resultClass = r.result === 'correct' ? 'border-emerald-500/20' : r.result === 'incorrect' ? 'border-red-500/20' : 'border-white/10';
-  const statusClass = r.result === 'correct' ? 'text-emerald-400 bg-emerald-500/10' : r.result === 'incorrect' ? 'text-red-400 bg-red-500/10' : 'text-zinc-400 bg-zinc-500/10';
+function QuestionCard({ r, open, onToggle, lightMode }: any) {
+  const resultClass = r.result === 'correct' ? (lightMode ? 'border-emerald-500/30' : 'border-emerald-500/20') : r.result === 'incorrect' ? (lightMode ? 'border-red-500/30' : 'border-red-500/20') : (lightMode ? 'border-slate-200' : 'border-white/10');
+  const statusClass = r.result === 'correct' ? 'text-emerald-600 bg-emerald-500/10' : r.result === 'incorrect' ? 'text-red-600 bg-red-500/10' : (lightMode ? 'text-slate-500 bg-slate-200' : 'text-zinc-400 bg-zinc-500/10');
   const selected = new Set((r.selected || []).map(String));
   const answer = new Set((r.answer || []).map(String));
 
   return (
-    <div className={`rounded-2xl border ${resultClass} bg-[#222] overflow-hidden`}>
-      <div className="px-5 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
+    <div className={`rounded-2xl border ${resultClass} ${lightMode ? 'bg-white' : 'bg-[#222]'} overflow-hidden shadow-sm`}>
+      <div className={`px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3 ${lightMode ? 'border-slate-200' : 'border-white/10'}`}>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center font-black text-sm">Q{r.number}</div>
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-sm ${lightMode ? 'bg-slate-100 text-slate-800' : 'bg-white/5'}`}>Q{r.number}</div>
           <div>
             <div className="font-black text-sm">Question {r.number}</div>
-            <div className="text-[11px] uppercase tracking-widest text-zinc-500 mt-0.5">{r.type} · +{Number(r.positiveMarks || 0).toFixed(2)} marks{Number(r.negativeMarks || 0) > 0 ? ` · −${Number(r.negativeMarks).toFixed(2)}` : ''}</div>
+            <div className={`text-[11px] uppercase tracking-widest mt-0.5 ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>{r.type} · +{Number(r.positiveMarks || 0).toFixed(2)} marks{Number(r.negativeMarks || 0) > 0 ? ` · −${Number(r.negativeMarks).toFixed(2)}` : ''}</div>
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className={`rounded-full px-3 py-1.5 font-black ${statusClass}`}>
-            {r.result === 'correct' ? '✓ Correct' : r.result === 'incorrect' ? '× Incorrect' : '— Unattempted'}
-          </span>
-          {r.markedForReview && <span className="rounded-full px-3 py-1.5 bg-violet-500/10 text-violet-300 font-bold"><Flag size={12} className="inline mr-1"/>Review</span>}
-          <span className="text-zinc-500"><Clock3 size={13} className="inline mr-1"/>{fmt(r.timeSpentSeconds)}</span>
-          <b className={Number(r.marks) >= 0 ? 'text-emerald-400' : 'text-red-400'}>{Number(r.marks) > 0 ? '+' : ''}{Number(r.marks).toFixed(2)}</b>
+          <span className={`rounded-full px-3 py-1.5 font-black ${statusClass}`}>{r.result === 'correct' ? '✓ Correct' : r.result === 'incorrect' ? '× Incorrect' : '— Unattempted'}</span>
+          {r.markedForReview && <span className="rounded-full px-3 py-1.5 bg-violet-500/10 text-violet-600 font-bold"><Flag size={12} className="inline mr-1"/>Review</span>}
+          <span className={lightMode ? 'text-slate-500' : 'text-zinc-500'}><Clock3 size={13} className="inline mr-1"/>{fmt(r.timeSpentSeconds)}</span>
+          <b className={Number(r.marks) >= 0 ? 'text-emerald-500' : 'text-red-500'}>{Number(r.marks) > 0 ? '+' : ''}{Number(r.marks).toFixed(2)}</b>
         </div>
       </div>
 
       <div className="p-5 lg:p-7">
-        <div className="prose prose-invert max-w-none text-[15px] leading-7" dangerouslySetInnerHTML={{ __html: r.questionHtml || '' }} />
+        <div className={`prose max-w-none text-[15px] leading-7 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: r.questionHtml || '' }} />
 
         {r.options?.length ? (
           <div className="mt-6 space-y-2.5">
             {r.options.map((o: any) => {
               const isCorrect = answer.has(String(o.key));
               const isSelected = selected.has(String(o.key));
+              // Do not reveal correctness until Show Solution is pressed.
+              const optionClass = open && isCorrect
+                ? (lightMode ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-emerald-500/40 bg-emerald-500/10')
+                : open && isSelected && !isCorrect
+                  ? (lightMode ? 'border-red-500/50 bg-red-500/10' : 'border-red-500/40 bg-red-500/10')
+                  : (lightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[.02]');
               return (
-                <div key={o.key} className={`flex items-start gap-3 rounded-xl border p-3.5 ${isCorrect ? 'border-emerald-500/40 bg-emerald-500/10' : isSelected ? 'border-red-500/40 bg-red-500/10' : 'border-white/10 bg-white/[.02]'}`}>
-                  <span className={`mt-0.5 w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${isCorrect ? 'bg-emerald-500 text-black' : isSelected ? 'bg-red-500 text-white' : 'border border-white/15 text-zinc-400'}`}>{o.key}</span>
-                  <div className="min-w-0 flex-1 text-sm leading-6" dangerouslySetInnerHTML={{ __html: o.html || '' }} />
-                  <div className="shrink-0 text-[10px] font-black uppercase tracking-wide text-right">
-                    {isCorrect && <div className="text-emerald-400">Correct Answer</div>}
-                    {isSelected && !isCorrect && <div className="text-red-400">Your Answer</div>}
-                  </div>
+                <div key={o.key} className={`flex items-start gap-3 rounded-xl border p-3.5 ${optionClass}`}>
+                  <span className={`mt-0.5 w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${open && isCorrect ? 'bg-emerald-500 text-black' : open && isSelected && !isCorrect ? 'bg-red-500 text-white' : (lightMode ? 'border border-slate-300 text-slate-600' : 'border border-white/15 text-zinc-400')}`}>{o.key}</span>
+                  <div className={`min-w-0 flex-1 text-sm leading-6 ${lightMode ? 'text-slate-800' : ''}`} dangerouslySetInnerHTML={{ __html: o.html || '' }} />
+                  {open && <div className="shrink-0 text-[10px] font-black uppercase tracking-wide text-right">{isCorrect && <div className="text-emerald-500">Correct Answer</div>}{isSelected && !isCorrect && <div className="text-red-500">Your Answer</div>}</div>}
                 </div>
               );
             })}
           </div>
         ) : (
-          <div className="mt-5 text-sm text-zinc-500">Your answer: <b className="text-white">{r.selected?.length ? r.selected.join(', ') : 'Not answered'}</b></div>
+          <div className={`mt-5 text-sm ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>Your answer: <b className={lightMode ? 'text-slate-900' : 'text-white'}>{r.selected?.length ? r.selected.join(', ') : 'Not answered'}</b></div>
         )}
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-          <div className="text-sm text-zinc-400">
-            Correct answer: <b className="text-emerald-400">{r.answer?.length ? r.answer.join(', ') : '—'}</b>
-            {r.selected?.length ? <span className="ml-3">Your answer: <b className={r.result === 'correct' ? 'text-emerald-400' : 'text-red-400'}>{r.selected.join(', ')}</b></span> : null}
+        <div className={`mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 ${lightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-[#1b1b1b]'}`}>
+          <div className={`text-sm ${lightMode ? 'text-slate-600' : 'text-zinc-400'}`}>
+            {open ? <>Correct answer: <b className="text-emerald-500">{r.answer?.length ? r.answer.join(', ') : '—'}</b>{r.selected?.length ? <span className="ml-3">Your answer: <b className={r.result === 'correct' ? 'text-emerald-500' : 'text-red-500'}>{r.selected.join(', ')}</b></span> : null}</> : <span>Answer hidden · Press <b className={lightMode ? 'text-slate-900' : 'text-white'}>Show Solution</b> to reveal the correct option.</span>}
           </div>
-          <button onClick={onToggle} className="inline-flex items-center gap-2 rounded-lg bg-white text-zinc-900 px-4 py-2.5 text-sm font-black hover:bg-emerald-300 transition">
-            {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} {open ? 'Hide Solution' : 'Show Solution'}
-          </button>
+          <button onClick={onToggle} className="inline-flex items-center gap-2 rounded-lg bg-white text-zinc-900 px-4 py-2.5 text-sm font-black hover:bg-emerald-300 transition">{open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} {open ? 'Hide Solution' : 'Show Solution'}</button>
         </div>
 
         {open && (
-          <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 sm:p-5">
+          <div className={`mt-4 rounded-xl border p-4 sm:p-5 ${lightMode ? 'border-emerald-500/30 bg-emerald-50' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
             <div className="flex items-center justify-between gap-3 mb-4">
-              <div className="font-black text-sm text-emerald-400">Solution</div>
-              <div className="text-xs text-zinc-500">Answer: <b className="text-emerald-400">{r.answer?.join(', ') || '—'}</b></div>
+              <div className="font-black text-sm text-emerald-500">Solution</div>
+              <div className={`text-xs ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>Answer: <b className="text-emerald-500">{r.answer?.join(', ') || '—'}</b></div>
             </div>
             {r.videoUrl ? (
               <div>
-                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-zinc-400 mb-2"><PlayCircle size={15} className="text-emerald-400"/> Video Solution</div>
+                <div className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}><PlayCircle size={15} className="text-emerald-500"/> Video Solution</div>
                 <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={r.videoUrl}/>
               </div>
             ) : (
-              <div className="rounded-lg border border-white/10 bg-black/10 p-4 text-sm text-zinc-500">No video solution is available for this question.</div>
+              <div className={`rounded-lg border p-4 text-sm ${lightMode ? 'border-slate-200 text-slate-500' : 'border-white/10 text-zinc-500'}`}>No video solution is available for this question.</div>
             )}
           </div>
         )}
@@ -299,9 +305,9 @@ function SectionTitle({ icon, title }: any) {
   return <div className="flex items-center gap-2 mb-4"><span className="text-emerald-400">{icon}</span><h2 className="text-lg font-black">{title}</h2></div>;
 }
 
-function Stat({ icon, label, value, sub, tone }: any) {
-  const tones: Record<string, string> = { amber: 'text-amber-400 bg-amber-500/10', purple: 'text-purple-400 bg-purple-500/10', blue: 'text-blue-400 bg-blue-500/10', green: 'text-emerald-400 bg-emerald-500/10', red: 'text-red-400 bg-red-500/10', gray: 'text-zinc-400 bg-zinc-500/10', cyan: 'text-cyan-400 bg-cyan-500/10' };
-  return <div className={`relative overflow-hidden rounded-2xl border border-white/10 bg-[#242424] p-4 min-h-[126px]`}><div className={`w-8 h-8 rounded-lg ${tones[tone]} flex items-center justify-center`}>{icon}</div><div className="text-xs text-zinc-500 mt-3">{label}</div><div className="text-2xl font-black mt-1">{value}<span className="text-sm font-bold text-zinc-500 ml-0.5">{sub}</span></div></div>;
+function Stat({ icon, label, value, sub, tone, lightMode }: any) {
+  const tones: Record<string, string> = { amber: 'text-amber-500 bg-amber-500/10', purple: 'text-purple-500 bg-purple-500/10', blue: 'text-blue-500 bg-blue-500/10', green: 'text-emerald-500 bg-emerald-500/10', red: 'text-red-500 bg-red-500/10', gray: 'text-zinc-500 bg-zinc-500/10', cyan: 'text-cyan-500 bg-cyan-500/10' };
+  return <div className={`relative overflow-hidden rounded-2xl border p-4 min-h-[126px] ${lightMode ? 'border-slate-200 bg-white shadow-sm' : 'border-white/10 bg-[#242424]'}`}><div className={`w-8 h-8 rounded-lg ${tones[tone]} flex items-center justify-center`}>{icon}</div><div className={`text-xs mt-3 ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>{label}</div><div className="text-2xl font-black mt-1">{value}<span className={`text-sm font-bold ml-0.5 ${lightMode ? 'text-slate-400' : 'text-zinc-500'}`}>{sub}</span></div></div>;
 }
 
 function Bar({ value, label, pct: percent, tone }: any) {
@@ -312,4 +318,4 @@ function Bar({ value, label, pct: percent, tone }: any) {
 }
 
 function Legend({ dot, text }: any) { return <span className="inline-flex items-center gap-1.5"><i className={`w-2 h-2 rounded-full ${dot}`}/>{text}</span>; }
-function SummaryRow({ label, value, good, bad }: any) { return <div className="flex items-center justify-between border-b border-white/5 pb-3"><span className="text-zinc-500">{label}</span><b className={good ? 'text-emerald-400' : bad ? 'text-red-400' : 'text-zinc-100'}>{value}</b></div>; }
+function SummaryRow({ label, value, good, bad, lightMode }: any) { return <div className={`flex items-center justify-between border-b pb-3 ${lightMode ? 'border-slate-200' : 'border-white/5'}`}><span className={lightMode ? 'text-slate-500' : 'text-zinc-500'}>{label}</span><b className={good ? 'text-emerald-500' : bad ? 'text-red-500' : (lightMode ? 'text-slate-800' : 'text-zinc-100')}>{value}</b></div>; }
