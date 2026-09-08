@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
-  ChevronLeft, ChevronRight, Flag, Send, Clock3, XCircle, MinusCircle,
+  ChevronLeft, ChevronRight, Flag, Bookmark, Send, Clock3, XCircle, MinusCircle,
   PlayCircle, Sun, Moon, Maximize2, Minimize2, RotateCcw, HelpCircle,
   FileText, Eye, CheckCircle2
 } from 'lucide-react';
@@ -46,6 +46,7 @@ export default function TestRunner() {
   const [test, setTest] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [marked, setMarked] = useState<Record<string, boolean>>({});
+  const [bookmarked, setBookmarked] = useState<Record<string, boolean>>({});
   const [current, setCurrent] = useState(0);
   const [remaining, setRemaining] = useState(0);
   const [started, setStarted] = useState(false);
@@ -172,6 +173,7 @@ export default function TestRunner() {
           timeSpentSeconds: Math.max(0, Math.floor((Date.now() - startAt) / 1000)),
           questionTimeSeconds: questionTimeRef.current,
           markedForReview: marked,
+          bookmarked,
         }),
       });
 
@@ -193,7 +195,7 @@ export default function TestRunner() {
       submittingRef.current = false;
       setSubmitted(false);
     }
-  }, [id, startAt, submitted, flushQuestionTime, router, answers, exitFullscreen]);
+  }, [id, startAt, submitted, flushQuestionTime, router, answers, marked, bookmarked, exitFullscreen]);
 
   useEffect(() => {
     if (!started || submitted) return;
@@ -261,6 +263,11 @@ export default function TestRunner() {
   const toggleMark = () => {
     if (!q) return;
     setMarked((m) => ({ ...m, [q.id]: !m[q.id] }));
+  };
+
+  const toggleBookmark = () => {
+    if (!q || submitted) return;
+    setBookmarked((b) => ({ ...b, [q.id]: !b[q.id] }));
   };
 
   const goTo = (index: number) => {
@@ -425,12 +432,23 @@ export default function TestRunner() {
                     <span className={lightMode ? 'rounded-md bg-slate-100 border border-slate-300 px-3 py-1 text-xs font-black' : 'rounded-md bg-white/5 border border-white/10 px-3 py-1 text-xs font-black'}>Q{q?.number}</span>
                     <span className="text-xs font-black uppercase tracking-widest opacity-60">{q?.type}</span>
                   </div>
-                  <button
-                    onClick={toggleMark}
-                    className={marked[q?.id || ''] ? 'flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-black text-white' : lightMode ? 'flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-black' : 'flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-black'}
-                  >
-                    <Flag size={15} /> {marked[q?.id || ''] ? 'Marked for Review' : 'Mark for Review'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={toggleMark}
+                      className={marked[q?.id || ''] ? 'flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-black text-white' : lightMode ? 'flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-black' : 'flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-black'}
+                    >
+                      <Flag size={15} /> {marked[q?.id || ''] ? 'Marked for Review' : 'Mark for Review'}
+                    </button>
+                    <button
+                      onClick={toggleBookmark}
+                      aria-label={bookmarked[q?.id || ''] ? 'Remove bookmark' : 'Bookmark this question'}
+                      title={bookmarked[q?.id || ''] ? 'Bookmarked' : 'Bookmark'}
+                      className={bookmarked[q?.id || ''] ? 'flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-xs font-black text-black' : lightMode ? 'flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-black' : 'flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-black'}
+                    >
+                      <Bookmark size={15} fill={bookmarked[q?.id || ''] ? 'currentColor' : 'none'} />
+                      {bookmarked[q?.id || ''] ? 'Bookmarked' : 'Bookmark'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className={lightMode ? 'mt-7 prose max-w-none text-sm leading-7 text-slate-800' : 'mt-7 prose prose-invert max-w-none text-sm leading-7'} dangerouslySetInnerHTML={{ __html: q?.questionHtml || '' }} />
