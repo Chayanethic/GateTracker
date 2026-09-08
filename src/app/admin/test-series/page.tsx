@@ -81,7 +81,9 @@ function randomOneTwo(count: number, target: number) {
   const values = Array.from({ length: count }, (_, i) => (i < twos ? 2 : 1));
   for (let i = values.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [values[i], values[j]] = [values[j], values[i]];
+    const temp = values[i];
+    values[i] = values[j];
+    values[j] = temp;
   }
   return values;
 }
