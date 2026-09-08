@@ -240,17 +240,21 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
   const answer = new Set((r.answer || []).map(String));
 
   const toggleSolution = () => {
-    // Opening the solution is instant: the correct answer/options already
-    // come with the attempt payload. Do not wait for any network request.
     const nextOpen = !open;
+
+    // Reveal the correct option immediately from the attempt payload.
+    // Do not wait for the solution API just to show the answer.
     onToggle();
 
-    // Written/image solution is optional and is loaded in the background.
-    // It must never block the correct answer from appearing immediately.
-    if (nextOpen && !solutionData?.loading && !solutionData?.solutionHtml) {
-      setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev[r.id] || {}), loading: true, hasVideo: Boolean(r.hasVideo) } }));
+    // Written/image solution is loaded in the background only after the
+    // user explicitly opens the solution. The UI does not wait for it.
+    if (nextOpen && !solutionData?.solutionLoaded && !solutionData?.loading) {
+      setSolutionData((prev: any) => ({
+        ...prev,
+        [r.id]: { ...(prev?.[r.id] || {}), solutionLoading: true, solutionLoaded: false },
+      }));
+
       fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=answer`, {
-        cache: 'no-store',
         credentials: 'include',
       })
         .then(async (res) => {
@@ -258,31 +262,41 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
           if (!res.ok) throw new Error(d.error || 'Unable to load written solution.');
           setSolutionData((prev: any) => ({
             ...prev,
-            [r.id]: { ...(d.solution || {}), loading: false, hasVideo: Boolean(r.hasVideo || d.solution?.hasVideo) },
+            [r.id]: {
+              ...(prev?.[r.id] || {}),
+              solutionHtml: d.solution?.solutionHtml || '',
+              solutionLoaded: true,
+              solutionLoading: false,
+            },
           }));
         })
         .catch((e: any) => {
-          setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev[r.id] || {}), loading: false, hasVideo: Boolean(r.hasVideo) } }));
+          setSolutionData((prev: any) => ({
+            ...prev,
+            [r.id]: {
+              ...(prev?.[r.id] || {}),
+              solutionLoaded: true,
+              solutionLoading: false,
+            },
+          }));
           console.error('Written solution load failed:', e);
         });
     }
   };
 
   const fetchVideo = async () => {
-    if (solutionData?.videoLoading || solutionData?.videoUrl || !solutionData?.hasVideo) return;
+    if (solutionData?.videoLoading || solutionData?.videoUrl || !(solutionData?.hasVideo ?? r.hasVideo)) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { toast.error('Please sign in again.'); return; }
-      setSolutionData((prev: any) => ({ ...prev, videoLoading: true }));
+      setSolutionData((prev: any) => ({ ...prev, videoLoading: true, hasVideo: true }));
       const res = await fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=video`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
         cache: 'no-store',
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Unable to load video solution.');
-      const videoUrl = String(d.solution?.videoUrl || '').trim();
-      if (!videoUrl) throw new Error('Video solution is not available for this question.');
-      setSolutionData((prev: any) => ({ ...prev, videoLoading: false, videoUrl, videoOpen: true }));
+      setSolutionData((prev: any) => ({ ...prev, videoLoading: false, videoUrl: d.solution?.videoUrl || null }));
     } catch (e: any) {
       setSolutionData((prev: any) => ({ ...prev, videoLoading: false }));
       toast.error(e?.message || 'Unable to load video solution.');
@@ -361,48 +375,16 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                     <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: solutionData.solutionHtml }} />
                   </div>
                 ) : null}
-                {(solutionData?.hasVideo || r.hasVideo) ? (
+                {solutionData?.hasVideo ? (
                   <div className="mt-4">
                     {!solutionData?.videoUrl ? (
-                      <button
-                        onClick={fetchVideo}
-                        disabled={solutionData?.videoLoading}
-                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-black text-black hover:bg-emerald-400 disabled:opacity-60"
-                      >
-                        <PlayCircle size={16}/>
-                        {solutionData?.videoLoading ? 'Loading Video…' : 'Video Solution'}
+                      <button onClick={fetchVideo} disabled={solutionData?.videoLoading} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-black text-black hover:bg-emerald-400 disabled:opacity-60">
+                        <PlayCircle size={16}/>{solutionData?.videoLoading ? 'Loading Video…' : 'Video Solution'}
                       </button>
                     ) : (
                       <div>
-                        <div className={`flex items-center justify-between gap-3 mb-2 text-xs font-black uppercase tracking-widest ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>
-                          <span className="inline-flex items-center gap-2"><PlayCircle size={15} className="text-emerald-500"/> Video Solution</span>
-                          <button
-                            type="button"
-                            onClick={() => setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...prev[r.id], videoOpen: !prev[r.id]?.videoOpen } }))}
-                            className="normal-case tracking-normal text-xs font-bold text-emerald-500 hover:text-emerald-400"
-                          >
-                            {solutionData?.videoOpen === false ? 'Open Video' : 'Hide Video'}
-                          </button>
-                        </div>
-                        {solutionData?.videoOpen !== false ? (
-                          <video
-                            key={solutionData.videoUrl}
-                            controls
-                            playsInline
-                            preload="auto"
-                            className="w-full max-h-[650px] rounded-xl bg-black"
-                            src={solutionData.videoUrl}
-                            onError={() => toast.error('This video could not be played. Check that the uploaded video URL is a direct playable video URL.')}
-                          />
-                        ) : null}
-                        <a
-                          href={solutionData.videoUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-2 inline-flex text-xs font-bold text-emerald-500 hover:underline"
-                        >
-                          Open video in new tab ↗
-                        </a>
+                        <div className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}><PlayCircle size={15} className="text-emerald-500"/> Video Solution</div>
+                        <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={solutionData.videoUrl}/>
                       </div>
                     )}
                   </div>
