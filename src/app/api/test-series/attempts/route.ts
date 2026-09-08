@@ -91,6 +91,7 @@ export async function GET(req: Request) {
       let positiveGained = 0;
       let negativeLost = 0;
       const markedMap = a.answers?.__markedForReview && typeof a.answers.__markedForReview === 'object' ? a.answers.__markedForReview : {};
+      const bookmarkedMap = a.answers?.__bookmarked && typeof a.answers.__bookmarked === 'object' ? a.answers.__bookmarked : {};
       const review = (keys || []).map((k: any) => {
         const selected = Array.isArray(a.answers?.[k.id_in_test]) ? a.answers[k.id_in_test].map(String) : [];
         const expected = Array.isArray(k.answer) ? k.answer.map(String) : [];
@@ -117,6 +118,7 @@ export async function GET(req: Request) {
           // solution HTML is fetched only when the user clicks its button.
           hasWrittenSolution: Boolean(k.solution_html),
           markedForReview: Boolean(markedMap?.[k.id_in_test]),
+          bookmarked: Boolean(bookmarkedMap?.[k.id_in_test]),
           timeSpentSeconds: Math.max(0, Math.floor(Number(a.question_time_seconds?.[k.id_in_test] || 0))),
         };
       });
