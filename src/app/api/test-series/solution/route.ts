@@ -41,12 +41,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ solution: { videoUrl: key.video_url || null } });
     }
 
-    // Answer/solution mode deliberately does NOT return the video URL.
-    // This keeps video URLs out of the initial analysis payload and defers
-    // video retrieval until the user explicitly asks for it.
+    // Answer/solution mode returns the written solution and only a boolean
+    // indicating whether a video exists. The actual URL is fetched only
+    // after the user explicitly clicks Video Solution.
     const { data: key, error } = await database
       .from('test_series_keys')
-      .select('id_in_test,solution_html')
+      .select('id_in_test,solution_html,video_url')
       .eq('test_series_id', testId)
       .eq('id_in_test', questionId)
       .maybeSingle();
@@ -56,7 +56,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       solution: {
         solutionHtml: key.solution_html || '',
-        hasVideo: false,
+        hasVideo: Boolean(key.video_url),
       },
     });
   } catch (e: any) {
