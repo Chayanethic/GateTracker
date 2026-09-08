@@ -234,11 +234,11 @@ function QuestionNavigator({ review, lightMode }: any) {
 }
 
 function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setSolutionData }: any) {
-  const currentSolution = solutionData?.[r.id] || {};
   const resultClass = r.result === 'correct' ? (lightMode ? 'border-emerald-500/30' : 'border-emerald-500/20') : r.result === 'incorrect' ? (lightMode ? 'border-red-500/30' : 'border-red-500/20') : (lightMode ? 'border-slate-200' : 'border-white/10');
   const statusClass = r.result === 'correct' ? 'text-emerald-600 bg-emerald-500/10' : r.result === 'incorrect' ? 'text-red-600 bg-red-500/10' : (lightMode ? 'text-slate-500 bg-slate-200' : 'text-zinc-400 bg-zinc-500/10');
   const selected = new Set((r.selected || []).map(String));
   const answer = new Set((r.answer || []).map(String));
+  const currentSolution = solutionData?.[r.id] || {};
 
   const toggleSolution = () => {
     const nextOpen = !open;
@@ -249,7 +249,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
 
     // Written/image solution is loaded in the background only after the
     // user explicitly opens the solution. The UI does not wait for it.
-    if (nextOpen && !currentSolution?.solutionLoaded && !currentSolution?.loading) {
+    if (nextOpen && !currentSolution?.solutionLoaded && !currentSolution?.solutionLoading) {
       setSolutionData((prev: any) => ({
         ...prev,
         [r.id]: { ...(prev?.[r.id] || {}), solutionLoading: true, solutionLoaded: false },
@@ -290,7 +290,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { toast.error('Please sign in again.'); return; }
-      setSolutionData((prev: any) => ({ ...prev, videoLoading: true, hasVideo: true }));
+      setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev?.[r.id] || {}), videoLoading: true, hasVideo: true } }));
       const res = await fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=video`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
         cache: 'no-store',
@@ -299,9 +299,9 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
       if (!res.ok) throw new Error(d.error || 'Unable to load video solution.');
       const videoUrl = d.solution?.videoUrl || null;
        if (!videoUrl) throw new Error('No video solution is available for this question.');
-       setSolutionData((prev: any) => ({ ...prev, videoLoading: false, videoUrl, hasVideo: true }));
+       setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev?.[r.id] || {}), videoLoading: false, videoUrl, hasVideo: true } }));
     } catch (e: any) {
-      setSolutionData((prev: any) => ({ ...prev, videoLoading: false }));
+      setSolutionData((prev: any) => ({ ...prev, [r.id]: { ...(prev?.[r.id] || {}), videoLoading: false } }));
       toast.error(e?.message || 'Unable to load video solution.');
     }
   };
@@ -364,7 +364,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
               <div className="font-black text-sm text-emerald-500">Solution</div>
               <div className={`text-xs ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>Answer: <b className="text-emerald-500">{r.answer?.join(', ') || '—'}</b></div>
             </div>
-            {currentSolution?.loading ? (
+            {currentSolution?.solutionLoading ? (
               <div className="rounded-lg border border-white/10 p-5 text-sm text-zinc-500">Loading answer…</div>
             ) : (
               <>
@@ -387,7 +387,7 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
                     ) : (
                       <div>
                         <div className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}><PlayCircle size={15} className="text-emerald-500"/> Video Solution</div>
-                        <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={solutionData.videoUrl}/>
+                        <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={currentSolution.videoUrl}/>
                       </div>
                     )}
                   </div>
