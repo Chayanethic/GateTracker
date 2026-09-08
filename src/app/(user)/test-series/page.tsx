@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Clock3, FileQuestion, LockKeyhole, ShieldAlert, CheckCircle2, RotateCcw, Trophy, ArrowRight } from 'lucide-react';
+import { Clock3, FileQuestion, LockKeyhole, ShieldAlert, CheckCircle2, RotateCcw, Trophy, ArrowRight, Flag } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type TestCard = {
@@ -26,6 +26,7 @@ export default function TestSeriesPage() {
   const [status, setStatus] = useState<'loading'|'none'|'pending'|'approved'|'rejected'>('loading');
   const [tests, setTests] = useState<TestCard[]>([]);
   const [requesting, setRequesting] = useState(false);
+  const [markedCount, setMarkedCount] = useState(0);
 
   const load = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -69,6 +70,17 @@ export default function TestSeriesPage() {
       }
 
       setTests(d.tests || []);
+
+      try {
+        const markedRes = await fetch('/api/test-series/marked', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: 'no-store',
+        });
+        const markedData = await markedRes.json();
+        if (markedRes.ok) setMarkedCount(Array.isArray(markedData.markedQuestions) ? markedData.markedQuestions.length : 0);
+      } catch (markedError) {
+        console.error('Marked questions load failed:', markedError);
+      }
     } catch (error) {
       console.error('Published tests load failed:', error);
       setTests([]);
@@ -158,6 +170,20 @@ export default function TestSeriesPage() {
         </div>
         <div className="text-xs text-zinc-500">{tests.length} published test{tests.length === 1 ? '' : 's'}</div>
       </div>
+
+      <Link
+        href="/test-series/marked"
+        className="mb-6 group flex items-center justify-between gap-4 rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-fuchsia-500/5 px-5 py-4 hover:border-violet-400/40 hover:bg-violet-500/15 transition-all"
+      >
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-11 h-11 shrink-0 rounded-xl bg-violet-500/15 text-violet-400 flex items-center justify-center"><Flag size={20}/></div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2"><h2 className="font-black text-white">Marked For Review</h2><span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-black text-violet-300">{markedCount}</span></div>
+            <p className="text-xs text-zinc-500 mt-1 truncate">Open your saved review questions, read the options, analyse the old attempt, or attempt the question again.</p>
+          </div>
+        </div>
+        <ArrowRight size={18} className="shrink-0 text-violet-400 group-hover:translate-x-1 transition-transform"/>
+      </Link>
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
         {tests.map((t) => {
