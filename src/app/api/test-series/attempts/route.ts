@@ -110,6 +110,9 @@ export async function GET(req: Request) {
           marks, positiveMarks: positive, negativeMarks: negative,
           questionHtml: question?.questionHtml || '',
           options: Array.isArray(question?.options) ? question.options : [],
+          // Only expose whether a video exists. The actual video URL is
+          // fetched later when the user presses "Video Solution".
+          hasVideo: Boolean(k.video_url),
           markedForReview: Boolean(markedMap?.[k.id_in_test]),
           timeSpentSeconds: Math.max(0, Math.floor(Number(a.question_time_seconds?.[k.id_in_test] || 0))),
         };
