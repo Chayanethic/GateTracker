@@ -35,7 +35,8 @@ export default function UserLayout({
 
   // The examination route is rendered as a dedicated full-screen app.
   // Do not show the normal dashboard/sidebar/mobile navigation while an exam is open.
-  const isExamRoute = /^\/test-series\/[^/]+(?:\/analysis)?$/.test(pathname || '');
+  const isExamRoute = /^\/test-series\/[^/]+$/.test(pathname || '');
+  const isAnalysisRoute = /^\/test-series\/[^/]+\/analysis$/.test(pathname || '');
 
   useEffect(() => {
     const verifyUser = async () => {
@@ -66,7 +67,7 @@ export default function UserLayout({
       setIsAuthorized(true);
 
       // GATE 2027 daily countdown animation
-      if (isExamRoute) {
+      if (isExamRoute || isAnalysisRoute) {
         setIsAuthorized(true);
         return;
       }
@@ -123,7 +124,7 @@ export default function UserLayout({
     };
 
     verifyUser();
-  }, [router, pathname, isExamRoute]);
+  }, [router, pathname, isExamRoute, isAnalysisRoute]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -178,7 +179,15 @@ export default function UserLayout({
   ];
 
   if (isExamRoute) {
-    return <div className="h-screen w-screen overflow-hidden bg-[#050505]">{children}</div>;
+    return <div className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#050505]">{children}</div>;
+  }
+
+  if (isAnalysisRoute) {
+    return (
+      <div className="fixed inset-0 z-[90] h-[100dvh] w-screen overflow-y-auto overflow-x-hidden overscroll-contain bg-[#181818]">
+        {children}
+      </div>
+    );
   }
 
   return (
