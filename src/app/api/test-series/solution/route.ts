@@ -38,7 +38,7 @@ export async function GET(req: Request) {
         .maybeSingle();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       if (!key) return NextResponse.json({ error: 'Question not found.' }, { status: 404 });
-      return NextResponse.json({ solution: { videoUrl: key.video_url || null } });
+      return NextResponse.json({ solution: { videoUrl: key.video_url ? String(key.video_url).trim() : null } }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     // Answer/solution mode deliberately does NOT return the video URL.
