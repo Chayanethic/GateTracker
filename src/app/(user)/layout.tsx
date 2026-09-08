@@ -25,6 +25,7 @@ export default function UserLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const isExamRoute = /^\/test-series\/[^/]+$/.test(pathname || '');
 
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [showGateDayAnimation, setShowGateDayAnimation] = useState(false);
@@ -60,6 +61,9 @@ export default function UserLayout({
       }
 
       setIsAuthorized(true);
+
+      // Never show platform chrome/countdown over the live examination.
+      if (isExamRoute) return;
 
       // GATE 2027 daily countdown animation
       const istNow = new Date(
@@ -114,7 +118,7 @@ export default function UserLayout({
     };
 
     verifyUser();
-  }, [router, pathname]);
+  }, [router, pathname, isExamRoute]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -167,6 +171,14 @@ export default function UserLayout({
       icon: FileQuestion,
     },
   ];
+
+  if (isExamRoute) {
+    return (
+      <div className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#202020]">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <>
