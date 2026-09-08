@@ -164,6 +164,7 @@ export default function TestRunner() {
           answers,
           timeSpentSeconds: Math.max(0, Math.floor((Date.now() - startAt) / 1000)),
           questionTimeSeconds: questionTimeRef.current,
+          markedForReview: marked,
         }),
       });
 
