@@ -98,6 +98,7 @@ export default function AnalysisPage() {
                     <span className={r.result === 'correct' ? 'text-emerald-400' : r.result === 'incorrect' ? 'text-red-400' : 'text-amber-400'}>
                       {r.result === 'correct' ? '✅ Correct' : r.result === 'incorrect' ? '❌ Incorrect' : 'Not Answered'}
                     </span>
+                    <span className="text-zinc-400">+{Number(r.positiveMarks || 0).toFixed(2)} / <span className={r.type === 'MCQ' ? 'text-red-400' : 'text-zinc-500'}>−{Number(r.negativeMarks || 0).toFixed(2)}</span></span>
                     <b className={r.marks >= 0 ? 'text-emerald-400' : 'text-red-400'}>{r.marks > 0 ? '+' : ''}{Number(r.marks).toFixed(2)} marks</b>
                     <span className="text-zinc-400"><Clock3 size={14} className="inline mr-1"/> {fmt(r.timeSpentSeconds)}</span>
                   </div>
