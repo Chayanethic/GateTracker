@@ -1,14 +1,32 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Clock3, FileQuestion, LockKeyhole, ShieldAlert } from 'lucide-react';
+import { Clock3, FileQuestion, LockKeyhole, ShieldAlert, CheckCircle2, RotateCcw, Trophy, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+type TestCard = {
+  id: string;
+  title: string;
+  exam_name: string;
+  duration_minutes: number;
+  max_marks: number;
+  question_count: number;
+  created_at: string;
+  attempt_count: number;
+  latest_attempt?: {
+    score: number;
+    max_marks: number;
+    submitted_at: string;
+  } | null;
+};
 
 export default function TestSeriesPage() {
   const [status, setStatus] = useState<'loading'|'none'|'pending'|'approved'|'rejected'>('loading');
-  const [tests, setTests] = useState<any[]>([]);
+  const [tests, setTests] = useState<TestCard[]>([]);
   const [requesting, setRequesting] = useState(false);
+
   const load = async () => {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -37,25 +55,32 @@ export default function TestSeriesPage() {
       return;
     }
 
-    const { data, error: testError } = await supabase
-      .from('test_series')
-      .select('id,title,exam_name,duration_minutes,max_marks,question_count,created_at')
-      .eq('is_published', true)
-      .order('created_at', { ascending: false });
+    try {
+      const res = await fetch('/api/test-series/list', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store',
+      });
+      const d = await res.json();
 
-    if (testError) {
-      console.error('Published tests load failed:', testError);
+      if (!res.ok) {
+        console.error('Published tests load failed:', d.error);
+        setTests([]);
+        return;
+      }
+
+      setTests(d.tests || []);
+    } catch (error) {
+      console.error('Published tests load failed:', error);
       setTests([]);
-      return;
     }
-
-    setTests(data || []);
   };
-  useEffect(()=>{
-    load();
-    const timer = window.setInterval(load, 10000);
+
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(), 10000);
     return () => window.clearInterval(timer);
-  },[]);
+  }, []);
+
   const request = async () => {
     setRequesting(true);
     try {
@@ -91,8 +116,112 @@ export default function TestSeriesPage() {
     }
   };
 
-  if (status === 'loading') return <div className="min-h-full flex items-center justify-center text-emerald-400">Checking test-series clearance...</div>;
-  if (status !== 'approved') return <div className="min-h-full flex items-center justify-center p-6"><div className="max-w-lg w-full bg-zinc-950 border border-white/10 rounded-3xl p-8 text-center shadow-2xl"><div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-5">{status==='pending'?<Clock3 className="text-amber-400" size={30}/>:status==='rejected'?<ShieldAlert className="text-red-400" size={30}/>:<LockKeyhole className="text-emerald-400" size={30}/>}</div><h1 className="text-2xl font-black text-white">Test Series Access</h1><p className="text-zinc-500 mt-3">{status==='pending'?'Your access request is waiting for admin approval.':status==='rejected'?'Your previous request was rejected. You can submit another request.':'This area is restricted. Request access once and an admin will approve your account.'}</p>{status!=='pending'&&<button onClick={request} disabled={requesting} className="mt-7 px-6 py-3 rounded-xl bg-emerald-500 text-black font-black disabled:opacity-50">{requesting?'Sending...':'Request Access'}</button>}</div></div>;
+  if (status === 'loading') {
+    return <div className="min-h-full flex items-center justify-center text-emerald-400">Checking test-series clearance...</div>;
+  }
 
-  return <div className="max-w-6xl mx-auto p-6 lg:p-10"><div className="mb-8"><div className="flex items-center gap-3"><FileQuestion className="text-emerald-400"/><h1 className="text-3xl font-black text-white">Test Series</h1><span className="text-xs font-black text-emerald-400 border border-emerald-500/20 rounded-full px-3 py-1">ACCESS APPROVED</span></div><p className="text-zinc-500 mt-2">Attempt the mock tests in a GATE-style timed environment.</p></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">{tests.map(t=><Link key={t.id} href={`/test-series/${t.id}`} className="group bg-zinc-950 border border-white/10 hover:border-emerald-500/30 rounded-2xl p-6 transition-all"><div className="text-xs font-black uppercase tracking-widest text-emerald-400">{t.exam_name}</div><h2 className="text-xl font-black text-white mt-3">{t.title}</h2><div className="grid grid-cols-3 gap-2 mt-6 text-xs text-zinc-500"><div><b className="block text-zinc-200">{t.question_count}</b>Questions</div><div><b className="block text-zinc-200">{t.duration_minutes}m</b>Time</div><div><b className="block text-zinc-200">{t.max_marks}</b>Marks</div></div><div className="mt-6 text-sm font-bold text-emerald-400 group-hover:translate-x-1 transition-transform">Start Test →</div></Link>)}</div>{!tests.length&&<div className="text-zinc-500">No test series published yet.</div>}</div>;
+  if (status !== 'approved') {
+    return (
+      <div className="min-h-full flex items-center justify-center p-6">
+        <div className="max-w-lg w-full bg-zinc-950 border border-white/10 rounded-3xl p-8 text-center shadow-2xl">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-5">
+            {status === 'pending' ? <Clock3 className="text-amber-400" size={30} /> : status === 'rejected' ? <ShieldAlert className="text-red-400" size={30} /> : <LockKeyhole className="text-emerald-400" size={30} />}
+          </div>
+          <h1 className="text-2xl font-black text-white">Test Series Access</h1>
+          <p className="text-zinc-500 mt-3">
+            {status === 'pending'
+              ? 'Your access request is waiting for admin approval.'
+              : status === 'rejected'
+                ? 'Your previous request was rejected. You can submit another request.'
+                : 'This area is restricted. Request access once and an admin will approve your account.'}
+          </p>
+          {status !== 'pending' && (
+            <button onClick={request} disabled={requesting} className="mt-7 px-6 py-3 rounded-xl bg-emerald-500 text-black font-black disabled:opacity-50">
+              {requesting ? 'Sending...' : 'Request Access'}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto p-5 md:p-8 lg:p-10">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <FileQuestion className="text-emerald-400" />
+            <h1 className="text-3xl font-black text-white">Test Series</h1>
+            <span className="text-xs font-black text-emerald-400 border border-emerald-500/20 rounded-full px-3 py-1">ACCESS APPROVED</span>
+          </div>
+          <p className="text-zinc-500 mt-2">GATE-style timed examinations with detailed attempt analysis.</p>
+        </div>
+        <div className="text-xs text-zinc-500">{tests.length} published test{tests.length === 1 ? '' : 's'}</div>
+      </div>
+
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+        {tests.map((t) => {
+          const attempted = t.attempt_count > 0;
+          const latestScore = Number(t.latest_attempt?.score || 0);
+          const maxMarks = Number(t.latest_attempt?.max_marks || t.max_marks || 0);
+
+          return (
+            <div
+              key={t.id}
+              className="group relative overflow-hidden bg-zinc-950 border border-white/10 hover:border-emerald-500/30 rounded-2xl transition-all"
+            >
+              {attempted && (
+                <div className="px-5 pt-5">
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-emerald-400 text-xs font-black">
+                        <CheckCircle2 size={17} /> ATTEMPTED
+                      </div>
+                      <span className="text-xs text-zinc-500">Attempt {t.attempt_count}</span>
+                    </div>
+                    <div className="mt-2 text-sm text-zinc-400">
+                      Latest score: <b className="text-white">{latestScore}/{maxMarks}</b>
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500">
+                      {t.attempt_count === 1 ? '1 time already attempted' : `${t.attempt_count} times already attempted`}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-6">
+                <div className="text-xs font-black uppercase tracking-widest text-emerald-400">{t.exam_name}</div>
+                <h2 className="text-xl font-black text-white mt-3">{t.title}</h2>
+
+                <div className="grid grid-cols-3 gap-2 mt-6 text-xs text-zinc-500">
+                  <div><b className="block text-zinc-200">{t.question_count}</b>Questions</div>
+                  <div><b className="block text-zinc-200">{t.duration_minutes}m</b>Time</div>
+                  <div><b className="block text-zinc-200">{t.max_marks}</b>Marks</div>
+                </div>
+
+                <div className="mt-6 flex gap-2">
+                  <Link
+                    href={`/test-series/${t.id}`}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white text-black py-3 font-black hover:bg-emerald-300 transition"
+                  >
+                    {attempted ? <><RotateCcw size={16} /> Reattempt</> : <>Start Test <ArrowRight size={16} /></>}
+                  </Link>
+                  {attempted && (
+                    <Link
+                      href={`/test-series/${t.id}/analysis`}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/5"
+                    >
+                      <Trophy size={16} /> Results
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {!tests.length && <div className="text-zinc-500">No test series published yet.</div>}
+    </div>
+  );
 }
