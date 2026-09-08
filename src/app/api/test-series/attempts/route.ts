@@ -58,6 +58,24 @@ export async function GET(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // Build the comparison pool from every submitted attempt for this test.
+    // This powers the result-style rank and percentile shown in analysis.
+    const { data: allAttempts, error: allAttemptsError } = await database
+      .from('test_series_attempts')
+      .select('score')
+      .eq('test_series_id', testId);
+
+    if (allAttemptsError) return NextResponse.json({ error: allAttemptsError.message }, { status: 500 });
+
+    const scorePool = (allAttempts || []).map((a: any) => Number(a.score || 0)).filter((n: number) => Number.isFinite(n));
+    const ranked = (score: number) => {
+      const better = scorePool.filter((s: number) => s > score).length;
+      return {
+        rank: better + 1,
+        total: scorePool.length,
+      };
+    };
+
     const { data: keys, error: keyError } = await database
       .from('test_series_keys')
       .select('*')
@@ -70,6 +88,9 @@ export async function GET(req: Request) {
 
     const hydrated = (attempts || []).map((a: any, index: number) => {
       let total = 0;
+      let positiveGained = 0;
+      let negativeLost = 0;
+      const markedMap = a.answers?.__markedForReview && typeof a.answers.__markedForReview === 'object' ? a.answers.__markedForReview : {};
       const review = (keys || []).map((k: any) => {
         const selected = Array.isArray(a.answers?.[k.id_in_test]) ? a.answers[k.id_in_test].map(String) : [];
         const expected = Array.isArray(k.answer) ? k.answer.map(String) : [];
@@ -80,24 +101,42 @@ export async function GET(req: Request) {
         const negative = k.negative_marks != null ? Math.max(0, Number(k.negative_marks)) : type === 'MCQ' ? Math.floor((positive / 3) * 100) / 100 : 0;
         const marks = !selected.length ? 0 : ok ? positive : -negative;
         total += marks;
+        if (ok) positiveGained += positive;
+        if (selected.length && !ok) negativeLost += negative;
+        const question = (Array.isArray(test.questions) ? test.questions : []).find((q: any) => String(q.id) === String(k.id_in_test));
         return {
           id: k.id_in_test, number: k.number, type, selected, answer: expected,
           correct: ok, result: !selected.length ? 'not_answered' : ok ? 'correct' : 'incorrect',
           marks, positiveMarks: positive, negativeMarks: negative,
+          questionHtml: question?.questionHtml || '',
+          options: Array.isArray(question?.options) ? question.options : [],
+          markedForReview: Boolean(markedMap?.[k.id_in_test]),
           solutionHtml: k.solution_html || '', videoUrl: k.video_url || null,
           timeSpentSeconds: Math.max(0, Math.floor(Number(a.question_time_seconds?.[k.id_in_test] || 0))),
         };
       });
+      const score = Number(Number(a.score ?? total).toFixed(2));
+      const rankInfo = ranked(score);
+      const attemptedCount = Number(a.correct_count || 0) + Number(a.incorrect_count || 0);
+      const accuracy = attemptedCount > 0 ? (Number(a.correct_count || 0) / attemptedCount) * 100 : 0;
+      const percentile = rankInfo.total > 0 ? ((rankInfo.total - rankInfo.rank) / rankInfo.total) * 100 : 0;
       return {
         attemptId: a.id,
         attemptNumber: (attempts?.length || 0) - index,
         submittedAt: a.submitted_at,
-        score: Number(Number(a.score ?? total).toFixed(2)),
+        score,
         maxMarks: test.max_marks,
-        correct: a.correct_count,
-        incorrect: a.incorrect_count,
-        notAnswered: a.not_answered_count,
-        totalTimeSeconds: a.time_spent_seconds,
+        correct: Number(a.correct_count || 0),
+        incorrect: Number(a.incorrect_count || 0),
+        notAnswered: Number(a.not_answered_count || 0),
+        totalTimeSeconds: Number(a.time_spent_seconds || 0),
+        rank: rankInfo.rank,
+        totalRanked: rankInfo.total,
+        percentile: Math.max(0, percentile),
+        accuracy,
+        positiveGained: Number(positiveGained.toFixed(2)),
+        negativeLost: Number(negativeLost.toFixed(2)),
+        markedCount: review.filter((r: any) => r.markedForReview).length,
         review,
       };
     });
