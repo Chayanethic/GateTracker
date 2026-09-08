@@ -111,7 +111,6 @@ export async function GET(req: Request) {
           questionHtml: question?.questionHtml || '',
           options: Array.isArray(question?.options) ? question.options : [],
           markedForReview: Boolean(markedMap?.[k.id_in_test]),
-          solutionHtml: k.solution_html || '', videoUrl: k.video_url || null,
           timeSpentSeconds: Math.max(0, Math.floor(Number(a.question_time_seconds?.[k.id_in_test] || 0))),
         };
       });
