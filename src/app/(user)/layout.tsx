@@ -25,7 +25,6 @@ export default function UserLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const isExamRoute = /^\/test-series\/[^/]+$/.test(pathname || '');
 
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [showGateDayAnimation, setShowGateDayAnimation] = useState(false);
@@ -33,6 +32,10 @@ export default function UserLayout({
     useState<'cut' | 'reveal'>('cut');
   const [gateDaysRemaining, setGateDaysRemaining] = useState(0);
   const [previousGateDays, setPreviousGateDays] = useState(0);
+
+  // The examination route is rendered as a dedicated full-screen app.
+  // Do not show the normal dashboard/sidebar/mobile navigation while an exam is open.
+  const isExamRoute = /^\/test-series\/[^/]+$/.test(pathname || '');
 
   useEffect(() => {
     const verifyUser = async () => {
@@ -62,10 +65,12 @@ export default function UserLayout({
 
       setIsAuthorized(true);
 
-      // Never show platform chrome/countdown over the live examination.
-      if (isExamRoute) return;
-
       // GATE 2027 daily countdown animation
+      if (isExamRoute) {
+        setIsAuthorized(true);
+        return;
+      }
+
       const istNow = new Date(
         new Date().toLocaleString('en-US', {
           timeZone: 'Asia/Kolkata',
@@ -173,11 +178,7 @@ export default function UserLayout({
   ];
 
   if (isExamRoute) {
-    return (
-      <div className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#202020]">
-        {children}
-      </div>
-    );
+    return <div className="h-screen w-screen overflow-hidden bg-[#050505]">{children}</div>;
   }
 
   return (
