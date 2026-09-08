@@ -240,12 +240,19 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
   const answer = new Set((r.answer || []).map(String));
 
   const toggleSolution = async () => {
-    if (!open && !solutionData) {
+    if (open) {
+      onToggle();
+      return;
+    }
+    if (!solutionData) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { toast.error('Please sign in again.'); return; }
         setSolutionData((prev: any) => ({ ...prev, [r.id]: { loading: true } }));
-        const res = await fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}`, { headers: { Authorization: `Bearer ${session.access_token}` }, cache: 'no-store' });
+        const res = await fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=answer`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: 'no-store',
+        });
         const d = await res.json();
         if (!res.ok) throw new Error(d.error || 'Unable to load solution.');
         setSolutionData((prev: any) => ({ ...prev, [r.id]: d.solution || {} }));
@@ -256,6 +263,25 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
       }
     }
     onToggle();
+  };
+
+  const fetchVideo = async () => {
+    if (solutionData?.videoLoading || solutionData?.videoUrl || !solutionData?.hasVideo) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { toast.error('Please sign in again.'); return; }
+      setSolutionData((prev: any) => ({ ...prev, videoLoading: true }));
+      const res = await fetch(`/api/test-series/solution?testId=${encodeURIComponent(testId)}&questionId=${encodeURIComponent(r.id)}&mode=video`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store',
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Unable to load video solution.');
+      setSolutionData((prev: any) => ({ ...prev, videoLoading: false, videoUrl: d.solution?.videoUrl || null }));
+    } catch (e: any) {
+      setSolutionData((prev: any) => ({ ...prev, videoLoading: false }));
+      toast.error(e?.message || 'Unable to load video solution.');
+    }
   };
 
   return (
@@ -317,19 +343,37 @@ function QuestionCard({ testId, r, open, onToggle, lightMode, solutionData, setS
               <div className={`text-xs ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>Answer: <b className="text-emerald-500">{r.answer?.join(', ') || '—'}</b></div>
             </div>
             {solutionData?.loading ? (
-              <div className="rounded-lg border border-white/10 p-5 text-sm text-zinc-500">Loading solution…</div>
-            ) : solutionData?.videoUrl ? (
-              <div>
-                <div className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}><PlayCircle size={15} className="text-emerald-500"/> Video Solution</div>
-                <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={solutionData.videoUrl}/>
-              </div>
-            ) : solutionData?.solutionHtml ? (
-              <div className={`rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#1b1b1b]'}`}>
-                <div className={`text-xs font-black uppercase tracking-widest mb-3 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Image / Written Solution</div>
-                <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: solutionData.solutionHtml }} />
-              </div>
+              <div className="rounded-lg border border-white/10 p-5 text-sm text-zinc-500">Loading answer…</div>
             ) : (
-              <div className={`rounded-lg border p-4 text-sm ${lightMode ? 'border-slate-200 text-slate-500' : 'border-white/10 text-zinc-500'}`}>No solution is available for this question.</div>
+              <>
+                <div className={`rounded-xl border p-4 ${lightMode ? 'border-emerald-500/20 bg-white' : 'border-white/10 bg-[#1b1b1b]'}`}>
+                  <div className={`text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Correct Option</div>
+                  <div className="text-lg font-black text-emerald-500">{r.answer?.length ? r.answer.join(', ') : '—'}</div>
+                </div>
+                {solutionData?.solutionHtml ? (
+                  <div className={`mt-3 rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#1b1b1b]'}`}>
+                    <div className={`text-xs font-black uppercase tracking-widest mb-3 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>Image / Written Solution</div>
+                    <div className={`prose max-w-none text-sm leading-6 ${lightMode ? 'text-slate-800' : 'prose-invert'}`} dangerouslySetInnerHTML={{ __html: solutionData.solutionHtml }} />
+                  </div>
+                ) : null}
+                {solutionData?.hasVideo ? (
+                  <div className="mt-4">
+                    {!solutionData?.videoUrl ? (
+                      <button onClick={fetchVideo} disabled={solutionData?.videoLoading} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-black text-black hover:bg-emerald-400 disabled:opacity-60">
+                        <PlayCircle size={16}/>{solutionData?.videoLoading ? 'Loading Video…' : 'Video Solution'}
+                      </button>
+                    ) : (
+                      <div>
+                        <div className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-2 ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}><PlayCircle size={15} className="text-emerald-500"/> Video Solution</div>
+                        <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={solutionData.videoUrl}/>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+                {!solutionData?.solutionHtml && !solutionData?.hasVideo ? (
+                  <div className={`mt-3 rounded-lg border p-4 text-sm ${lightMode ? 'border-slate-200 text-slate-500' : 'border-white/10 text-zinc-500'}`}>No additional solution is available for this question.</div>
+                ) : null}
+              </>
             )}
           </div>
         )}
