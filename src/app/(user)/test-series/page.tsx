@@ -178,7 +178,7 @@ export default function TestSeriesPage() {
         <div className="flex items-center gap-4 min-w-0">
           <div className="w-11 h-11 shrink-0 rounded-xl bg-violet-500/15 text-violet-400 flex items-center justify-center"><Flag size={20}/></div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2"><h2 className="font-black text-white">Marked For Review</h2><span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-black text-violet-300">{markedCount}</span></div>
+            <div className="flex items-center gap-2"><h2 className="font-black text-white">Bookmarked Questions</h2><span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-black text-violet-300">{markedCount}</span></div>
             <p className="text-xs text-zinc-500 mt-1 truncate">Open your saved review questions, read the options, analyse the old attempt, or attempt the question again.</p>
           </div>
         </div>
