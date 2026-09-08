@@ -53,6 +53,7 @@ export default function TestRunner() {
   const [startAt, setStartAt] = useState(0);
   const [lightMode, setLightMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showQuestionPaper, setShowQuestionPaper] = useState(false);
   const activeQuestionRef = useRef<string | null>(null);
   const questionStartedAtRef = useRef<number | null>(null);
   const questionTimeRef = useRef<Record<string, number>>({});
@@ -174,11 +175,10 @@ export default function TestRunner() {
         return;
       }
 
+      // Keep the post-submit summary on this page. The candidate can then
+      // explicitly open the detailed analysis for the exact submitted attempt.
       setResult(d);
       await exitFullscreen();
-      // Use a full navigation after submission so the completed attempt
-      // is immediately loaded by the analysis page and no exam state leaks.
-      window.location.assign(`/test-series/${encodeURIComponent(id)}/analysis?attempt=${encodeURIComponent(d.attemptId)}`);
     } catch (error) {
       console.error('Submission failed:', error);
       toast.error('Submission failed. Please try again.');
@@ -261,11 +261,8 @@ export default function TestRunner() {
   };
 
   const startExam = async () => {
-    const now = Date.now();
-    setStartAt(now);
     setStarted(true);
-    activeQuestionRef.current = questions[0]?.id || null;
-    questionStartedAtRef.current = now;
+    setStartAt(Date.now());
     await enterFullscreen();
   };
 
@@ -351,8 +348,18 @@ export default function TestRunner() {
           </div>
 
           <div className="hidden md:flex items-center gap-1 text-xs font-bold">
-            <button className="px-3 py-2 underline underline-offset-4">Question Paper</button>
-            <button className="px-3 py-2 underline underline-offset-4">View Instructions</button>
+            <button
+              onClick={() => setShowQuestionPaper(true)}
+              className="px-3 py-2 underline underline-offset-4 hover:text-blue-500"
+            >
+              Question Paper
+            </button>
+            <button
+              onClick={() => setShowQuestionPaper(true)}
+              className="px-3 py-2 underline underline-offset-4 hover:text-blue-500"
+            >
+              View Instructions
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -396,7 +403,7 @@ export default function TestRunner() {
       </div>
 
       <div className="flex flex-col lg:flex-row min-h-[calc(100vh-96px)]">
-        <main className="min-w-0 flex-1">
+        <main className="min-w-0 flex-1 min-h-0 h-[calc(100vh-96px)] overflow-y-auto custom-scrollbar">
           <div className={lightMode ? 'px-4 md:px-7 py-3 border-b border-slate-300 flex items-center justify-between text-sm font-bold' : 'px-4 md:px-7 py-3 border-b border-white/10 flex items-center justify-between text-sm font-bold'}>
             <span>Question No.: {q?.number}</span>
             <span className="font-mono text-xs">Your Time: {formatDuration(questionTimeRef.current[q?.id || ''] || 0)}</span>
@@ -485,7 +492,7 @@ export default function TestRunner() {
           </div>
         </main>
 
-        <aside className={lightMode ? 'w-full lg:w-[330px] bg-white border-l border-slate-300' : 'w-full lg:w-[330px] bg-[#f1f7fb] text-slate-900 border-l border-black/10'}>
+        <aside className={lightMode ? 'w-full lg:w-[330px] lg:h-[calc(100vh-96px)] lg:overflow-y-auto bg-white border-l border-slate-300' : 'w-full lg:w-[330px] lg:h-[calc(100vh-96px)] lg:overflow-y-auto bg-[#f1f7fb] text-slate-900 border-l border-black/10'}>
           <div className="p-4 md:p-5">
             <div className="rounded-xl bg-white p-4 shadow-sm border border-slate-200">
               <div className="flex items-center justify-between">
@@ -553,6 +560,71 @@ export default function TestRunner() {
           </div>
         </aside>
       </div>
+
+      {showQuestionPaper && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm p-3 md:p-6">
+          <div className={lightMode
+            ? 'h-full w-full overflow-hidden rounded-2xl bg-white text-slate-900 border border-slate-300 shadow-2xl'
+            : 'h-full w-full overflow-hidden rounded-2xl bg-[#181818] text-white border border-white/10 shadow-2xl'}>
+            <div className={lightMode
+              ? 'sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-300 bg-white px-5 py-4'
+              : 'sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#181818] px-5 py-4'}>
+              <div>
+                <div className="text-xs font-black uppercase tracking-widest text-blue-500">Question Paper</div>
+                <h2 className="mt-1 text-lg md:text-xl font-black">{test.title}</h2>
+              </div>
+              <button
+                onClick={() => setShowQuestionPaper(false)}
+                className={lightMode ? 'rounded-lg border border-slate-300 p-2 hover:bg-slate-100' : 'rounded-lg border border-white/10 p-2 hover:bg-white/10'}
+                aria-label="Close question paper"
+              >
+                <XCircle size={20} />
+              </button>
+            </div>
+
+            <div className="h-[calc(100%-76px)] overflow-y-auto p-4 md:p-7 custom-scrollbar">
+              <div className="mx-auto max-w-5xl space-y-5">
+                {questions.map((question) => (
+                  <article
+                    key={question.id}
+                    className={lightMode
+                      ? 'rounded-2xl border border-slate-300 bg-slate-50 p-5 md:p-7'
+                      : 'rounded-2xl border border-white/10 bg-[#222] p-5 md:p-7'}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-current/10 pb-4">
+                      <div className="font-black">Question {question.number}</div>
+                      <div className="flex items-center gap-3 text-xs font-bold opacity-70">
+                        <span>{question.type}</span>
+                        <span>+{Number(question.marks || 0).toFixed(2)}</span>
+                        {question.type === 'MCQ' && <span className="text-red-500">−{Number(question.negativeMarks || 0).toFixed(2)}</span>}
+                      </div>
+                    </div>
+
+                    <div
+                      className={lightMode ? 'prose max-w-none mt-5 text-sm md:text-base leading-7 text-slate-800' : 'prose prose-invert max-w-none mt-5 text-sm md:text-base leading-7'}
+                      dangerouslySetInnerHTML={{ __html: question.questionHtml || '' }}
+                    />
+
+                    {question.type === 'NAT' ? (
+                      <div className="mt-5 rounded-xl border border-current/10 p-4 text-sm opacity-70">Numerical Answer</div>
+                    ) : (
+                      <div className="mt-5 space-y-3">
+                        {question.options?.map((option) => (
+                          <div key={option.key} className={lightMode ? 'flex gap-3 rounded-xl border border-slate-300 bg-white p-4' : 'flex gap-3 rounded-xl border border-white/10 bg-black/10 p-4'}>
+                            <span className="shrink-0 font-black">{option.key}.</span>
+                            <span className="text-sm leading-6" dangerouslySetInnerHTML={{ __html: option.html }} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -584,57 +656,56 @@ function MiniStat({ label, value }: { label: string; value: number }) {
 }
 
 function Result({ test, result }: { test: any; result: any }) {
+  const router = useRouter();
+
   return (
-    <div className="max-w-6xl mx-auto p-5 lg:p-10">
-      <div className="bg-zinc-950 border border-white/10 rounded-3xl p-6 lg:p-8">
-        <div className="text-xs uppercase tracking-widest text-emerald-400 font-black">Test Submitted</div>
-        <h1 className="text-3xl font-black text-white mt-2">{test.title}</h1>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-8">
-          {[
-            ['Score', `${result.score}/${result.maxMarks}`, 'text-emerald-400'],
-            ['Correct', result.correct, 'text-emerald-400'],
-            ['Incorrect', result.incorrect, 'text-red-400'],
-            ['Not Answered', result.notAnswered, 'text-amber-400'],
-            ['Accuracy', `${test.question_count ? Math.round(result.correct / test.question_count * 100) : 0}%`, 'text-blue-400'],
-          ].map(([a, b, c]) => (
-            <div className="bg-white/[.03] rounded-xl p-4" key={String(a)}>
-              <div className="text-xs text-zinc-500">{a}</div>
-              <div className={`text-2xl font-black mt-1 ${c}`}>{b}</div>
+    <div className="min-h-screen bg-[#171717] text-white flex items-center justify-center p-5">
+      <div className="w-full max-w-3xl">
+        <div className="rounded-3xl border border-white/10 bg-[#242424] shadow-2xl overflow-hidden">
+          <div className="px-6 md:px-8 py-6 border-b border-white/10">
+            <div className="text-xs uppercase tracking-widest text-emerald-400 font-black">Test Submitted</div>
+            <h1 className="text-2xl md:text-3xl font-black mt-2">{test.title}</h1>
+            <p className="text-sm text-zinc-500 mt-1">Your attempt has been submitted successfully.</p>
+          </div>
+
+          <div className="p-6 md:p-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <SummaryStat label="Score" value={`${Number(result.score || 0).toFixed(2)}/${result.maxMarks}`} cls="text-emerald-400" />
+              <SummaryStat label="Correct" value={String(result.correct || 0)} cls="text-emerald-400" />
+              <SummaryStat label="Incorrect" value={String(result.incorrect || 0)} cls="text-red-400" />
+              <SummaryStat label="Not Answered" value={String(result.notAnswered || 0)} cls="text-amber-400" />
             </div>
-          ))}
-        </div>
-        <div className="mt-10">
-          <h2 className="text-xl font-black text-white mb-4">Question Analysis & Solutions</h2>
-          <div className="space-y-4">
-            {test.questions.map((question: Q) => {
-              const r = result.review.find((x: any) => x.id === question.id);
-              const selected = r?.selected || [];
-              const ok = r?.correct;
-              return (
-                <div key={question.id} className="border border-white/10 rounded-2xl p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-black text-white">Q{question.number} <span className="text-xs text-zinc-500 ml-2">{question.type}</span></div>
-                    {selected.length === 0 ? <MinusCircle className="text-amber-400" size={19} /> : ok ? <CheckCircle2 className="text-emerald-400" size={19} /> : <XCircle className="text-red-400" size={19} />}
-                  </div>
-                  <div className="mt-3 text-xs text-zinc-400">Time spent: <b className="text-zinc-200">{formatDuration(r?.timeSpentSeconds || 0)}</b></div>
-                  <div className="mt-4 text-sm leading-6 prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: question.questionHtml }} />
-                  <div className="mt-4 text-xs text-zinc-500">Your answer: <b className="text-zinc-200">{selected.join(', ') || 'Not answered'}</b> · Correct: <b className="text-emerald-400">{question.answer.join(', ')}</b></div>
-                  <details className="mt-4 border border-white/10 rounded-xl overflow-hidden">
-                    <summary className="cursor-pointer px-4 py-3 text-emerald-400 font-bold">View Full Solution</summary>
-                    <div className="p-4 border-t border-white/10 text-sm leading-6 prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: question.solutionHtml || '<span class="text-zinc-500">No written solution provided.</span>' }} />
-                    {question.videoUrl && (
-                      <div className="p-4 pt-0">
-                        <div className="flex items-center gap-2 text-emerald-400 text-xs font-black mb-2"><PlayCircle size={15} /> VIDEO SOLUTION</div>
-                        <video controls playsInline preload="metadata" className="w-full max-h-[650px] rounded-xl bg-black" src={question.videoUrl} />
-                      </div>
-                    )}
-                  </details>
-                </div>
-              );
-            })}
+
+            <div className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 text-sm text-zinc-300">
+              Detailed question-wise solutions, marks, negative marking and time spent are available in Analysis.
+            </div>
+
+            <div className="mt-7 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => router.replace(`/test-series/${test.id}/analysis?attempt=${result.attemptId}`)}
+                className="flex-1 rounded-xl bg-white text-black py-3.5 font-black hover:bg-emerald-300 transition"
+              >
+                Analyse Attempt
+              </button>
+              <button
+                onClick={() => router.replace('/test-series/')}
+                className="rounded-xl border border-white/10 px-6 py-3.5 font-bold hover:bg-white/5"
+              >
+                Back to Test Series
+              </button>
+            </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value, cls }: { label: string; value: string; cls: string }) {
+  return (
+    <div className="rounded-xl bg-white/[.03] border border-white/10 p-4">
+      <div className="text-xs text-zinc-500">{label}</div>
+      <div className={`text-2xl font-black mt-1 ${cls}`}>{value}</div>
     </div>
   );
 }
