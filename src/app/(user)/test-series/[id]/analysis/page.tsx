@@ -48,11 +48,11 @@ export default function AnalysisPage() {
 
   if (!data?.attempts?.length) return (
     <div className="max-w-3xl mx-auto p-6 lg:p-10">
-      <button onClick={() => router.push(`/test-series/${id}`)} className="flex items-center gap-2 text-zinc-400 hover:text-white mb-8"><ArrowLeft size={18}/> Back to Test</button>
+      <button onClick={() => router.push('/test-series/')} className="flex items-center gap-2 text-zinc-400 hover:text-white mb-8"><ArrowLeft size={18}/> Back to Test Series</button>
       <div className="bg-zinc-950 border border-white/10 rounded-3xl p-10 text-center">
         <h1 className="text-2xl font-black text-white">No Attempts Yet</h1>
         <p className="text-zinc-500 mt-2">Start this test to create your first result.</p>
-        <button onClick={() => router.push(`/test-series/${id}`)} className="mt-6 bg-emerald-500 text-black font-black px-6 py-3 rounded-xl">Start Test</button>
+        <button onClick={() => router.push('/test-series/')} className="mt-6 bg-emerald-500 text-black font-black px-6 py-3 rounded-xl">Start Test</button>
       </div>
     </div>
   );
@@ -61,11 +61,11 @@ export default function AnalysisPage() {
     <div className="max-w-7xl mx-auto p-5 lg:p-10 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <button onClick={() => router.push(`/test-series/${id}`)} className="flex items-center gap-2 text-zinc-400 hover:text-white mb-3"><ArrowLeft size={18}/> Back to Test</button>
+          <button onClick={() => router.push('/test-series/')} className="flex items-center gap-2 text-zinc-400 hover:text-white mb-3"><ArrowLeft size={18}/> Back to Test Series</button>
           <h1 className="text-3xl font-black text-white">{data.test.title} — Analysis</h1>
           <p className="text-zinc-500 mt-1">Choose an attempt to view its complete question-by-question analysis.</p>
         </div>
-        <button onClick={() => router.push(`/test-series/${id}`)} className="bg-emerald-500 text-black font-black px-5 py-3 rounded-xl">Start Another Attempt</button>
+        <button onClick={() => router.push('/test-series/')} className="bg-emerald-500 text-black font-black px-5 py-3 rounded-xl">Start Another Attempt</button>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-2">
