@@ -298,14 +298,10 @@ export default function AdminTestSeries() {
         toast.error(isMadeEasy ? 'Please provide a subject so the MADE EASY test can be named.' : 'Title and exam name are required.');
         return;
       }
-      // MADE EASY HTML can contain hundreds of base64-embedded images. Sending the
-      // raw JSON can exceed the hosting provider's request-body limit and return 413.
-      // Gzip the JSON in the browser so both small and large exports use the same path.
-      const uploadPayload = { title: effectiveTitle, examName: effectiveExamName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, provider: isMadeEasy ? 'madeeasy' : 'prepfusion', testCategory: isMadeEasy ? madeEasyCategory : 'standard', testNumber: isMadeEasy && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: isMadeEasy ? madeEasySubject : '', topic: isMadeEasy ? madeEasyTopic : '', syllabus: isMadeEasy ? madeEasySyllabus : '', examYear: isMadeEasy && madeEasyYear ? Number(madeEasyYear) : null, stream: isMadeEasy ? madeEasyStream : '' };
-      const payloadBytes = new TextEncoder().encode(JSON.stringify(uploadPayload));
-      const compressedStream = new Blob([payloadBytes]).stream().pipeThrough(new CompressionStream('gzip'));
-      const compressedBody = await new Response(compressedStream).arrayBuffer();
-      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: { ...adminHeaders, 'Content-Encoding': 'gzip', 'Content-Type': 'application/json' }, body: compressedBody });
+      const payload = { title: effectiveTitle, examName: effectiveExamName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, provider: isMadeEasy ? 'madeeasy' : 'prepfusion', testCategory: isMadeEasy ? madeEasyCategory : 'standard', testNumber: isMadeEasy && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: isMadeEasy ? madeEasySubject : '', topic: isMadeEasy ? madeEasyTopic : '', syllabus: isMadeEasy ? madeEasySyllabus : '', examYear: isMadeEasy && madeEasyYear ? Number(madeEasyYear) : null, stream: isMadeEasy ? madeEasyStream : '' };
+      const jsonBytes = new TextEncoder().encode(JSON.stringify(payload));
+      const compressed = await new Response(new Blob([jsonBytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: { ...adminHeaders, 'Content-Encoding': 'gzip', 'Content-Type': 'application/json' }, body: compressed });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       toast.success(`Test published with ${draftQuestions.length} questions.`);
