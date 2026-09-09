@@ -47,16 +47,21 @@ export async function POST(req: Request) {
     const examYear = b.examYear == null || b.examYear === '' ? null : Number(b.examYear);
     const stream = String(b.stream || '').trim().toUpperCase() || null;
 
+    const rawTitle = String(b.title || '').trim();
+    const rawExamName = String(b.examName || '').trim();
+    const effectiveTitle = rawTitle || (provider === 'madeeasy' ? subject : '');
+    const effectiveExamName = rawExamName || (provider === 'madeeasy' ? 'MADE EASY' : '');
+
     if (
-      !b.title ||
-      !b.examName ||
+      !effectiveTitle ||
+      !effectiveExamName ||
       !b.durationMinutes ||
       !b.maxMarks ||
       !Array.isArray(b.questions) ||
       !b.questions.length
     ) {
       return NextResponse.json(
-        { error: 'All fields and questions are required.' },
+        { error: provider === 'madeeasy' ? 'MADE EASY test title could not be determined from the HTML. Please provide a subject.' : 'All fields and questions are required.' },
         { status: 400 }
       );
     }
@@ -102,8 +107,8 @@ export async function POST(req: Request) {
     const { data, error } = await db()
       .from('test_series')
       .insert({
-        title: String(b.title).trim(),
-        exam_name: String(b.examName).trim(),
+        title: effectiveTitle,
+        exam_name: effectiveExamName,
         duration_minutes: Number(b.durationMinutes),
         max_marks: Number(b.maxMarks),
         question_count: questions.length,
