@@ -47,34 +47,70 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Test-series access is not approved.' }, { status: 403 });
     }
 
-    // Only published tests are returned. Deleted tests therefore disappear
-    // automatically and cannot remain as stale cards on the user page.
-    const metadataSelect = 'id,title,exam_name,duration_minutes,max_marks,question_count,created_at,is_published,provider,test_category,test_number,subject,topic,syllabus,exam_year,stream';
-    let { data: tests, error: testError } = await admin
+    // Test-series visibility follows the branch selected by the user.
+    // ECE users see EC/ECE tests; CSE users see CS/CSE and DA tests.
+    // Keep this filtering server-side so a user never receives another
+    // branch's test-series data from this endpoint.
+    const { data: profile, error: profileError } = await admin
+      .from('user_profiles')
+      .select('branch')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      return NextResponse.json({ error: profileError.message }, { status: 500 });
+    }
+
+    const branch = String(profile?.branch || '').toLowerCase().trim();
+    if (!branch) {
+      return NextResponse.json({ error: 'Please select your branch first.' }, { status: 400 });
+    }
+
+    const allowedStreams = branch === 'ece'
+      ? new Set(['ec', 'ece'])
+      : branch === 'cse'
+        ? new Set(['cs', 'cse', 'da'])
+        : new Set<string>();
+
+    if (!allowedStreams.size) {
+      return NextResponse.json({ error: 'Unsupported branch selected.' }, { status: 400 });
+    }
+
+    // Only published tests are returned. The extra MADE EASY metadata columns
+    // are optional until the migration is run. Fall back to the legacy shape so
+    // existing published tests never disappear from the user page.
+    let tests: any[] = [];
+    const rich = await admin
       .from('test_series')
-      .select(metadataSelect)
+      .select('id,title,exam_name,duration_minutes,max_marks,question_count,created_at,is_published,provider,test_category,test_number,subject,topic,syllabus,exam_year,stream')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
-    // Keep old PREPFUSION tests visible even before the optional metadata
-    // migration has been applied.
-    if (testError) {
+    if (!rich.error) {
+      tests = rich.data || [];
+    } else {
       const legacy = await admin
         .from('test_series')
         .select('id,title,exam_name,duration_minutes,max_marks,question_count,created_at,is_published')
         .eq('is_published', true)
         .order('created_at', { ascending: false });
       if (legacy.error) {
-        return NextResponse.json({ error: testError.message }, { status: 500 });
+        return NextResponse.json({ error: legacy.error.message }, { status: 500 });
       }
       tests = (legacy.data || []).map((t: any) => ({
         ...t, provider: 'prepfusion', test_category: 'standard', test_number: null,
         subject: null, topic: null, syllabus: null, exam_year: null, stream: null,
       }));
-      testError = null;
     }
 
-    const ids = (tests || []).map((t: any) => t.id);
+    // A test must explicitly belong to the user's selected stream. This also
+    // prevents legacy/null-stream tests from leaking into another branch.
+    tests = tests.filter((t: any) => {
+      const stream = String(t.stream || '').toLowerCase().trim();
+      return allowedStreams.has(stream);
+    });
+
+    const ids = tests.map((t: any) => t.id);
     if (!ids.length) return NextResponse.json({ tests: [] }, { headers: { 'Cache-Control': 'no-store' } });
 
     const { data: attempts, error: attemptError } = await admin
