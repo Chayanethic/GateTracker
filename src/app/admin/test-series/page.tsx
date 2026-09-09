@@ -264,7 +264,11 @@ export default function AdminTestSeries() {
     if (total !== Number(marks)) return toast.error(`Question marks total ${total}, but Maximum Marks is ${marks}. Edit the marks so the total matches.`);
     setUploading(true);
     try {
-      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, provider: uploadFormat === 'madeeasy' ? 'madeeasy' : 'prepfusion', testCategory: uploadFormat === 'madeeasy' ? madeEasyCategory : 'standard', testNumber: uploadFormat === 'madeeasy' && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: uploadFormat === 'madeeasy' ? madeEasySubject : '', topic: uploadFormat === 'madeeasy' ? madeEasyTopic : '', syllabus: uploadFormat === 'madeeasy' ? madeEasySyllabus : '', examYear: uploadFormat === 'madeeasy' && madeEasyYear ? Number(madeEasyYear) : null, stream: uploadFormat === 'madeeasy' ? madeEasyStream : '' }) });
+      const endpoint = uploadFormat === 'madeeasy' ? '/api/madeeasy-test-series/upload' : '/api/test-series/upload';
+      const payload = uploadFormat === 'madeeasy'
+        ? { title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, testCategory: madeEasyCategory, testNumber: madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: madeEasySubject, topic: madeEasyTopic, syllabus: madeEasySyllabus, examYear: madeEasyYear ? Number(madeEasyYear) : null, stream: madeEasyStream }
+        : { title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions };
+      const res = await fetch(endpoint, { method: 'POST', headers: adminHeaders, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       toast.success(`Test published with ${draftQuestions.length} questions.`);
