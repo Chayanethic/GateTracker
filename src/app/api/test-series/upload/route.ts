@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { gunzipSync } from 'node:zlib';
 
 const db = () =>
   createClient(
@@ -22,6 +23,18 @@ function adminOk(req: Request) {
   );
 }
 
+async function readJsonBody(req: Request) {
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  const encoding = String(req.headers.get('content-encoding') || '').toLowerCase();
+  if (encoding.includes('gzip')) {
+    const inflated = gunzipSync(bytes);
+    return JSON.parse(new TextDecoder().decode(inflated));
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+export const runtime = 'nodejs';
+
 export async function POST(req: Request) {
   try {
     if (!adminOk(req))
@@ -36,7 +49,7 @@ export async function POST(req: Request) {
         { status: 500 }
       );
 
-    const b = await req.json();
+    const b = await readJsonBody(req);
     const provider = String(b.provider || 'prepfusion').toLowerCase() === 'madeeasy' ? 'madeeasy' : 'prepfusion';
     const allowedCategories = new Set(['topicwise', 'subjectwise', 'full_syllabus', 'standard']);
     const testCategory = provider === 'madeeasy' && allowedCategories.has(String(b.testCategory || '')) ? String(b.testCategory) : 'standard';
@@ -66,6 +79,9 @@ export async function POST(req: Request) {
       );
     }
 
+    // Keep the candidate-facing question JSON compact. Answers, written/image
+    // solutions and video URLs are stored once in test_series_keys and fetched
+    // server-side when needed. This is important for large exported HTML files.
     const questions = b.questions.map((q: any) => ({
       id: String(q.id),
       number: Number(q.number),
@@ -128,32 +144,32 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    const { error: keyError } = await db()
-      .from('test_series_keys')
-      .insert(
-        keys.map(
-          (
-            k: {
-              test_series_id: string;
-              id_in_test: string;
-              number: number;
-              answer: string[];
-              solution_html: string;
-              video_url: string | null;
-              question_type: string;
-              marks: number;
-              negative_marks: number;
-            }
-          ) => ({
-            ...k,
-            test_series_id: data.id,
-          })
-        )
-      );
+    const keyRows = keys.map(
+      (
+        k: {
+          test_series_id: string;
+          id_in_test: string;
+          number: number;
+          answer: string[];
+          solution_html: string;
+          video_url: string | null;
+          question_type: string;
+          marks: number;
+          negative_marks: number;
+        }
+      ) => ({ ...k, test_series_id: data.id })
+    );
 
-    if (keyError) {
-      await db().from('test_series').delete().eq('id', data.id);
-      throw keyError;
+    // Insert in small batches so large 65-question exports (especially ones
+    // containing embedded solution images) do not hit a single huge request.
+    for (let i = 0; i < keyRows.length; i += 10) {
+      const { error: keyError } = await db()
+        .from('test_series_keys')
+        .insert(keyRows.slice(i, i + 10));
+      if (keyError) {
+        await db().from('test_series').delete().eq('id', data.id);
+        throw keyError;
+      }
     }
 
     return NextResponse.json({
