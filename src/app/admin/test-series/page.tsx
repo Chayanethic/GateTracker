@@ -387,7 +387,7 @@ export default function AdminTestSeries() {
     const subject = subjectRenameValue.trim();
     if (!subject) return toast.error('Subject name cannot be empty.');
     try {
-      const res = await fetch('/api/test-series/admin', { method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ id, action: 'rename_subject', subject }) });
+      const res = await fetch('/api/madeeasy-test-series/subject', { method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ id, subject }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Unable to rename subject.');
       setTests(prev => prev.map(t => t.id === id ? { ...t, subject: data.subject } : t));
