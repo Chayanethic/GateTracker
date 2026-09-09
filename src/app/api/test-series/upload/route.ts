@@ -37,15 +37,12 @@ export async function POST(req: Request) {
       );
 
     const b = await req.json();
-    const provider = String(b.provider || 'prepfusion').toLowerCase() === 'madeeasy' ? 'madeeasy' : 'prepfusion';
-    const allowedCategories = new Set(['topicwise', 'subjectwise', 'full_syllabus', 'standard']);
-    const testCategory = provider === 'madeeasy' && allowedCategories.has(String(b.testCategory || '')) ? String(b.testCategory) : 'standard';
-    const testNumber = b.testNumber == null || b.testNumber === '' ? null : Number(b.testNumber);
-    const subject = String(b.subject || '').trim() || null;
-    const topic = String(b.topic || '').trim() || null;
-    const syllabus = String(b.syllabus || '').trim() || null;
-    const examYear = b.examYear == null || b.examYear === '' ? null : Number(b.examYear);
-    const stream = String(b.stream || '').trim().toUpperCase() || null;
+
+    // This endpoint is intentionally STANDARD/PREPFUSION-only. MADE EASY
+    // publishing uses /api/madeeasy-test-series/upload so the two formats
+    // cannot accidentally become linked through the upload flow.
+    const provider = 'prepfusion';
+    const testCategory = 'standard';
 
     if (
       !b.title ||
@@ -96,14 +93,6 @@ export async function POST(req: Request) {
         question_count: questions.length,
         questions,
         is_published: true,
-        provider,
-        test_category: testCategory,
-        test_number: Number.isFinite(testNumber) ? testNumber : null,
-        subject,
-        topic,
-        syllabus,
-        exam_year: Number.isFinite(examYear) ? examYear : null,
-        stream,
       })
       .select('id')
       .single();
