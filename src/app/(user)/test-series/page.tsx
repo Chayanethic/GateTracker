@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Clock3, FileQuestion, LockKeyhole, ShieldAlert, CheckCircle2, RotateCcw, Trophy, ArrowRight, Flag, Layers3, BookOpen, GraduationCap, ListTree, ChevronLeft, Sparkles, Zap } from 'lucide-react';
+import { Clock3, FileQuestion, LockKeyhole, ShieldAlert, CheckCircle2, RotateCcw, Trophy, ArrowRight, Flag, Layers3, BookOpen, GraduationCap, ListTree, ChevronLeft, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type MadeEasyCategory = 'topicwise' | 'subjectwise' | 'full_syllabus';
@@ -229,10 +229,21 @@ export default function TestSeriesPage() {
 
                 <h2 className="text-base font-black leading-snug text-white mt-2 line-clamp-2 min-h-[2.5rem]">{t.title}</h2>
 
-                {(t.subject || t.topic) && (
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    {t.subject && <span className="max-w-full truncate rounded-lg bg-white/[0.04] border border-white/5 px-2 py-1 text-[9px] font-bold text-zinc-400">{t.subject}</span>}
-                    {t.topic && <span className="max-w-full truncate rounded-lg bg-white/[0.04] border border-white/5 px-2 py-1 text-[9px] font-bold text-zinc-500">{t.topic}</span>}
+                {(t.subject || t.topic || t.syllabus) && (
+                  <div className="mt-2.5 space-y-1.5">
+                    {(t.subject || t.topic) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {t.subject && <span className="max-w-full truncate rounded-lg bg-white/[0.04] border border-white/5 px-2 py-1 text-[9px] font-bold text-zinc-300">{t.subject}</span>}
+                        {t.topic && <span className="max-w-full truncate rounded-lg bg-white/[0.04] border border-white/5 px-2 py-1 text-[9px] font-bold text-zinc-500">{t.topic}</span>}
+                      </div>
+                    )}
+                    {t.syllabus && (
+                      <div className="rounded-lg border border-violet-500/10 bg-violet-500/[0.045] px-2.5 py-1.5 text-[9px] leading-snug text-zinc-400" title={t.syllabus}>
+                        <span className="font-black uppercase tracking-wider text-violet-300/80">Syllabus</span>
+                        <span className="mx-1 text-zinc-600">•</span>
+                        <span className="line-clamp-2">{t.syllabus}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -267,7 +278,7 @@ export default function TestSeriesPage() {
               {groupBySubject(items).map(group => (
                 <div key={group.subject}>
                   <div className="flex items-center gap-2 mb-2 text-xs font-black text-violet-200"><BookOpen size={14}/>{group.subject}</div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{group.items.sort((a,b)=>(a.test_number||999)-(b.test_number||999)).map(renderTest)}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">{group.items.sort((a,b)=>(a.test_number||999)-(b.test_number||999)).map(renderTest)}</div>
                 </div>
               ))}
               {!items.length && <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-xs text-zinc-500">No {title.toLowerCase()} tests published yet.</div>}
@@ -285,8 +296,7 @@ export default function TestSeriesPage() {
             <div className="relative flex items-center gap-3">
               <div className="w-11 h-11 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">{icon}</div>
               <div className="min-w-0 flex-1">
-                <div className="text-[9px] uppercase tracking-[0.18em] font-black text-zinc-500">Choose provider</div>
-                <h2 className="text-lg font-black text-white mt-0.5">{title}</h2>
+                <h2 className="text-lg font-black text-white">{title}</h2>
               </div>
               <ArrowRight size={18} className="text-zinc-500 group-hover:text-white group-hover:translate-x-1 transition-all" />
             </div>
@@ -300,19 +310,14 @@ export default function TestSeriesPage() {
 
         if (!selectedProvider) {
           return (
-            <section className="space-y-5">
-              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-emerald-500/[0.09] via-zinc-950 to-violet-500/[0.08] p-5 md:p-7">
-                <div className="absolute -top-24 -right-20 w-56 h-56 rounded-full bg-emerald-500/10 blur-3xl" />
-                <div className="relative flex items-start gap-4">
-                  <div className="w-12 h-12 shrink-0 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center"><Sparkles size={23}/></div>
-                  <div>
-                    <div className="flex items-center gap-2"><span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Test Library</span><Zap size={13} className="text-amber-300" /></div>
-                    <h2 className="text-2xl md:text-3xl font-black text-white mt-1">Choose your test series</h2>
-                    <p className="text-xs md:text-sm text-zinc-500 mt-2 max-w-2xl">Pick a provider to jump directly into its test collection. Everything is arranged for quick scanning and fast test selection.</p>
-                  </div>
+            <section className="space-y-4">
+              <div className="flex items-center justify-between gap-3 px-1">
+                <div>
+                  <div className="flex items-center gap-2"><Sparkles size={16} className="text-emerald-400"/><span className="text-xs font-black uppercase tracking-[0.18em] text-emerald-400">Test Library</span></div>
+                  <h2 className="text-xl md:text-2xl font-black text-white mt-1">Choose a test series</h2>
                 </div>
+                <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] font-black text-zinc-500">{tests.length} tests</span>
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                 {providerChoice('madeeasy', 'MADE EASY', 'Topicwise, Single Subject and Full Syllabus tests.', madeEasy.length, <GraduationCap size={22} className="text-violet-300" />, 'border-violet-500/25 hover:border-violet-400/60')}
                 {providerChoice('prepfusion', 'PREPFUSION', 'Standard GATE-style test series and practice tests.', prepfusion.length, <Layers3 size={22} className="text-emerald-300" />, 'border-emerald-500/25 hover:border-emerald-400/60')}
@@ -348,7 +353,7 @@ export default function TestSeriesPage() {
                   <div><h2 className="text-xl font-black text-white">PREPFUSION Test Series</h2><p className="text-[10px] text-zinc-500 mt-0.5">Standard GATE-style test series.</p></div>
                   <span className="ml-auto rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black text-zinc-400">{prepfusion.length} tests</span>
                 </div>
-                {prepfusion.length > 0 ? <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{prepfusion.map(renderTest)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-xs text-zinc-500">No PREPFUSION tests published yet.</div>}
+                {prepfusion.length > 0 ? <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">{prepfusion.map(renderTest)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-xs text-zinc-500">No PREPFUSION tests published yet.</div>}
               </div>
             )}
           </section>
