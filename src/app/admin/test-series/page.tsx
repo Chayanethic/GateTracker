@@ -195,6 +195,8 @@ export default function AdminTestSeries() {
   const [uploading, setUploading] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
   const [tests, setTests] = useState<any[]>([]);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[] | null>(null);
   const [marksMode, setMarksMode] = useState<'random' | 'edit' | null>(null);
   const [marksDetected, setMarksDetected] = useState(false);
@@ -224,6 +226,9 @@ export default function AdminTestSeries() {
     setMarksDetected(allPresent);
     setUploadFormat(format);
     if (allPresent) {
+      // The imported HTML is authoritative when every question contains marks.
+      // Sync Maximum Marks so the Publish button is not incorrectly disabled
+      // because the form still contains its default value (100).
       const detectedTotal = questions.reduce((sum, q) => sum + Number(q.marks || 0), 0);
       if (detectedTotal > 0) setMarks(String(detectedTotal));
       setMarksMode('edit');
@@ -266,7 +271,14 @@ export default function AdminTestSeries() {
     if (total !== Number(marks)) return toast.error(`Question marks total ${total}, but Maximum Marks is ${marks}. Edit the marks so the total matches.`);
     setUploading(true);
     try {
-      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, provider: uploadFormat === 'madeeasy' ? 'madeeasy' : 'prepfusion', testCategory: uploadFormat === 'madeeasy' ? madeEasyCategory : 'standard', testNumber: uploadFormat === 'madeeasy' && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: uploadFormat === 'madeeasy' ? madeEasySubject : '', topic: uploadFormat === 'madeeasy' ? madeEasyTopic : '', syllabus: uploadFormat === 'madeeasy' ? madeEasySyllabus : '', examYear: uploadFormat === 'madeeasy' && madeEasyYear ? Number(madeEasyYear) : null, stream: uploadFormat === 'madeeasy' ? madeEasyStream : '' }) });
+      const isMadeEasy = uploadFormat === 'madeeasy';
+      const effectiveTitle = title.trim() || (isMadeEasy ? madeEasySubject.trim() : '');
+      const effectiveExamName = examName.trim() || (isMadeEasy ? 'MADE EASY' : '');
+      if (!effectiveTitle || !effectiveExamName) {
+        toast.error(isMadeEasy ? 'Please provide a subject so the MADE EASY test can be named.' : 'Title and exam name are required.');
+        return;
+      }
+      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ title: effectiveTitle, examName: effectiveExamName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, provider: isMadeEasy ? 'madeeasy' : 'prepfusion', testCategory: isMadeEasy ? madeEasyCategory : 'standard', testNumber: isMadeEasy && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: isMadeEasy ? madeEasySubject : '', topic: isMadeEasy ? madeEasyTopic : '', syllabus: isMadeEasy ? madeEasySyllabus : '', examYear: isMadeEasy && madeEasyYear ? Number(madeEasyYear) : null, stream: isMadeEasy ? madeEasyStream : '' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       toast.success(`Test published with ${draftQuestions.length} questions.`);
@@ -309,7 +321,6 @@ export default function AdminTestSeries() {
         if (inferred.stream) setMadeEasyStream(inferred.stream);
         if (inferred.subject) {
           setMadeEasySubject(inferred.subject);
-          if (!examName.trim()) setExamName(inferred.subject);
         }
         if (inferred.category === 'topicwise' && inferred.testNumber != null && inferred.testNumber >= 1 && inferred.testNumber <= 24 && inferred.stream === 'EC' && inferred.year === 2026 && usePdfSyllabus) {
           setMadeEasySyllabus(MADE_EASY_EC_TOPICWISE_SYLLABUS[inferred.testNumber] || '');
@@ -327,6 +338,22 @@ export default function AdminTestSeries() {
     const res = await fetch('/api/test-series/admin', { method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ id, status }) });
     const data = await res.json();
     if (!res.ok) toast.error(data.error || 'Update failed.'); else { toast.success(status === 'approved' ? 'Access approved.' : 'Access rejected.'); load(); }
+  };
+
+  const renameTest = async (id: string) => {
+    const name = renameValue.trim();
+    if (!name) return toast.error('Test title cannot be empty.');
+    const res = await fetch('/api/test-series/admin', {
+      method: 'PATCH',
+      headers: adminHeaders,
+      body: JSON.stringify({ id, action: 'rename', title: name }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error(data.error || 'Unable to rename test.');
+    setTests(prev => prev.map(t => t.id === id ? { ...t, title: name } : t));
+    setRenamingId(null);
+    setRenameValue('');
+    toast.success('Test renamed.');
   };
 
   const deleteSyllabus = async (id: string, testTitle: string) => {
@@ -358,10 +385,8 @@ export default function AdminTestSeries() {
         <span className="px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-black uppercase">MADE EASY FORMAT</span>
       </div>
       <div className="grid md:grid-cols-2 gap-4">
-        <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Test title (optional: uses HTML title)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
-        <input required value={examName} onChange={e=>setExamName(e.target.value)} placeholder="Exam name (e.g. GATE ECE)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
-        <input required type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} placeholder="Time in minutes" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
         <input required type="number" min="1" value={marks} onChange={e=>setMarks(e.target.value)} placeholder="Maximum marks" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+        <input required type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} placeholder="Time in minutes" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
       </div>
       <div className="rounded-2xl border border-violet-500/20 bg-black/20 p-4 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -423,6 +448,6 @@ export default function AdminTestSeries() {
       {requests.length === 0 ? <p className="p-5 text-gray-500">No access requests.</p> : <div className="divide-y divide-gray-800">{requests.map(r=><div key={r.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-mono text-sm text-white">{r.user_id}</div><div className="text-xs text-gray-500 flex items-center gap-1 mt-1"><Clock3 size={12}/> {new Date(r.requested_at).toLocaleString()}</div></div><div className="flex items-center gap-2">{r.status === 'pending' ? <><button onClick={()=>updateRequest(r.id,'approved')} className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-bold flex items-center gap-1"><Check size={16}/> Approve</button><button onClick={()=>updateRequest(r.id,'rejected')} className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold flex items-center gap-1"><X size={16}/> Reject</button></> : <span className="text-xs font-black uppercase text-gray-400">{r.status}</span>}</div></div>)}</div>}
     </section>
 
-    <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden"><div className="p-5 border-b border-gray-800 font-bold text-white">Published Tests</div><div className="divide-y divide-gray-800">{tests.map(t=><div key={t.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-bold text-white">{t.title}</div><div className="text-xs text-gray-500 mt-1">{t.exam_name} • {t.question_count} questions • {t.duration_minutes} min • {t.max_marks} marks</div><div className="text-[11px] text-zinc-500 mt-2 flex flex-wrap gap-2"><span className="px-2 py-1 rounded-full bg-white/5 border border-white/10">{t.provider === 'madeeasy' ? 'MADE EASY' : 'PREPFUSION'}</span>{t.provider === 'madeeasy' && t.test_category && <span className="px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/10">{t.test_category === 'subjectwise' ? 'SINGLE SUBJECT' : t.test_category.replace('_',' ').toUpperCase()}</span>}{t.test_number ? <span>Test No. {t.test_number}</span> : null}{t.subject ? <span>• {t.subject}</span> : null}{t.topic ? <span>• {t.topic}</span> : null}</div></div><div className="flex items-center gap-3"><span className="text-xs text-emerald-400 font-bold">{t.is_published ? 'PUBLISHED' : 'DRAFT'}</span>{t.syllabus && <button type="button" onClick={()=>deleteSyllabus(t.id,t.title)} className="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold hover:bg-amber-500/20">Delete Syllabus</button>}<button type="button" onClick={()=>deleteTest(t.id,t.title)} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold hover:bg-red-500/20">Delete</button></div></div>)}{!tests.length && <p className="p-5 text-gray-500">No tests published yet.</p>}</div></section>
+    <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden"><div className="p-5 border-b border-gray-800 font-bold text-white">Published Tests</div><div className="divide-y divide-gray-800">{tests.map(t=><div key={t.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-bold text-white">{t.title}</div><div className="text-xs text-gray-500 mt-1">{t.exam_name} • {t.question_count} questions • {t.duration_minutes} min • {t.max_marks} marks</div><div className="text-[11px] text-zinc-500 mt-2 flex flex-wrap gap-2"><span className="px-2 py-1 rounded-full bg-white/5 border border-white/10">{t.provider === 'madeeasy' ? 'MADE EASY' : 'PREPFUSION'}</span>{t.provider === 'madeeasy' && t.test_category && <span className="px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/10">{t.test_category === 'subjectwise' ? 'SINGLE SUBJECT' : t.test_category.replace('_',' ').toUpperCase()}</span>}{t.test_number ? <span>Test No. {t.test_number}</span> : null}{t.subject ? <span>• {t.subject}</span> : null}{t.topic ? <span>• {t.topic}</span> : null}</div></div><div className="flex items-center gap-3"><span className="text-xs text-emerald-400 font-bold">{t.is_published ? 'PUBLISHED' : 'DRAFT'}</span>{t.syllabus && <button type="button" onClick={()=>deleteSyllabus(t.id,t.title)} className="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold hover:bg-amber-500/20">Delete Syllabus</button>}{renamingId === t.id ? (<><input autoFocus value={renameValue} onChange={e=>setRenameValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') renameTest(t.id); if(e.key==='Escape'){setRenamingId(null);setRenameValue('')}}} className="w-56 bg-black border border-gray-700 rounded-lg px-3 py-2 text-white"/><button type="button" onClick={()=>renameTest(t.id)} className="px-3 py-2 rounded-lg bg-emerald-500 text-black font-bold">Save</button><button type="button" onClick={()=>{setRenamingId(null);setRenameValue('')}} className="px-3 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></>) : (<button type="button" onClick={()=>{setRenamingId(t.id);setRenameValue(t.title || '')}} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-300 border border-blue-500/20 font-bold hover:bg-blue-500/20">Rename</button>)}<button type="button" onClick={()=>deleteTest(t.id,t.title)} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold hover:bg-red-500/20">Delete</button></div></div>)}{!tests.length && <p className="p-5 text-gray-500">No tests published yet.</p>}</div></section>
   </div>;
 }
