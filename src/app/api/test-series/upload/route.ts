@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     const questions = b.questions.map((q: any) => ({
       id: String(q.id),
       number: Number(q.number),
-      type: String(q.type),
+      type: String(q.type).toUpperCase(),
       questionHtml: clean(String(q.questionHtml || '')),
       options: (q.options || []).map((o: any) => ({
         key: String(o.key),
@@ -73,6 +73,19 @@ export async function POST(req: Request) {
       marks: Number(q.marks),
       negativeMarks: Number(q.negativeMarks || 0),
     }));
+
+    if (questions.some((q: any) => !Number.isFinite(q.marks) || q.marks <= 0)) {
+      return NextResponse.json(
+        { error: 'Every question must have a valid positive mark value.' },
+        { status: 400 }
+      );
+    }
+    if (questions.some((q: any) => !Number.isFinite(q.negativeMarks) || q.negativeMarks < 0)) {
+      return NextResponse.json(
+        { error: 'Every question must have a valid non-negative negative-mark value.' },
+        { status: 400 }
+      );
+    }
 
     const keys = b.questions.map((q: any) => ({
       test_series_id: 'TEMP',
