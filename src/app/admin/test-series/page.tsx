@@ -224,8 +224,13 @@ export default function AdminTestSeries() {
     setMarksDetected(allPresent);
     setUploadFormat(format);
     if (allPresent) {
+      // The imported HTML is authoritative when every question contains marks.
+      // Sync Maximum Marks so the Publish button is not incorrectly disabled
+      // because the form still contains its default value (100).
+      const detectedTotal = questions.reduce((sum, q) => sum + Number(q.marks || 0), 0);
+      if (detectedTotal > 0) setMarks(String(detectedTotal));
       setMarksMode('edit');
-      toast.success('Marks found in HTML. Review them before publishing.');
+      toast.success(`Marks found in HTML. Maximum Marks set to ${detectedTotal}. Review before publishing.`);
       return;
     }
     setMarksMode(null);
