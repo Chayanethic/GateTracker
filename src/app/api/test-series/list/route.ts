@@ -51,7 +51,7 @@ export async function GET(req: Request) {
     // automatically and cannot remain as stale cards on the user page.
     const { data: tests, error: testError } = await admin
       .from('test_series')
-      .select('id,title,exam_name,duration_minutes,max_marks,question_count,created_at,is_published')
+      .select('id,title,exam_name,duration_minutes,max_marks,question_count,created_at,is_published,provider,test_category,test_number,subject,topic,syllabus,exam_year,stream')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
@@ -91,6 +91,14 @@ export async function GET(req: Request) {
         max_marks: t.max_marks,
         question_count: t.question_count,
         created_at: t.created_at,
+        provider: t.provider || 'prepfusion',
+        test_category: t.test_category || 'standard',
+        test_number: t.test_number ?? null,
+        subject: t.subject || null,
+        topic: t.topic || null,
+        syllabus: t.syllabus || null,
+        exam_year: t.exam_year ?? null,
+        stream: t.stream || null,
         attempt_count: list.length,
         latest_attempt: latest
           ? {
