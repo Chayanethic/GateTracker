@@ -190,6 +190,8 @@ export default function AdminTestSeries() {
   const [duration, setDuration] = useState('180');
   const [marks, setMarks] = useState('100');
   const [file, setFile] = useState<File | null>(null);
+  const [madeEasyFile, setMadeEasyFile] = useState<File | null>(null);
+  const madeEasyFileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
   const [tests, setTests] = useState<any[]>([]);
@@ -262,15 +264,11 @@ export default function AdminTestSeries() {
     if (total !== Number(marks)) return toast.error(`Question marks total ${total}, but Maximum Marks is ${marks}. Edit the marks so the total matches.`);
     setUploading(true);
     try {
-      const endpoint = uploadFormat === 'madeeasy' ? '/api/madeeasy-test-series/upload' : '/api/test-series/upload';
-      const payload = uploadFormat === 'madeeasy'
-        ? { title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, testCategory: madeEasyCategory, testNumber: madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: madeEasySubject, topic: madeEasyTopic, syllabus: madeEasySyllabus, examYear: madeEasyYear ? Number(madeEasyYear) : null, stream: madeEasyStream }
-        : { title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions };
-      const res = await fetch(endpoint, { method: 'POST', headers: adminHeaders, body: JSON.stringify(payload) });
+      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, provider: uploadFormat === 'madeeasy' ? 'madeeasy' : 'prepfusion', testCategory: uploadFormat === 'madeeasy' ? madeEasyCategory : 'standard', testNumber: uploadFormat === 'madeeasy' && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: uploadFormat === 'madeeasy' ? madeEasySubject : '', topic: uploadFormat === 'madeeasy' ? madeEasyTopic : '', syllabus: uploadFormat === 'madeeasy' ? madeEasySyllabus : '', examYear: uploadFormat === 'madeeasy' && madeEasyYear ? Number(madeEasyYear) : null, stream: uploadFormat === 'madeeasy' ? madeEasyStream : '' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       toast.success(`Test published with ${draftQuestions.length} questions.`);
-      setTitle(''); setExamName(''); setFile(null); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard'); setMadeEasyCategory('full_syllabus'); setMadeEasyTestNumber(''); setMadeEasySubject(''); setMadeEasyTopic(''); setMadeEasySyllabus(''); setMadeEasyYear(''); setMadeEasyStream(''); setUsePdfSyllabus(true); setMadeEasyMetaManual(false);
+      setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard'); setMadeEasyCategory('full_syllabus'); setMadeEasyTestNumber(''); setMadeEasySubject(''); setMadeEasyTopic(''); setMadeEasySyllabus(''); setMadeEasyYear(''); setMadeEasyStream(''); setUsePdfSyllabus(true); setMadeEasyMetaManual(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       load();
     } catch (err: any) { toast.error(err.message); }
@@ -292,43 +290,33 @@ export default function AdminTestSeries() {
 
   const uploadMadeEasy = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return toast.error('Select the HTML file first.');
+    if (!madeEasyFile) return toast.error('Select the MADE EASY index.html file first.');
     setUploading(true);
     try {
-      const html = await file.text();
-      const parsed = parseAnyTestHtml(html);
-      if (!parsed.questions.length) throw new Error('No supported test-series questions were found. Upload a standard PREPFUSION HTML export or the MADE EASY index.html format.');
-
-      if (parsed.format === 'madeeasy') {
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const detectedTitle = (doc.title || '').trim();
-        const effectiveTitle = title.trim() || detectedTitle;
-        if (!title.trim() && detectedTitle) setTitle(detectedTitle);
-        const inferred = inferMadeEasyMeta(effectiveTitle);
-        if (!madeEasyMetaManual) {
-          setMadeEasyCategory(inferred.category);
-          if (inferred.testNumber != null) setMadeEasyTestNumber(String(inferred.testNumber));
-          if (inferred.year != null) setMadeEasyYear(String(inferred.year));
-          if (inferred.stream) setMadeEasyStream(inferred.stream);
-          if (inferred.subject) {
-            setMadeEasySubject(inferred.subject);
-            if (!examName.trim()) setExamName(inferred.subject);
-          }
-          if (inferred.category === 'topicwise' && inferred.testNumber != null && inferred.testNumber >= 1 && inferred.testNumber <= 24 && inferred.stream === 'EC' && inferred.year === 2026 && usePdfSyllabus) {
-            setMadeEasySyllabus(MADE_EASY_EC_TOPICWISE_SYLLABUS[inferred.testNumber] || '');
-          } else if (inferred.category !== 'topicwise') {
-            setMadeEasySyllabus('');
-          }
+      const html = await madeEasyFile.text();
+      const parsed = parseMadeEasyHtml(html);
+      if (!parsed.questions.length) throw new Error('This file does not match the MADE EASY index.html format.');
+      const detectedTitle = (new DOMParser().parseFromString(html, 'text/html').title || '').trim();
+      const effectiveTitle = title.trim() || detectedTitle;
+      if (!title.trim() && detectedTitle) setTitle(detectedTitle);
+      const inferred = inferMadeEasyMeta(effectiveTitle);
+      if (!madeEasyMetaManual) {
+        setMadeEasyCategory(inferred.category);
+        if (inferred.testNumber != null) setMadeEasyTestNumber(String(inferred.testNumber));
+        if (inferred.year != null) setMadeEasyYear(String(inferred.year));
+        if (inferred.stream) setMadeEasyStream(inferred.stream);
+        if (inferred.subject) {
+          setMadeEasySubject(inferred.subject);
+          if (!examName.trim()) setExamName(inferred.subject);
         }
-        toast.success(`MADE EASY format detected: ${parsed.questions.length} questions extracted.`);
-      } else {
-        // Standard/PREPFUSION stays completely separate from MADE EASY metadata.
-        setMadeEasyMetaManual(false);
-        setMadeEasySyllabus('');
-        toast.success(`Standard/PREPFUSION format detected: ${parsed.questions.length} questions extracted.`);
+        if (inferred.category === 'topicwise' && inferred.testNumber != null && inferred.testNumber >= 1 && inferred.testNumber <= 24 && inferred.stream === 'EC' && inferred.year === 2026 && usePdfSyllabus) {
+          setMadeEasySyllabus(MADE_EASY_EC_TOPICWISE_SYLLABUS[inferred.testNumber] || '');
+        } else if (inferred.category !== 'topicwise') {
+          setMadeEasySyllabus('');
+        }
       }
-
-      prepareMarks(parsed.questions, parsed.allMarksPresent, parsed.format);
+      prepareMarks(parsed.questions, parsed.allMarksPresent, 'madeeasy');
+      toast.success(`MADE EASY format detected: ${parsed.questions.length} questions extracted.`);
     } catch (err: any) { toast.error(err.message); }
     finally { setUploading(false); }
   };
@@ -362,32 +350,21 @@ export default function AdminTestSeries() {
 
   return <div className="max-w-6xl mx-auto space-y-10">
     <div><h1 className="text-3xl font-black text-white">Test Series Control</h1><p className="text-gray-500 mt-2">Upload the exported HTML, define per-question marks, and control candidate access.</p></div>
-    <form onSubmit={uploadMadeEasy} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+    <form onSubmit={uploadMadeEasy} className="bg-gradient-to-br from-violet-950/40 to-gray-900 border border-violet-500/20 rounded-2xl p-6 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3 text-white font-black text-lg"><FileUp size={20}/> Upload Test Series HTML</div>
-          <p className="text-xs text-zinc-500 mt-1">Upload <b>one HTML file here</b>. The system automatically detects whether it is the Standard/PREPFUSION format or the MADE EASY index.html format.</p>
-        </div>
-        <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-zinc-300 text-[10px] font-black uppercase">AUTO DETECT FORMAT</span>
+        <div><div className="flex items-center gap-3 text-violet-300 font-black text-lg"><FileUp size={20}/> MADE EASY Test Series</div><p className="text-xs text-zinc-500 mt-1">Upload the original MADE EASY <b>index.html</b>. The importer converts its qcard structure internally to the same GateTracker question format.</p></div>
+        <span className="px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-black uppercase">MADE EASY FORMAT</span>
       </div>
-
       <div className="grid md:grid-cols-2 gap-4">
-        <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Test title (optional for MADE EASY; HTML title is used automatically)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
-        <input value={examName} onChange={e=>setExamName(e.target.value)} placeholder="Exam name (auto for MADE EASY when detected)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+        <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Test title (optional: uses HTML title)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+        <input required value={examName} onChange={e=>setExamName(e.target.value)} placeholder="Exam name (e.g. GATE ECE)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
         <input required type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} placeholder="Time in minutes" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
         <input required type="number" min="1" value={marks} onChange={e=>setMarks(e.target.value)} placeholder="Maximum marks" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
       </div>
-
-      <input ref={fileInputRef} required type="file" accept=".html,text/html" onChange={e=>{setFile(e.target.files?.[0] || null);setDraftQuestions(null);setMarksMode(null);setMarksDetected(false)}} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
-      <button disabled={uploading} className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-black font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Detecting & Extracting HTML...' : 'Detect Format & Extract Questions'}</button>
-      <p className="text-xs text-gray-500">Only this one file input is used for both formats. After extraction, the marking section and its Publish button belong exclusively to the detected format.</p>
-    </form>
-
-    {draftQuestions && uploadFormat === 'madeeasy' && (
-      <section className="bg-gradient-to-br from-violet-950/30 to-gray-900 border border-violet-500/20 rounded-2xl p-6 space-y-4">
+      <div className="rounded-2xl border border-violet-500/20 bg-black/20 p-4 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><div className="font-black text-violet-300">MADE EASY Test Structure</div><div className="text-xs text-zinc-500 mt-1">Detected from the title. You can manually correct these values before publishing.</div></div>
-          <span className="px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-black uppercase">MADE EASY ONLY</span>
+          <div><div className="font-black text-white">MADE EASY Test Structure</div><div className="text-xs text-zinc-500 mt-1">Choose manually, or leave Auto from title to detect Topicwise / Single Subject / Full Syllabus.</div></div>
+          <span className="text-[10px] font-black uppercase tracking-widest text-violet-300">Page 19–20 schedule structure</span>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
           <select value={madeEasyCategory} onChange={e=>{setMadeEasyMetaManual(true);setMadeEasyCategory(e.target.value as MadeEasyCategory)}} className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white">
@@ -396,16 +373,35 @@ export default function AdminTestSeries() {
           <input type="number" min="1" value={madeEasyTestNumber} onChange={e=>{setMadeEasyMetaManual(true);setMadeEasyTestNumber(e.target.value)}} placeholder="Test No. / SL No." className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
           <input type="number" min="2000" max="2100" value={madeEasyYear} onChange={e=>setMadeEasyYear(e.target.value)} placeholder="Year (auto from title)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
           <input value={madeEasyStream} onChange={e=>setMadeEasyStream(e.target.value.toUpperCase())} placeholder="Stream (EC / CE / ME...)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
-          <input value={madeEasySubject} onChange={e=>setMadeEasySubject(e.target.value)} placeholder="Subject" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+          <input value={madeEasySubject} onChange={e=>setMadeEasySubject(e.target.value)} placeholder="Subject / title subject" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
           <input value={madeEasyTopic} onChange={e=>setMadeEasyTopic(e.target.value)} placeholder="Topic" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
         </div>
         <label className="flex items-center gap-3 rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3 cursor-pointer">
           <input type="checkbox" checked={usePdfSyllabus} onChange={e=>{setUsePdfSyllabus(e.target.checked); if (!e.target.checked) setMadeEasySyllabus('');}} className="h-4 w-4 accent-violet-500"/>
-          <span><b className="text-white text-sm">Use syllabus info from PDF</b><span className="block text-xs text-zinc-500 mt-0.5">For EC 2026 Topicwise Tests 1–24, use the supplied schedule syllabus. Uncheck it if you do not want PDF syllabus data.</span></span>
+          <span><b className="text-white text-sm">Use syllabus info from PDF</b><span className="block text-xs text-zinc-500 mt-0.5">For the supplied Electronics Engineering schedule: Topicwise Test 1–24 uses the syllabus from PDF page 19. Uncheck to leave it empty.</span></span>
         </label>
         <textarea value={madeEasySyllabus} onChange={e=>setMadeEasySyllabus(e.target.value)} placeholder="Syllabus / coverage" rows={3} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-white resize-y"/>
-      </section>
-    )}
+        <div className="text-xs text-zinc-500">Auto-detection example: “Topicwise Test-9 Part Syllabus GATE 2026 EC Engineering Mathematics-1” → Topicwise, Test 9, Year 2026, Stream EC, Subject Engineering Mathematics-1. You can correct any field manually before publishing. PDF pages 19–20 show Topicwise 1–24, Single Subject 25–36, Full Syllabus 37–44 and Mock Tests 45–48.</div>
+      </div>
+      <input ref={madeEasyFileInputRef} required type="file" accept=".html,text/html" onChange={e=>setMadeEasyFile(e.target.files?.[0] || null)} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
+      <button disabled={uploading} className="w-full flex items-center justify-center gap-2 bg-violet-500 text-white font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Reading MADE EASY HTML...' : 'Import MADE EASY index.html & Set Marks'}</button>
+      <p className="text-xs text-zinc-500">Supports MCQ, MSQ and NAT. It extracts question text, embedded images, options, correct answers, positive/negative marks and written/image solutions when present.</p>
+    </form>
+
+    <form onSubmit={upload} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 grid md:grid-cols-2 gap-5">
+      <div className="md:col-span-2 flex items-center gap-3 text-emerald-400 font-bold"><FileUp size={20}/> Publish New Test</div>
+      <div className="md:col-span-2 grid md:grid-cols-2 gap-3">
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><div className="font-black text-emerald-300">Standard Test Series</div><div className="text-xs text-zinc-500 mt-1">Rank Pulse / questionCard export with video or written solutions.</div></div>
+        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4"><div className="font-black text-violet-300">MADE EASY Test Series</div><div className="text-xs text-zinc-500 mt-1">Upload the MADE EASY <b>index.html</b> format. Questions, options, answers, marks and image/written solutions are extracted automatically.</div></div>
+      </div>
+      <input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="Title (e.g. Full Mock Test 01)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+      <input required value={examName} onChange={e=>setExamName(e.target.value)} placeholder="Exam name (e.g. GATE ECE)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+      <input required type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} placeholder="Time in minutes" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+      <input required type="number" min="1" value={marks} onChange={e=>setMarks(e.target.value)} placeholder="Maximum marks" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+      <input ref={fileInputRef} required type="file" accept=".html,text/html" onChange={e=>setFile(e.target.files?.[0] || null)} className="md:col-span-2 bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
+      <button disabled={uploading} className="md:col-span-2 flex items-center justify-center gap-2 bg-emerald-500 text-black font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Reading HTML...' : 'Read HTML & Set Marks'}</button>
+      <p className="md:col-span-2 text-xs text-gray-500">If the export does not contain marks for every question, the next step will let you randomly distribute 1/2 marks or edit every question manually. MCQ negative marks are automatically 0.33 for 1 mark and 0.66 for 2 marks; MSQ/NAT have no negative marks.</p>
+    </form>
 
     {draftQuestions && !marksMode && !marksDetected && <section className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-6 space-y-5">
       <div><div className="flex items-center gap-2 text-amber-300 font-black text-lg"><Sparkles size={19}/> Marks not found in HTML</div><p className="text-sm text-amber-100/70 mt-2">This export does not define marks for every question. You can automatically distribute 1 and 2 marks randomly while keeping the total equal to Maximum Marks ({marks}), or edit them yourself.</p></div>
@@ -415,8 +411,8 @@ export default function AdminTestSeries() {
     </section>}
 
     {draftQuestions && marksMode === 'edit' && <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-      <div className="p-5 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><div className="text-lg font-black text-white">{uploadFormat === 'madeeasy' ? 'MADE EASY Question Marking' : 'Standard Test Question Marking'}</div><span className={`px-2 py-1 rounded-full ${uploadFormat === 'madeeasy' ? 'bg-violet-500/10 border border-violet-500/20 text-violet-300' : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'} text-[10px] font-black uppercase`}>{uploadFormat === 'madeeasy' ? 'MADE EASY ONLY' : 'PREPFUSION / STANDARD ONLY'}</span></div><div className="text-xs text-zinc-500 mt-1">{draftQuestions.length} questions • {draftMcq} MCQ • {draftMsq} MSQ • {draftNat} NAT</div></div><div className={`text-sm font-black ${totalDraftMarks === Number(marks) ? 'text-emerald-400' : 'text-amber-400'}`}>Total: {totalDraftMarks} / {marks}</div></div>
-      <div className="p-4 flex flex-wrap gap-3 border-b border-gray-800"><button type="button" onClick={resetRandom} className="px-4 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-bold flex items-center gap-2"><RotateCcw size={15}/> Randomize Again</button><button type="button" onClick={publishPrepared} disabled={uploading || totalDraftMarks !== Number(marks)} className="px-5 py-2 rounded-lg bg-emerald-500 text-black font-black flex items-center gap-2 disabled:opacity-40"><Save size={15}/> {uploading ? 'Publishing...' : uploadFormat === 'madeeasy' ? 'Publish MADE EASY Test' : 'Publish Standard Test'}</button><button type="button" onClick={()=>{setDraftQuestions(null);setMarksMode(null)}} className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></div>
+      <div className="p-5 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><div className="text-lg font-black text-white">Question Marking</div><span className="px-2 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-black uppercase">{uploadFormat === 'madeeasy' ? 'MADE EASY' : 'STANDARD'}</span></div><div className="text-xs text-zinc-500 mt-1">{draftQuestions.length} questions • {draftMcq} MCQ • {draftMsq} MSQ • {draftNat} NAT</div></div><div className={`text-sm font-black ${totalDraftMarks === Number(marks) ? 'text-emerald-400' : 'text-amber-400'}`}>Total: {totalDraftMarks} / {marks}</div></div>
+      <div className="p-4 flex flex-wrap gap-3 border-b border-gray-800"><button type="button" onClick={resetRandom} className="px-4 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-bold flex items-center gap-2"><RotateCcw size={15}/> Randomize Again</button><button type="button" onClick={publishPrepared} disabled={uploading || totalDraftMarks !== Number(marks)} className="px-5 py-2 rounded-lg bg-emerald-500 text-black font-black flex items-center gap-2 disabled:opacity-40"><Save size={15}/> {uploading ? 'Publishing...' : 'Save Marks & Publish'}</button><button type="button" onClick={()=>{setDraftQuestions(null);setMarksMode(null)}} className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></div>
       <div className="max-h-[620px] overflow-auto divide-y divide-gray-800">{draftQuestions.map(q=><div key={q.id} className="p-4 flex flex-wrap items-center gap-4"><div className="w-16 font-black text-white">Q{q.number}</div><span className={`px-2 py-1 rounded-full text-[10px] font-black ${q.type==='MCQ'?'bg-cyan-500/10 text-cyan-300':q.type==='MSQ'?'bg-violet-500/10 text-violet-300':'bg-amber-500/10 text-amber-300'}`}>{q.type}</span><select value={q.marks ?? ''} onChange={e=>editMark(q.id,e.target.value)} className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-white font-bold"><option value="">Select marks</option><option value="1">1 Mark</option><option value="2">2 Marks</option></select><span className="text-sm text-zinc-400">Positive: <b className="text-emerald-400">+{Number(q.marks || 0).toFixed(2)}</b></span><span className="text-sm text-zinc-400">Negative: <b className={q.type==='MCQ'?'text-red-400':'text-zinc-500'}>{q.type==='MCQ'?`-${negativeFor(q.type,Number(q.marks||1)).toFixed(2)}`:'0.00'}</b></span></div>)}</div>
       <div className="p-4 text-xs text-zinc-500 border-t border-gray-800">Changing a question from 1 → 2 automatically changes MCQ negative marking from −0.33 → −0.66. MSQ and NAT always remain −0.00.</div>
     </section>}
