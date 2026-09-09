@@ -191,6 +191,7 @@ export default function AdminTestSeries() {
   const [marks, setMarks] = useState('100');
   const [file, setFile] = useState<File | null>(null);
   const [madeEasyFile, setMadeEasyFile] = useState<File | null>(null);
+  const [madeEasyHtml, setMadeEasyHtml] = useState('');
   const madeEasyFileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
@@ -282,7 +283,7 @@ export default function AdminTestSeries() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       toast.success(`Test published with ${draftQuestions.length} questions.`);
-      setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard'); setMadeEasyCategory('full_syllabus'); setMadeEasyTestNumber(''); setMadeEasySubject(''); setMadeEasyTopic(''); setMadeEasySyllabus(''); setMadeEasyYear(''); setMadeEasyStream(''); setUsePdfSyllabus(true); setMadeEasyMetaManual(false);
+      setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setMadeEasyHtml(''); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard'); setMadeEasyCategory('full_syllabus'); setMadeEasyTestNumber(''); setMadeEasySubject(''); setMadeEasyTopic(''); setMadeEasySyllabus(''); setMadeEasyYear(''); setMadeEasyStream(''); setUsePdfSyllabus(true); setMadeEasyMetaManual(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       load();
     } catch (err: any) { toast.error(err.message); }
@@ -304,10 +305,12 @@ export default function AdminTestSeries() {
 
   const uploadMadeEasy = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!madeEasyFile) return toast.error('Select the MADE EASY index.html file first.');
+    if (!madeEasyFile && !madeEasyHtml.trim()) {
+      return toast.error('Upload the MADE EASY index.html file or paste the HTML code.');
+    }
     setUploading(true);
     try {
-      const html = await madeEasyFile.text();
+      const html = madeEasyHtml.trim() || await madeEasyFile!.text();
       const parsed = parseMadeEasyHtml(html);
       if (!parsed.questions.length) throw new Error('This file does not match the MADE EASY index.html format.');
       const detectedTitle = (new DOMParser().parseFromString(html, 'text/html').title || '').trim();
@@ -410,9 +413,18 @@ export default function AdminTestSeries() {
         <textarea value={madeEasySyllabus} onChange={e=>setMadeEasySyllabus(e.target.value)} placeholder="Syllabus / coverage" rows={3} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-white resize-y"/>
         <div className="text-xs text-zinc-500">Auto-detection example: “Topicwise Test-9 Part Syllabus GATE 2026 EC Engineering Mathematics-1” → Topicwise, Test 9, Year 2026, Stream EC, Subject Engineering Mathematics-1. You can correct any field manually before publishing. PDF pages 19–20 show Topicwise 1–24, Single Subject 25–36, Full Syllabus 37–44 and Mock Tests 45–48.</div>
       </div>
-      <input ref={madeEasyFileInputRef} required type="file" accept=".html,text/html" onChange={e=>setMadeEasyFile(e.target.files?.[0] || null)} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
-      <button disabled={uploading} className="w-full flex items-center justify-center gap-2 bg-violet-500 text-white font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Reading MADE EASY HTML...' : 'Import MADE EASY index.html & Set Marks'}</button>
-      <p className="text-xs text-zinc-500">Supports MCQ, MSQ and NAT. It extracts question text, embedded images, options, correct answers, positive/negative marks and written/image solutions when present.</p>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className="text-xs font-black uppercase tracking-wider text-zinc-400">Option 1 · Upload HTML file</label>
+          <input ref={madeEasyFileInputRef} type="file" accept=".html,text/html" onChange={e=>{setMadeEasyFile(e.target.files?.[0] || null); if (e.target.files?.[0]) setMadeEasyHtml('')}} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-black uppercase tracking-wider text-zinc-400">Option 2 · Paste HTML code</label>
+          <textarea value={madeEasyHtml} onChange={e=>{setMadeEasyHtml(e.target.value); if (e.target.value.trim()) { setMadeEasyFile(null); if (madeEasyFileInputRef.current) madeEasyFileInputRef.current.value=''; }}} placeholder="Paste the complete MADE EASY index.html code here..." rows={4} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-white font-mono text-xs resize-y"/>
+        </div>
+      </div>
+      <button disabled={uploading} className="w-full flex items-center justify-center gap-2 bg-violet-500 text-white font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Reading MADE EASY HTML...' : 'Import MADE EASY HTML & Set Marks'}</button>
+      <p className="text-xs text-zinc-500">You can now upload the original <b>index.html</b> or paste its complete HTML code directly. Only one is needed. Supports MCQ, MSQ and NAT, including answers, marks and written/image solutions when present.</p>
     </form>
 
     <form onSubmit={upload} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 grid md:grid-cols-2 gap-5">
