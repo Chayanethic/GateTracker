@@ -76,15 +76,34 @@ function parseTestHtml(html: string): { questions: DraftQuestion[]; allMarksPres
 
 function parseMadeEasyHtml(html: string): { questions: DraftQuestion[]; allMarksPresent: boolean } {
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  const cards = Array.from(doc.querySelectorAll('section.qcard[data-qnum], .qcard[data-qnum]'));
+
+  // MADE EASY exports can visually/group questions into different <section>
+  // blocks. Do not treat those groups as separate tests. Flatten every actual
+  // question node into one GateTracker question list. The qnum + qtype
+  // attributes are the reliable question markers, while the class/tag can vary
+  // between exports.
+  const seen = new Set<Element>();
+  const cards = Array.from(
+    doc.querySelectorAll('[data-qnum][data-qtype]')
+  ).filter((node) => {
+    if (seen.has(node)) return false;
+    seen.add(node);
+    return Boolean(
+      node.querySelector('.qtext, .questionText') ||
+      node.querySelector('.opts .opt, [data-opt]') ||
+      node.getAttribute('data-correct') != null ||
+      node.getAttribute('data-nat-low') != null
+    );
+  });
+
   const questions = cards.map((card, index) => {
     const number = Number(card.getAttribute('data-qnum') || index + 1);
     const rawType = String(card.getAttribute('data-qtype') || 'MCQ').toUpperCase();
     const type: MarkType = rawType === 'MSQ' ? 'MSQ' : rawType === 'NAT' ? 'NAT' : 'MCQ';
-    const questionHtml = cleanHtml(card.querySelector('.qtext')?.innerHTML || '');
-    const options = Array.from(card.querySelectorAll(':scope .opts > .opt')).map((option, i) => ({
+    const questionHtml = cleanHtml(card.querySelector('.qtext, .questionText')?.innerHTML || '');
+    const options = Array.from(card.querySelectorAll('.opts .opt, [data-opt]')).filter((option, i, arr) => arr.indexOf(option) === i).map((option, i) => ({
       key: String(option.getAttribute('data-opt') || String.fromCharCode(65 + i)).trim().toUpperCase(),
-      html: cleanHtml((option.querySelector(':scope > div:not(.optionMarker)')?.innerHTML || option.querySelector('.optionContent')?.innerHTML || '').trim()),
+      html: cleanHtml((option.querySelector(':scope > div:not(.optionMarker)')?.innerHTML || option.querySelector('.optionContent')?.innerHTML || option.querySelector(':scope > div')?.innerHTML || '').trim()),
     })).filter(o => o.html);
     let answer = String(card.getAttribute('data-correct') || '').split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
     if (type === 'NAT' && !answer.length) {
@@ -95,14 +114,14 @@ function parseMadeEasyHtml(html: string): { questions: DraftQuestion[]; allMarks
     const wrong = readNumber(card, ['data-wrong']);
     const marks = right != null && right > 0 ? right : null;
     const negativeMarks = wrong != null && wrong > 0 ? wrong : 0;
-    const solutionNode = card.querySelector('.solutionText, .solution, .solutionContent');
+    const solutionNode = card.querySelector(".solutionText, .solution, .solutionContent, [class*=\"solution\"]");
     let solutionHtml = '';
     if (solutionNode) {
       const clone = solutionNode.cloneNode(true) as Element;
       clone.querySelector('summary')?.remove();
       solutionHtml = cleanHtml(clone.innerHTML || '');
     }
-    const videoUrl = (card.querySelector('video.solutionVideo') as HTMLVideoElement | null)?.getAttribute('src') || undefined;
+    const videoUrl = (card.querySelector('video.solutionVideo, video[src]') as HTMLVideoElement | null)?.getAttribute('src') || undefined;
     return { id: `madeeasy-q-${number}-${index}`, number, type, questionHtml, options, answer, solutionHtml, videoUrl, marks, negativeMarks, marksDetected: marks != null };
   });
   return { questions, allMarksPresent: questions.length > 0 && questions.every(q => q.marksDetected) };
