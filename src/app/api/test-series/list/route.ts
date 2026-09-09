@@ -103,9 +103,15 @@ export async function GET(req: Request) {
       }));
     }
 
-    // A test must explicitly belong to the user's selected stream. This also
-    // prevents legacy/null-stream tests from leaking into another branch.
+    // MADE EASY tests use the new stream metadata for branch filtering.
+    // Standard/PREPFUSION tests keep the existing visibility behavior: they
+    // remain visible even when the newer MADE EASY stream metadata is absent.
+    // This is important for older Standard tests that were published before
+    // the MADE EASY structure was introduced.
     tests = tests.filter((t: any) => {
+      if (String(t.provider || 'prepfusion').toLowerCase() !== 'madeeasy') {
+        return true;
+      }
       const stream = String(t.stream || '').toLowerCase().trim();
       return allowedStreams.has(stream);
     });
