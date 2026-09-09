@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { Clock3, FileQuestion, LockKeyhole, ShieldAlert, CheckCircle2, RotateCcw, Trophy, ArrowRight, Flag, Layers3, BookOpen, GraduationCap, ListTree } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+type MadeEasyCategory = 'topicwise' | 'subjectwise' | 'full_syllabus';
+
 type TestCard = {
   id: string;
   title: string;
