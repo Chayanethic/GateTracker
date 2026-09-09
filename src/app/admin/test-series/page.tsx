@@ -74,6 +74,48 @@ function parseTestHtml(html: string): { questions: DraftQuestion[]; allMarksPres
   return { questions, allMarksPresent: questions.length > 0 && questions.every(q => q.marksDetected) };
 }
 
+function parseMadeEasyHtml(html: string): { questions: DraftQuestion[]; allMarksPresent: boolean } {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const cards = Array.from(doc.querySelectorAll('section.qcard[data-qnum], .qcard[data-qnum]'));
+  const questions = cards.map((card, index) => {
+    const number = Number(card.getAttribute('data-qnum') || index + 1);
+    const rawType = String(card.getAttribute('data-qtype') || 'MCQ').toUpperCase();
+    const type: MarkType = rawType === 'MSQ' ? 'MSQ' : rawType === 'NAT' ? 'NAT' : 'MCQ';
+    const questionHtml = cleanHtml(card.querySelector('.qtext')?.innerHTML || '');
+    const options = Array.from(card.querySelectorAll(':scope .opts > .opt')).map((option, i) => ({
+      key: String(option.getAttribute('data-opt') || String.fromCharCode(65 + i)).trim().toUpperCase(),
+      html: cleanHtml((option.querySelector(':scope > div:not(.optionMarker)')?.innerHTML || option.querySelector('.optionContent')?.innerHTML || '').trim()),
+    })).filter(o => o.html);
+    let answer = String(card.getAttribute('data-correct') || '').split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (type === 'NAT' && !answer.length) {
+      const nat = String(card.getAttribute('data-nat-low') || '').trim();
+      if (nat) answer = [nat];
+    }
+    const right = readNumber(card, ['data-right']);
+    const wrong = readNumber(card, ['data-wrong']);
+    const marks = right != null && right > 0 ? right : null;
+    const negativeMarks = wrong != null && wrong > 0 ? wrong : 0;
+    const solutionNode = card.querySelector('.solutionText, .solution, .solutionContent');
+    let solutionHtml = '';
+    if (solutionNode) {
+      const clone = solutionNode.cloneNode(true) as Element;
+      clone.querySelector('summary')?.remove();
+      solutionHtml = cleanHtml(clone.innerHTML || '');
+    }
+    const videoUrl = (card.querySelector('video.solutionVideo') as HTMLVideoElement | null)?.getAttribute('src') || undefined;
+    return { id: `madeeasy-q-${number}-${index}`, number, type, questionHtml, options, answer, solutionHtml, videoUrl, marks, negativeMarks, marksDetected: marks != null };
+  });
+  return { questions, allMarksPresent: questions.length > 0 && questions.every(q => q.marksDetected) };
+}
+
+function parseAnyTestHtml(html: string): { questions: DraftQuestion[]; allMarksPresent: boolean; format: 'standard' | 'madeeasy' } {
+  const standard = parseTestHtml(html);
+  if (standard.questions.length) return { ...standard, format: 'standard' };
+  const madeEasy = parseMadeEasyHtml(html);
+  if (madeEasy.questions.length) return { ...madeEasy, format: 'madeeasy' };
+  return { ...standard, format: 'standard' };
+}
+
 function randomOneTwo(count: number, target: number) {
   if (!Number.isInteger(target) || target < count || target > count * 2) {
     throw new Error(`For automatic 1/2-mark distribution, Maximum Marks must be between ${count} and ${count * 2}.`);
@@ -95,12 +137,15 @@ export default function AdminTestSeries() {
   const [duration, setDuration] = useState('180');
   const [marks, setMarks] = useState('100');
   const [file, setFile] = useState<File | null>(null);
+  const [madeEasyFile, setMadeEasyFile] = useState<File | null>(null);
+  const madeEasyFileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
   const [tests, setTests] = useState<any[]>([]);
   const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[] | null>(null);
   const [marksMode, setMarksMode] = useState<'random' | 'edit' | null>(null);
   const [marksDetected, setMarksDetected] = useState(false);
+  const [uploadFormat, setUploadFormat] = useState<'standard' | 'madeeasy'>('standard');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const adminHeaders = { 'Content-Type': 'application/json', 'x-admin-email': process.env.NEXT_PUBLIC_ADMIN_EMAIL || '', 'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '' };
@@ -112,9 +157,10 @@ export default function AdminTestSeries() {
   };
   useEffect(() => { load(); }, []);
 
-  const prepareMarks = (questions: DraftQuestion[], allPresent: boolean) => {
+  const prepareMarks = (questions: DraftQuestion[], allPresent: boolean, format: 'standard' | 'madeeasy' = 'standard') => {
     setDraftQuestions(questions);
     setMarksDetected(allPresent);
+    setUploadFormat(format);
     if (allPresent) {
       setMarksMode('edit');
       toast.success('Marks found in HTML. Review them before publishing.');
@@ -160,7 +206,7 @@ export default function AdminTestSeries() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       toast.success(`Test published with ${draftQuestions.length} questions.`);
-      setTitle(''); setExamName(''); setFile(null); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false);
+      setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard');
       if (fileInputRef.current) fileInputRef.current.value = '';
       load();
     } catch (err: any) { toast.error(err.message); }
@@ -173,9 +219,25 @@ export default function AdminTestSeries() {
     setUploading(true);
     try {
       const html = await file.text();
-      const parsed = parseTestHtml(html);
-      if (!parsed.questions.length) throw new Error('No .questionCard questions were found in this HTML file.');
-      prepareMarks(parsed.questions, parsed.allMarksPresent);
+      const parsed = parseAnyTestHtml(html);
+      if (!parsed.questions.length) throw new Error('No supported test-series questions were found. Upload the normal exported HTML or the MADE EASY index.html format.');
+      prepareMarks(parsed.questions, parsed.allMarksPresent, parsed.format);
+    } catch (err: any) { toast.error(err.message); }
+    finally { setUploading(false); }
+  };
+
+  const uploadMadeEasy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!madeEasyFile) return toast.error('Select the MADE EASY index.html file first.');
+    setUploading(true);
+    try {
+      const html = await madeEasyFile.text();
+      const parsed = parseMadeEasyHtml(html);
+      if (!parsed.questions.length) throw new Error('This file does not match the MADE EASY index.html format.');
+      const detectedTitle = (new DOMParser().parseFromString(html, 'text/html').title || '').trim();
+      if (!title.trim() && detectedTitle) setTitle(detectedTitle);
+      prepareMarks(parsed.questions, parsed.allMarksPresent, 'madeeasy');
+      toast.success(`MADE EASY format detected: ${parsed.questions.length} questions extracted.`);
     } catch (err: any) { toast.error(err.message); }
     finally { setUploading(false); }
   };
@@ -201,8 +263,28 @@ export default function AdminTestSeries() {
 
   return <div className="max-w-6xl mx-auto space-y-10">
     <div><h1 className="text-3xl font-black text-white">Test Series Control</h1><p className="text-gray-500 mt-2">Upload the exported HTML, define per-question marks, and control candidate access.</p></div>
+    <form onSubmit={uploadMadeEasy} className="bg-gradient-to-br from-violet-950/40 to-gray-900 border border-violet-500/20 rounded-2xl p-6 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><div className="flex items-center gap-3 text-violet-300 font-black text-lg"><FileUp size={20}/> MADE EASY Test Series</div><p className="text-xs text-zinc-500 mt-1">Upload the original MADE EASY <b>index.html</b>. The importer converts its qcard structure internally to the same GateTracker question format.</p></div>
+        <span className="px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-black uppercase">MADE EASY FORMAT</span>
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Test title (optional: uses HTML title)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+        <input required value={examName} onChange={e=>setExamName(e.target.value)} placeholder="Exam name (e.g. GATE ECE)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+        <input required type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} placeholder="Time in minutes" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+        <input required type="number" min="1" value={marks} onChange={e=>setMarks(e.target.value)} placeholder="Maximum marks" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+      </div>
+      <input ref={madeEasyFileInputRef} required type="file" accept=".html,text/html" onChange={e=>setMadeEasyFile(e.target.files?.[0] || null)} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
+      <button disabled={uploading} className="w-full flex items-center justify-center gap-2 bg-violet-500 text-white font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Reading MADE EASY HTML...' : 'Import MADE EASY index.html & Set Marks'}</button>
+      <p className="text-xs text-zinc-500">Supports MCQ, MSQ and NAT. It extracts question text, embedded images, options, correct answers, positive/negative marks and written/image solutions when present.</p>
+    </form>
+
     <form onSubmit={upload} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 grid md:grid-cols-2 gap-5">
       <div className="md:col-span-2 flex items-center gap-3 text-emerald-400 font-bold"><FileUp size={20}/> Publish New Test</div>
+      <div className="md:col-span-2 grid md:grid-cols-2 gap-3">
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><div className="font-black text-emerald-300">Standard Test Series</div><div className="text-xs text-zinc-500 mt-1">Rank Pulse / questionCard export with video or written solutions.</div></div>
+        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4"><div className="font-black text-violet-300">MADE EASY Test Series</div><div className="text-xs text-zinc-500 mt-1">Upload the MADE EASY <b>index.html</b> format. Questions, options, answers, marks and image/written solutions are extracted automatically.</div></div>
+      </div>
       <input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="Title (e.g. Full Mock Test 01)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
       <input required value={examName} onChange={e=>setExamName(e.target.value)} placeholder="Exam name (e.g. GATE ECE)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
       <input required type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} placeholder="Time in minutes" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
@@ -220,7 +302,7 @@ export default function AdminTestSeries() {
     </section>}
 
     {draftQuestions && marksMode === 'edit' && <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-      <div className="p-5 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3"><div><div className="text-lg font-black text-white">Question Marking</div><div className="text-xs text-zinc-500 mt-1">{draftQuestions.length} questions • {draftMcq} MCQ • {draftMsq} MSQ • {draftNat} NAT</div></div><div className={`text-sm font-black ${totalDraftMarks === Number(marks) ? 'text-emerald-400' : 'text-amber-400'}`}>Total: {totalDraftMarks} / {marks}</div></div>
+      <div className="p-5 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><div className="text-lg font-black text-white">Question Marking</div><span className="px-2 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-black uppercase">{uploadFormat === 'madeeasy' ? 'MADE EASY' : 'STANDARD'}</span></div><div className="text-xs text-zinc-500 mt-1">{draftQuestions.length} questions • {draftMcq} MCQ • {draftMsq} MSQ • {draftNat} NAT</div></div><div className={`text-sm font-black ${totalDraftMarks === Number(marks) ? 'text-emerald-400' : 'text-amber-400'}`}>Total: {totalDraftMarks} / {marks}</div></div>
       <div className="p-4 flex flex-wrap gap-3 border-b border-gray-800"><button type="button" onClick={resetRandom} className="px-4 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-bold flex items-center gap-2"><RotateCcw size={15}/> Randomize Again</button><button type="button" onClick={publishPrepared} disabled={uploading || totalDraftMarks !== Number(marks)} className="px-5 py-2 rounded-lg bg-emerald-500 text-black font-black flex items-center gap-2 disabled:opacity-40"><Save size={15}/> {uploading ? 'Publishing...' : 'Save Marks & Publish'}</button><button type="button" onClick={()=>{setDraftQuestions(null);setMarksMode(null)}} className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></div>
       <div className="max-h-[620px] overflow-auto divide-y divide-gray-800">{draftQuestions.map(q=><div key={q.id} className="p-4 flex flex-wrap items-center gap-4"><div className="w-16 font-black text-white">Q{q.number}</div><span className={`px-2 py-1 rounded-full text-[10px] font-black ${q.type==='MCQ'?'bg-cyan-500/10 text-cyan-300':q.type==='MSQ'?'bg-violet-500/10 text-violet-300':'bg-amber-500/10 text-amber-300'}`}>{q.type}</span><select value={q.marks ?? ''} onChange={e=>editMark(q.id,e.target.value)} className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-white font-bold"><option value="">Select marks</option><option value="1">1 Mark</option><option value="2">2 Marks</option></select><span className="text-sm text-zinc-400">Positive: <b className="text-emerald-400">+{Number(q.marks || 0).toFixed(2)}</b></span><span className="text-sm text-zinc-400">Negative: <b className={q.type==='MCQ'?'text-red-400':'text-zinc-500'}>{q.type==='MCQ'?`-${negativeFor(q.type,Number(q.marks||1)).toFixed(2)}`:'0.00'}</b></span></div>)}</div>
       <div className="p-4 text-xs text-zinc-500 border-t border-gray-800">Changing a question from 1 → 2 automatically changes MCQ negative marking from −0.33 → −0.66. MSQ and NAT always remain −0.00.</div>
