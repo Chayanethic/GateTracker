@@ -60,6 +60,26 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true, title });
   }
 
+  if (action === 'rename_subject') {
+    const subject = String(body.subject || '').trim();
+    if (!id) return NextResponse.json({ error: 'Test id is required' }, { status: 400 });
+    if (!subject) return NextResponse.json({ error: 'Subject name cannot be empty.' }, { status: 400 });
+    if (subject.length > 200) return NextResponse.json({ error: 'Subject name is too long.' }, { status: 400 });
+    const { error } = await db().from('test_series').update({ subject }).eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, subject });
+  }
+
+  if (action === 'rename_subject') {
+    const subject = String(body.subject || '').trim();
+    if (!id) return NextResponse.json({ error: 'Test id is required' }, { status: 400 });
+    if (!subject) return NextResponse.json({ error: 'Subject name cannot be empty.' }, { status: 400 });
+    if (subject.length > 200) return NextResponse.json({ error: 'Subject name is too long.' }, { status: 400 });
+    const { error } = await db().from('test_series').update({ subject }).eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, subject });
+  }
+
   if (action === 'delete_syllabus') {
     if (!id) return NextResponse.json({ error: 'Test id is required' }, { status: 400 });
     const { error } = await db().from('test_series').update({ syllabus: null }).eq('id', id);
