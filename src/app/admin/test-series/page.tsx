@@ -116,6 +116,59 @@ function parseAnyTestHtml(html: string): { questions: DraftQuestion[]; allMarksP
   return { ...standard, format: 'standard' };
 }
 
+type MadeEasyCategory = 'topicwise' | 'subjectwise' | 'full_syllabus';
+
+const MADE_EASY_EC_TOPICWISE_SYLLABUS: Record<number, string> = {
+  1: 'Network-1: Circuit analysis methods: nodal and mesh analysis; Wye-Delta transformation; Network theorems—reciprocity, superposition, Thevenin and Norton; sinusoidal steady-state analysis, phasor/complex phasors, complex power, maximum power transfer.',
+  2: 'Network-2: Time and frequency domain analysis of linear circuits: RL, AC, RLC circuit; solution of network equations using Laplace transform; linear 2-port network parameters; Wye-Delta transformation.',
+  3: 'Control-1: Basic control system components; feedback principle; transfer function; block diagram representation; signal flow graph; transient and steady-state analysis of LTI systems; Routh-Hurwitz; root-locus plots.',
+  4: 'Control-2: Frequency response; Nyquist stability criteria; Bode plots; lag, lead and lag-lead compensation; state variable model and solution of state equation of LTI systems.',
+  5: 'Electronic Devices-1: Formation of energy bands in solids; energy bands in intrinsic and extrinsic semiconductors; equilibrium carrier concentration; direct and indirect band-gap semiconductors; carrier transport, diffusion current, drift current, mobility and resistivity; generation and recombination of carriers; Poisson and continuity equations; P-N junction; Zener diode.',
+  6: 'Electronic Devices-2: BJT, MOS capacitor, MOSFET, scaling in MOSFET, LED, photo diode and solar cell.',
+  7: 'Signals and Systems-1: Continuous-time signals; Fourier series and Fourier transform representations; Nyquist sampling theorem; sampling and reconstruction. Continuous LTI systems: definition and properties, causality, stability, impulse response.',
+  8: 'Signals and Systems-2: Discrete-time signals: DTFT, DFT, z-transform. Discrete LTI systems: definition and properties, causality, stability, impulse response, convolution, poles and zeroes, FIR and IIR filter design.',
+  9: 'Engineering Mathematics-1: Linear Algebra, Calculus, Vector Analysis.',
+  10: 'Engineering Mathematics-2: Differential Equations, Complex Analysis, Probability and Statistics, Correlation and regression analysis.',
+  11: 'General Aptitude (Part-1): Numerical Ability, Numerical computation, numerical estimation, and data interpretation.',
+  12: 'General Aptitude (Part-2): Verbal Ability—English grammar, sentence completion, verbal analogies, word groups, instructions, critical reasoning, numerical reasoning, verbal deduction and spatial aptitude.',
+  13: 'Analog circuit-1: Diode circuits—clipping, clamping and rectifiers; BJT and MOSFET amplifier biasing.',
+  14: 'Analog circuit-2: BJT and MOSFET: AC coupling, small signal analysis, frequency response; current mirrors and differential amplifiers; dominant-pole compensation and phase margin analysis.',
+  15: 'Analog circuit-3: Op-amp circuits—amplifiers, summers, differentiators, integrators, active filters, Schmitt triggers and oscillators.',
+  16: 'COA: Semiconductor memories—ROM, SRAM, DRAM. Computer organization: machine instructions and addressing modes, ALU, data-path and control unit, instruction pipelining.',
+  17: 'Digital circuits-1: Number representations—binary, integer and floating-point numbers. Combinatorial circuits: Boolean algebra, minimization of functions using Boolean identities and Karnaugh map, logic gates and their static CMOS implementations, arithmetic circuits, code converters, multiplexers, decoders.',
+  18: 'Digital circuits-2: Sequential circuits—latches and flip-flops, counters, shift-registers, finite state machines, propagation delay, setup and hold time, critical path delay. Data converters: sample and hold circuits, ADCs and DACs.',
+  19: 'Communications-1: Analog communications—amplitude modulation and demodulation, angle modulation and demodulation, spectra of AM and FM, superheterodyne receivers.',
+  20: 'Communications-2: Random processes—autocorrelation and power spectral density, properties of white noise, filtering of random signals through LTI systems. Information theory: different types of source coding, entropy, mutual information and channel capacity theorem.',
+  21: 'Communications-3: Digital communications—PCM, DPCM, digital modulation schemes (ASK, PSK, FSK, QAM), bandwidth, inter-symbol interference, MAP, ML detection, matched filter receiver, SNR and BER. Fundamentals of error correction, Hamming codes, CRC.',
+  22: "Electromagnetics-1: Maxwell's equations—differential and integral forms and their interpretation, boundary conditions, wave equation, Poynting vector.",
+  23: 'Electromagnetics-2: Plane waves and properties—reflection and refraction, polarization, phase and group velocity, propagation through various media, skin depth, rectangular and circular waveguides.',
+  24: 'Electromagnetics-3: Transmission lines—equations, characteristic impedance, impedance matching, impedance transformation, S-parameters, Smith chart; light propagation in optical fibers, dipole and monopole antennas.',
+};
+
+function inferMadeEasyMeta(title: string) {
+  const value = title.trim();
+  const lower = value.toLowerCase();
+  let category: MadeEasyCategory = 'full_syllabus';
+  if (/\btopicwise\b|\btopic\s*wise\b/.test(lower)) category = 'topicwise';
+  else if (/\bsingle\s+subject\b|\bsubjectwise\b|\bsubject\s*wise\b/.test(lower)) category = 'subjectwise';
+  else if (/\bfull\s+syllabus\b/.test(lower)) category = 'full_syllabus';
+
+  const numberMatch = lower.match(/\b(?:test|mock)(?:\s*[-#:]?\s*test)?\s*[-#:]?\s*(\d{1,3})\b/);
+  const yearMatch = value.match(/\b(?:GATE\s*)?(20\d{2})\b/i);
+  const year = yearMatch ? Number(yearMatch[1]) : null;
+  const afterYear = yearMatch ? value.slice((yearMatch.index || 0) + yearMatch[0].length).trim() : '';
+  const streamMatch = afterYear.match(/^(CE|ME|EE|EC|CS|IN|PI|CH|DA)\b/i);
+  const stream = streamMatch ? streamMatch[1].toUpperCase() : null;
+  let remainder = streamMatch ? afterYear.slice(streamMatch[0].length).trim() : '';
+  remainder = remainder.replace(/^[-–—:|]+\s*/, '').trim();
+  // Remove common trailing labels that may follow the actual subject/coverage title.
+  remainder = remainder.replace(/\s+\b(?:part\s+syllabus|full\s+syllabus|single\s+subject|topicwise)\b.*$/i, '').trim();
+  const subject = remainder || null;
+  const topic = category === 'topicwise' ? (remainder ? remainder.split(/\s*:\s*/, 1)[0].trim() : null) : null;
+  const testNumber = numberMatch ? Number(numberMatch[1]) : null;
+  return { category, testNumber, year, stream, subject, topic };
+}
+
 function randomOneTwo(count: number, target: number) {
   if (!Number.isInteger(target) || target < count || target > count * 2) {
     throw new Error(`For automatic 1/2-mark distribution, Maximum Marks must be between ${count} and ${count * 2}.`);
@@ -146,6 +199,15 @@ export default function AdminTestSeries() {
   const [marksMode, setMarksMode] = useState<'random' | 'edit' | null>(null);
   const [marksDetected, setMarksDetected] = useState(false);
   const [uploadFormat, setUploadFormat] = useState<'standard' | 'madeeasy'>('standard');
+  const [madeEasyCategory, setMadeEasyCategory] = useState<MadeEasyCategory>('full_syllabus');
+  const [madeEasyTestNumber, setMadeEasyTestNumber] = useState('');
+  const [madeEasySubject, setMadeEasySubject] = useState('');
+  const [madeEasyTopic, setMadeEasyTopic] = useState('');
+  const [madeEasySyllabus, setMadeEasySyllabus] = useState('');
+  const [madeEasyYear, setMadeEasyYear] = useState('');
+  const [madeEasyStream, setMadeEasyStream] = useState('');
+  const [usePdfSyllabus, setUsePdfSyllabus] = useState(true);
+  const [madeEasyMetaManual, setMadeEasyMetaManual] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const adminHeaders = { 'Content-Type': 'application/json', 'x-admin-email': process.env.NEXT_PUBLIC_ADMIN_EMAIL || '', 'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '' };
@@ -202,11 +264,11 @@ export default function AdminTestSeries() {
     if (total !== Number(marks)) return toast.error(`Question marks total ${total}, but Maximum Marks is ${marks}. Edit the marks so the total matches.`);
     setUploading(true);
     try {
-      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions }) });
+      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ title, examName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, provider: uploadFormat === 'madeeasy' ? 'madeeasy' : 'prepfusion', testCategory: uploadFormat === 'madeeasy' ? madeEasyCategory : 'standard', testNumber: uploadFormat === 'madeeasy' && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: uploadFormat === 'madeeasy' ? madeEasySubject : '', topic: uploadFormat === 'madeeasy' ? madeEasyTopic : '', syllabus: uploadFormat === 'madeeasy' ? madeEasySyllabus : '', examYear: uploadFormat === 'madeeasy' && madeEasyYear ? Number(madeEasyYear) : null, stream: uploadFormat === 'madeeasy' ? madeEasyStream : '' }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       toast.success(`Test published with ${draftQuestions.length} questions.`);
-      setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard');
+      setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard'); setMadeEasyCategory('full_syllabus'); setMadeEasyTestNumber(''); setMadeEasySubject(''); setMadeEasyTopic(''); setMadeEasySyllabus(''); setMadeEasyYear(''); setMadeEasyStream(''); setUsePdfSyllabus(true); setMadeEasyMetaManual(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       load();
     } catch (err: any) { toast.error(err.message); }
@@ -235,7 +297,24 @@ export default function AdminTestSeries() {
       const parsed = parseMadeEasyHtml(html);
       if (!parsed.questions.length) throw new Error('This file does not match the MADE EASY index.html format.');
       const detectedTitle = (new DOMParser().parseFromString(html, 'text/html').title || '').trim();
+      const effectiveTitle = title.trim() || detectedTitle;
       if (!title.trim() && detectedTitle) setTitle(detectedTitle);
+      const inferred = inferMadeEasyMeta(effectiveTitle);
+      if (!madeEasyMetaManual) {
+        setMadeEasyCategory(inferred.category);
+        if (inferred.testNumber != null) setMadeEasyTestNumber(String(inferred.testNumber));
+        if (inferred.year != null) setMadeEasyYear(String(inferred.year));
+        if (inferred.stream) setMadeEasyStream(inferred.stream);
+        if (inferred.subject) {
+          setMadeEasySubject(inferred.subject);
+          if (!examName.trim()) setExamName(inferred.subject);
+        }
+        if (inferred.category === 'topicwise' && inferred.testNumber != null && inferred.testNumber >= 1 && inferred.testNumber <= 24 && inferred.stream === 'EC' && inferred.year === 2026 && usePdfSyllabus) {
+          setMadeEasySyllabus(MADE_EASY_EC_TOPICWISE_SYLLABUS[inferred.testNumber] || '');
+        } else if (inferred.category !== 'topicwise') {
+          setMadeEasySyllabus('');
+        }
+      }
       prepareMarks(parsed.questions, parsed.allMarksPresent, 'madeeasy');
       toast.success(`MADE EASY format detected: ${parsed.questions.length} questions extracted.`);
     } catch (err: any) { toast.error(err.message); }
@@ -246,6 +325,14 @@ export default function AdminTestSeries() {
     const res = await fetch('/api/test-series/admin', { method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ id, status }) });
     const data = await res.json();
     if (!res.ok) toast.error(data.error || 'Update failed.'); else { toast.success(status === 'approved' ? 'Access approved.' : 'Access rejected.'); load(); }
+  };
+
+  const deleteSyllabus = async (id: string, testTitle: string) => {
+    if (!window.confirm(`Delete syllabus information for \"${testTitle}\"? This permanently removes the stored syllabus text from this test.`)) return;
+    const res = await fetch('/api/test-series/admin', { method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ id, action: 'delete_syllabus' }) });
+    const data = await res.json();
+    if (!res.ok) toast.error(data.error || 'Could not delete syllabus.');
+    else { toast.success('Syllabus information permanently deleted.'); load(); }
   };
 
   const deleteTest = async (id: string, testTitle: string) => {
@@ -273,6 +360,28 @@ export default function AdminTestSeries() {
         <input required value={examName} onChange={e=>setExamName(e.target.value)} placeholder="Exam name (e.g. GATE ECE)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
         <input required type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} placeholder="Time in minutes" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
         <input required type="number" min="1" value={marks} onChange={e=>setMarks(e.target.value)} placeholder="Maximum marks" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+      </div>
+      <div className="rounded-2xl border border-violet-500/20 bg-black/20 p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><div className="font-black text-white">MADE EASY Test Structure</div><div className="text-xs text-zinc-500 mt-1">Choose manually, or leave Auto from title to detect Topicwise / Single Subject / Full Syllabus.</div></div>
+          <span className="text-[10px] font-black uppercase tracking-widest text-violet-300">Page 19–20 schedule structure</span>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <select value={madeEasyCategory} onChange={e=>{setMadeEasyMetaManual(true);setMadeEasyCategory(e.target.value as MadeEasyCategory)}} className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white">
+            <option value="topicwise">Topicwise</option><option value="subjectwise">Single Subject</option><option value="full_syllabus">Full Syllabus</option>
+          </select>
+          <input type="number" min="1" value={madeEasyTestNumber} onChange={e=>{setMadeEasyMetaManual(true);setMadeEasyTestNumber(e.target.value)}} placeholder="Test No. / SL No." className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+          <input type="number" min="2000" max="2100" value={madeEasyYear} onChange={e=>setMadeEasyYear(e.target.value)} placeholder="Year (auto from title)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+          <input value={madeEasyStream} onChange={e=>setMadeEasyStream(e.target.value.toUpperCase())} placeholder="Stream (EC / CE / ME...)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+          <input value={madeEasySubject} onChange={e=>setMadeEasySubject(e.target.value)} placeholder="Subject / title subject" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+          <input value={madeEasyTopic} onChange={e=>setMadeEasyTopic(e.target.value)} placeholder="Topic" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white"/>
+        </div>
+        <label className="flex items-center gap-3 rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3 cursor-pointer">
+          <input type="checkbox" checked={usePdfSyllabus} onChange={e=>{setUsePdfSyllabus(e.target.checked); if (!e.target.checked) setMadeEasySyllabus('');}} className="h-4 w-4 accent-violet-500"/>
+          <span><b className="text-white text-sm">Use syllabus info from PDF</b><span className="block text-xs text-zinc-500 mt-0.5">For the supplied Electronics Engineering schedule: Topicwise Test 1–24 uses the syllabus from PDF page 19. Uncheck to leave it empty.</span></span>
+        </label>
+        <textarea value={madeEasySyllabus} onChange={e=>setMadeEasySyllabus(e.target.value)} placeholder="Syllabus / coverage" rows={3} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-white resize-y"/>
+        <div className="text-xs text-zinc-500">Auto-detection example: “Topicwise Test-9 Part Syllabus GATE 2026 EC Engineering Mathematics-1” → Topicwise, Test 9, Year 2026, Stream EC, Subject Engineering Mathematics-1. You can correct any field manually before publishing. PDF pages 19–20 show Topicwise 1–24, Single Subject 25–36, Full Syllabus 37–44 and Mock Tests 45–48.</div>
       </div>
       <input ref={madeEasyFileInputRef} required type="file" accept=".html,text/html" onChange={e=>setMadeEasyFile(e.target.files?.[0] || null)} className="w-full bg-black border border-gray-700 rounded-xl px-4 py-3 text-gray-300"/>
       <button disabled={uploading} className="w-full flex items-center justify-center gap-2 bg-violet-500 text-white font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Reading MADE EASY HTML...' : 'Import MADE EASY index.html & Set Marks'}</button>
@@ -312,6 +421,6 @@ export default function AdminTestSeries() {
       {requests.length === 0 ? <p className="p-5 text-gray-500">No access requests.</p> : <div className="divide-y divide-gray-800">{requests.map(r=><div key={r.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-mono text-sm text-white">{r.user_id}</div><div className="text-xs text-gray-500 flex items-center gap-1 mt-1"><Clock3 size={12}/> {new Date(r.requested_at).toLocaleString()}</div></div><div className="flex items-center gap-2">{r.status === 'pending' ? <><button onClick={()=>updateRequest(r.id,'approved')} className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-bold flex items-center gap-1"><Check size={16}/> Approve</button><button onClick={()=>updateRequest(r.id,'rejected')} className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold flex items-center gap-1"><X size={16}/> Reject</button></> : <span className="text-xs font-black uppercase text-gray-400">{r.status}</span>}</div></div>)}</div>}
     </section>
 
-    <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden"><div className="p-5 border-b border-gray-800 font-bold text-white">Published Tests</div><div className="divide-y divide-gray-800">{tests.map(t=><div key={t.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-bold text-white">{t.title}</div><div className="text-xs text-gray-500 mt-1">{t.exam_name} • {t.question_count} questions • {t.duration_minutes} min • {t.max_marks} marks</div></div><div className="flex items-center gap-3"><span className="text-xs text-emerald-400 font-bold">{t.is_published ? 'PUBLISHED' : 'DRAFT'}</span><button type="button" onClick={()=>deleteTest(t.id,t.title)} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold hover:bg-red-500/20">Delete</button></div></div>)}{!tests.length && <p className="p-5 text-gray-500">No tests published yet.</p>}</div></section>
+    <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden"><div className="p-5 border-b border-gray-800 font-bold text-white">Published Tests</div><div className="divide-y divide-gray-800">{tests.map(t=><div key={t.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-bold text-white">{t.title}</div><div className="text-xs text-gray-500 mt-1">{t.exam_name} • {t.question_count} questions • {t.duration_minutes} min • {t.max_marks} marks</div><div className="text-[11px] text-zinc-500 mt-2 flex flex-wrap gap-2"><span className="px-2 py-1 rounded-full bg-white/5 border border-white/10">{t.provider === 'madeeasy' ? 'MADE EASY' : 'PREPFUSION'}</span>{t.provider === 'madeeasy' && t.test_category && <span className="px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/10">{t.test_category === 'subjectwise' ? 'SINGLE SUBJECT' : t.test_category.replace('_',' ').toUpperCase()}</span>}{t.test_number ? <span>Test No. {t.test_number}</span> : null}{t.subject ? <span>• {t.subject}</span> : null}{t.topic ? <span>• {t.topic}</span> : null}</div></div><div className="flex items-center gap-3"><span className="text-xs text-emerald-400 font-bold">{t.is_published ? 'PUBLISHED' : 'DRAFT'}</span>{t.syllabus && <button type="button" onClick={()=>deleteSyllabus(t.id,t.title)} className="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold hover:bg-amber-500/20">Delete Syllabus</button>}<button type="button" onClick={()=>deleteTest(t.id,t.title)} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold hover:bg-red-500/20">Delete</button></div></div>)}{!tests.length && <p className="p-5 text-gray-500">No tests published yet.</p>}</div></section>
   </div>;
 }
