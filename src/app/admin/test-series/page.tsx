@@ -224,9 +224,6 @@ export default function AdminTestSeries() {
     setMarksDetected(allPresent);
     setUploadFormat(format);
     if (allPresent) {
-      // The imported HTML is authoritative when every question contains marks.
-      // Sync Maximum Marks so the Publish button is not incorrectly disabled
-      // because the form still contains its default value (100).
       const detectedTotal = questions.reduce((sum, q) => sum + Number(q.marks || 0), 0);
       if (detectedTotal > 0) setMarks(String(detectedTotal));
       setMarksMode('edit');
