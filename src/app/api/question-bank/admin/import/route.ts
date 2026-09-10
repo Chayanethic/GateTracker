@@ -333,12 +333,17 @@ export async function POST(req: Request) {
       const existingOptions = Array.isArray(existing.options) ? existing.options : [];
       const incomingOptions = Array.isArray(rows[0].options) ? rows[0].options : [];
 
-      // Append, never overwrite. Keep the existing option objects exactly as-is.
-      if (existingOptions.length && incomingOptions.length) {
-        rows[0].options = [...existingOptions, ...incomingOptions];
-      } else if (existingOptions.length) {
-        rows[0].options = existingOptions;
-      }
+      // Repair files can contain ONLY the newly-added options. Never let the
+      // incoming option at index 0/key "0" overwrite the existing A option.
+      // First append, then re-key the complete merged list sequentially so the
+      // user renderer never sees duplicate option keys (0/0, A/A, etc.).
+      const mergedOptions = [...existingOptions, ...incomingOptions];
+      rows[0].options = mergedOptions.map((option: any, index: number) => {
+        if (option && typeof option === 'object' && !Array.isArray(option)) {
+          return { ...option, key: String(index) };
+        }
+        return { key: String(index), html: String(option ?? '') };
+      });
 
       // Preserve existing option-image mappings and shift incoming image indexes
       // by the number of existing options so A's image can never be overwritten
