@@ -24,3 +24,214 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Global GateTracker theme system                                            */
+/* -------------------------------------------------------------------------- */
+html,
+body {
+  min-height: 100%;
+  transition: background-color 220ms ease, color 220ms ease;
+}
+
+.theme-transition,
+.theme-transition * {
+  transition-property: background-color, border-color, color, box-shadow, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+
+html.dark-theme body {
+  background: #050505;
+  color: #e4e4e7;
+}
+
+html.light-theme body {
+  background: #f4f6f8 !important;
+  color: #18181b !important;
+}
+
+/* Dark utility surfaces -> clean light surfaces. These selectors intentionally
+   cover the existing Tailwind utility classes throughout the app, so the
+   switch is global without requiring every page to be rewritten. */
+html.light-theme [class*="bg-[#050505]"],
+html.light-theme [class*="bg-gray-950"],
+html.light-theme [class*="bg-zinc-950"],
+html.light-theme [class*="bg-gray-900"],
+html.light-theme [class*="bg-zinc-900"] {
+  background-color: #ffffff !important;
+}
+
+html.light-theme [class*="bg-gray-800"],
+html.light-theme [class*="bg-zinc-800"] {
+  background-color: #f1f3f5 !important;
+}
+
+html.light-theme [class*="bg-black/"],
+html.light-theme [class*="bg-white/[0.01]"],
+html.light-theme [class*="bg-white/[0.02]"],
+html.light-theme [class*="bg-white/[0.03]"],
+html.light-theme [class*="bg-white/5"],
+html.light-theme [class*="bg-white/10"] {
+  background-color: rgba(15, 23, 42, 0.035) !important;
+}
+
+html.light-theme [class*="text-white"],
+html.light-theme [class*="text-zinc-100"],
+html.light-theme [class*="text-zinc-200"] {
+  color: #18181b !important;
+}
+
+html.light-theme [class*="text-zinc-300"] {
+  color: #3f3f46 !important;
+}
+
+html.light-theme [class*="text-zinc-400"] {
+  color: #52525b !important;
+}
+
+html.light-theme [class*="text-zinc-500"] {
+  color: #71717a !important;
+}
+
+html.light-theme [class*="text-zinc-600"] {
+  color: #8a8a93 !important;
+}
+
+html.light-theme [class*="text-gray-400"] {
+  color: #52525b !important;
+}
+
+html.light-theme [class*="text-gray-500"] {
+  color: #71717a !important;
+}
+
+html.light-theme [class*="text-gray-600"] {
+  color: #8a8a93 !important;
+}
+
+html.light-theme [class*="border-white/"],
+html.light-theme [class*="border-gray-800"],
+html.light-theme [class*="border-gray-700"],
+html.light-theme [class*="border-zinc-800"] {
+  border-color: rgba(15, 23, 42, 0.10) !important;
+}
+
+html.light-theme [class*="ring-white/"],
+html.light-theme [class*="ring-gray-800"] {
+  --tw-ring-color: rgba(15, 23, 42, 0.10) !important;
+}
+
+html.light-theme [class*="hover:bg-white/"]:hover {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+html.light-theme [class*="shadow-[5px_0_30px"] {
+  box-shadow: 5px 0 30px rgba(15, 23, 42, 0.08) !important;
+}
+
+html.light-theme ::selection {
+  background: rgba(16, 185, 129, 0.22);
+  color: #18181b;
+}
+
+/* Scrollbars */
+html.light-theme .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(39, 39, 42, 0.20);
+}
+
+html.light-theme .custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Global GateTracker theme system                                            */
+/* -------------------------------------------------------------------------- */
+html,
+body {
+  min-height: 100%;
+  transition: background-color 220ms ease, color 220ms ease;
+}
+
+.theme-transition,
+.theme-transition * {
+  transition-property: background-color, border-color, color, box-shadow, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+
+html.dark-theme body {
+  background: #050505;
+  color: #e4e4e7;
+}
+
+html.light-theme body {
+  background: #f4f6f8 !important;
+  color: #18181b !important;
+}
+
+html.light-theme [class*="bg-[#050505]"],
+html.light-theme [class*="bg-gray-950"],
+html.light-theme [class*="bg-zinc-950"],
+html.light-theme [class*="bg-gray-900"],
+html.light-theme [class*="bg-zinc-900"] {
+  background-color: #ffffff !important;
+}
+
+html.light-theme [class*="bg-gray-800"],
+html.light-theme [class*="bg-zinc-800"] {
+  background-color: #f1f3f5 !important;
+}
+
+html.light-theme [class*="bg-black/"],
+html.light-theme [class*="bg-white/[0.01]"],
+html.light-theme [class*="bg-white/[0.02]"],
+html.light-theme [class*="bg-white/[0.03]"],
+html.light-theme [class*="bg-white/5"],
+html.light-theme [class*="bg-white/10"] {
+  background-color: rgba(15, 23, 42, 0.035) !important;
+}
+
+html.light-theme [class*="text-white"],
+html.light-theme [class*="text-zinc-100"],
+html.light-theme [class*="text-zinc-200"] {
+  color: #18181b !important;
+}
+
+html.light-theme [class*="text-zinc-300"] { color: #3f3f46 !important; }
+html.light-theme [class*="text-zinc-400"] { color: #52525b !important; }
+html.light-theme [class*="text-zinc-500"] { color: #71717a !important; }
+html.light-theme [class*="text-zinc-600"] { color: #8a8a93 !important; }
+html.light-theme [class*="text-gray-300"] { color: #3f3f46 !important; }
+html.light-theme [class*="text-gray-400"] { color: #52525b !important; }
+html.light-theme [class*="text-gray-500"] { color: #71717a !important; }
+html.light-theme [class*="text-gray-600"] { color: #8a8a93 !important; }
+
+html.light-theme [class*="border-white/"],
+html.light-theme [class*="border-gray-800"],
+html.light-theme [class*="border-gray-700"],
+html.light-theme [class*="border-zinc-800"] {
+  border-color: rgba(15, 23, 42, 0.10) !important;
+}
+
+html.light-theme [class*="ring-white/"],
+html.light-theme [class*="ring-gray-800"] {
+  --tw-ring-color: rgba(15, 23, 42, 0.10) !important;
+}
+
+html.light-theme [class*="hover:bg-white/"]:hover {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+html.light-theme [class*="shadow-[5px_0_30px"] {
+  box-shadow: 5px 0 30px rgba(15, 23, 42, 0.08) !important;
+}
+
+html.light-theme ::selection {
+  background: rgba(16, 185, 129, 0.22);
+  color: #18181b;
+}
+
+html.light-theme .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(39, 39, 42, 0.20);
+}
