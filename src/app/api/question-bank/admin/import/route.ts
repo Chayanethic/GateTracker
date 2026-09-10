@@ -399,31 +399,86 @@ export async function POST(req: Request) {
 
       // Existing options are authoritative. Only use their signatures to
       // identify duplicates; never replace them with incoming content.
-      const existingSignatures = new Set<string>();
-      for (const option of existingOptions) {
-        const sig = optionSignature(option);
-        if (sig !== '|') existingSignatures.add(sig);
-      }
-
-      const mergedOptions = existingOptions.map((option: any, index: number) => {
-        if (option && typeof option === 'object' && !Array.isArray(option)) {
-          return { ...option, key: String(index) };
-        }
-        return { key: String(index), html: String(option ?? '') };
-      });
-
-      // Preserve the incoming image mapping by the FINAL option index.
-      const mergedImageMap: Record<string, string> = {};
-
-      // Existing option-image mappings stay exactly where they were.
+      // Build a clean existing option list first. A previous repair may have
+      // already appended the same options, so never treat the current DB
+      // array as automatically unique.
       const existingImageMap =
         existing.option_image_urls && typeof existing.option_image_urls === 'object'
           ? existing.option_image_urls
           : {};
-      Object.entries(existingImageMap).forEach(([key, value]) => {
-        if (value != null && String(value).trim()) {
-          mergedImageMap[String(key)] = String(value);
+
+      const optionSignatureWithImage = (option: any, index: number, imageMap: any) => {
+        const text = stripHtml(optionText(option));
+        const image = String(
+          imageMap?.[String(index)] ??
+          imageMap?.[String.fromCharCode(65 + index)] ??
+          imageMap?.[String.fromCharCode(97 + index)] ??
+          ''
+        ).trim();
+        return `${text}|${image}`;
+      };
+
+      const existingOptionsRaw = Array.isArray(existingOptions) ? existingOptions : [];
+      const existingOptionsClean: any[] = [];
+      const existingSeenText = new Set<string>();
+      const existingSeenImage = new Set<string>();
+      const oldIndexToCleanIndex = new Map<number, number>();
+
+      existingOptionsRaw.forEach((option: any, oldIndex: number) => {
+        const text = stripHtml(optionText(option));
+        const image = String(
+          existingImageMap?.[String(oldIndex)] ??
+          existingImageMap?.[String.fromCharCode(65 + oldIndex)] ??
+          existingImageMap?.[String.fromCharCode(97 + oldIndex)] ??
+          ''
+        ).trim();
+
+        // Empty positions are not real options.
+        if (!text && !image) return;
+
+        // Preserve the first copy of an option. This specifically repairs a
+        // database that was previously pushed as A-D + A-D.
+        if ((text && existingSeenText.has(text)) || (image && existingSeenImage.has(image))) {
+          const previous = existingOptionsClean.length - 1;
+          oldIndexToCleanIndex.set(oldIndex, Math.max(0, previous));
+          return;
         }
+
+        const cleanIndex = existingOptionsClean.length;
+        const canonical = option && typeof option === 'object' && !Array.isArray(option)
+          ? { ...option, key: String(cleanIndex) }
+          : { key: String(cleanIndex), html: String(option ?? '') };
+        existingOptionsClean.push(canonical);
+        if (text) existingSeenText.add(text);
+        if (image) existingSeenImage.add(image);
+        oldIndexToCleanIndex.set(oldIndex, cleanIndex);
+      });
+
+      const mergedOptions = existingOptionsClean.slice();
+      const mergedImageMap: Record<string, string> = {};
+
+      // Keep image URLs attached to the cleaned existing option positions.
+      existingOptionsRaw.forEach((_: any, oldIndex: number) => {
+        const cleanIndex = oldIndexToCleanIndex.get(oldIndex);
+        if (cleanIndex == null) return;
+        const value = String(
+          existingImageMap?.[String(oldIndex)] ??
+          existingImageMap?.[String.fromCharCode(65 + oldIndex)] ??
+          existingImageMap?.[String.fromCharCode(97 + oldIndex)] ??
+          ''
+        ).trim();
+        if (value && mergedImageMap[String(cleanIndex)] == null) {
+          mergedImageMap[String(cleanIndex)] = value;
+        }
+      });
+
+      const existingSignatures = new Set<string>();
+      mergedOptions.forEach((option: any, index: number) => {
+        const text = stripHtml(optionText(option));
+        const image = String(mergedImageMap[String(index)] || '').trim();
+        if (text) existingSignatures.add(`text:${text}`);
+        if (image) existingSignatures.add(`image:${image}`);
+        existingSignatures.add(optionSignatureWithImage(option, index, mergedImageMap));
       });
 
       let addedIncoming = 0;
@@ -431,23 +486,16 @@ export async function POST(req: Request) {
       for (const item of incomingCanonical) {
         const textSig = stripHtml(optionText(item.option));
         const imageSig = String(item.image || '').trim();
-        const sig = `${textSig}|${imageSig}`;
 
         // Ignore completely empty source positions.
         if (!textSig && !imageSig) continue;
 
-        // Exact duplicate of an existing option: preserve the DB option and
-        // do not append it. This is the key fix for the repeated A option.
-        if (existingSignatures.has(sig)) continue;
-
-        // If text matches an existing text option but the incoming option adds
-        // an image, it is still the same logical option. Preserve the existing
-        // position rather than creating a duplicate.
-        const sameText = existingOptions.some((old: any) => {
-          const oldText = stripHtml(optionText(old));
-          return textSig && oldText && textSig === oldText;
-        });
-        if (sameText) continue;
+        // Same text/image means the logical option is already present. Keep
+        // the existing DB option and do not create a second copy.
+        if (
+          (textSig && existingSignatures.has(`text:${textSig}`)) ||
+          (imageSig && existingSignatures.has(`image:${imageSig}`))
+        ) continue;
 
         const finalIndex = mergedOptions.length;
         const canonical = item.option && typeof item.option === 'object' && !Array.isArray(item.option)
@@ -455,12 +503,10 @@ export async function POST(req: Request) {
           : { key: String(finalIndex), html: String(item.option ?? '') };
 
         mergedOptions.push(canonical);
-
-        if (item.image) {
-          mergedImageMap[String(finalIndex)] = item.image;
-        }
-
-        existingSignatures.add(sig);
+        if (imageSig) mergedImageMap[String(finalIndex)] = imageSig;
+        if (textSig) existingSignatures.add(`text:${textSig}`);
+        if (imageSig) existingSignatures.add(`image:${imageSig}`);
+        existingSignatures.add(optionSignatureWithImage(canonical, finalIndex, mergedImageMap));
         addedIncoming++;
       }
 
@@ -474,22 +520,19 @@ export async function POST(req: Request) {
       const sourceToFinal = new Map<number, number>();
 
       incomingCanonical.forEach((item: { option: any; sourceIndex: number; image: string }) => {
-        const sig = optionSignature(item.option);
-        if (!sig || sig === '|') return;
+        const incomingText = stripHtml(optionText(item.option));
+        const incomingImage = String(item.image || '').trim();
+        if (!incomingText && !incomingImage) return;
 
-        // Prefer an existing matching option.
-        let finalIndex = existingOptions.findIndex((old: any) => {
-          const oldSig = optionSignature(old);
-          if (oldSig === sig) return true;
-          const a = stripHtml(optionText(old));
-          const b = stripHtml(optionText(item.option));
-          return Boolean(a && b && a === b);
+        // Find the exact logical option in the final list. Text is preferred
+        // because the same option may have a newly uploaded image URL.
+        let finalIndex = mergedOptions.findIndex((merged: any, mergedIndex: number) => {
+          const mergedText = stripHtml(optionText(merged));
+          const mergedImage = String(mergedImageMap[String(mergedIndex)] || '').trim();
+          if (incomingText && mergedText && incomingText === mergedText) return true;
+          if (incomingImage && mergedImage && incomingImage === mergedImage) return true;
+          return false;
         });
-
-        // Otherwise locate the appended option by signature.
-        if (finalIndex < 0) {
-          finalIndex = mergedOptions.findIndex((merged: any) => optionSignature(merged) === sig);
-        }
 
         if (finalIndex >= 0) {
           sourceToFinal.set(item.sourceIndex, finalIndex);
