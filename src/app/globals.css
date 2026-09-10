@@ -279,3 +279,30 @@ html.dark-theme .qb-theme .bg-blue-50 { background-color: #152233 !important; }
 html.dark-theme .qb-theme .bg-emerald-50 { background-color: #13251e !important; }
 html.dark-theme .qb-theme .bg-red-50 { background-color: #2b171a !important; }
 html.dark-theme .qb-theme .bg-violet-50 { background-color: #211b2d !important; }
+
+/* Question Bank: keep consecutive question paragraphs flowing naturally like the source question layout.
+   Images and other block elements remain on their own line. */
+.qb-question-content > p {
+  display: inline;
+  margin: 0;
+}
+.qb-question-content > p + p::before {
+  content: " ";
+}
+.qb-question-content > p:has(> img),
+.qb-question-content > p:has(> figure),
+.qb-question-content > p:has(> table),
+.qb-question-content > p:has(> ul),
+.qb-question-content > p:has(> ol) {
+  display: block;
+}
+.qb-question-content > p:has(> img)::before,
+.qb-question-content > p:has(> figure)::before,
+.qb-question-content > p:has(> table)::before,
+.qb-question-content > p:has(> ul)::before,
+.qb-question-content > p:has(> ol)::before {
+  content: none;
+}
+.qb-question-content > br {
+  line-height: 1.75;
+}
