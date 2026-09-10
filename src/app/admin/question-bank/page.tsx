@@ -36,6 +36,9 @@ export default function AdminQuestionBank() {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ done:0, total:0, label:'' });
   const [dragging, setDragging] = useState(false);
+  const [pendingChapter, setPendingChapter] = useState<{ questions:any[]; chapterId?:any; subjectName:string; chapterName:string } | null>(null);
+  const [chapterSubject, setChapterSubject] = useState('');
+  const [chapterName, setChapterName] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -60,34 +63,132 @@ export default function AdminQuestionBank() {
   }, [subjects, search]);
 
   const importFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.json')) { toast.error('Please choose a JSON file.'); return; }
-    setImporting(true); setProgress({done:0,total:0,label:'Reading JSON…'});
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      toast.error('Please choose a JSON file.');
+      return;
+    }
+
+    setImporting(true);
+    setProgress({done:0,total:0,label:'Reading JSON…'});
+    let opensChapterDialog = false;
+
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const sourceSubjects = Array.isArray(parsed?.subjects) ? parsed.subjects : [];
-      if (!sourceSubjects.length) throw new Error('Expected the exported structure with subjects → chapters → questions.');
-      const chapters: {s:any;c:any}[] = [];
-      for (const s of sourceSubjects) for (const c of (s.chapters || [])) if (pickQuestions(c).length) chapters.push({s,c});
-      if (!chapters.length) throw new Error('No chapter question arrays were found.');
-      setProgress({done:0,total:chapters.length,label:'Starting import…'});
 
-      for (let i=0;i<chapters.length;i++) {
-        const {s,c}=chapters[i];
-        setProgress({done:i,total:chapters.length,label:`${s.name || s.title} → ${c.name || c.title}`});
-        const r = await fetch('/api/question-bank/admin/import', {
-          method:'POST', headers:adminHeaders(), body:JSON.stringify(chapterPayload(s,c))
-        });
-        const d = await r.json();
-        if (!r.ok) throw new Error(`${s.name || s.title} / ${c.name || c.title}: ${d.error || 'Import failed'}`);
-        setProgress({done:i+1,total:chapters.length,label:`Imported ${d.imported} questions • ${d.imageUploads || 0} images`});
+      // Support both the full exporter format:
+      // { exam, subjects: [{ chapters: [{ questions: [...] }] }] }
+      // and the direct chapter format returned by:
+      // /api/question-bank/chapters/:id/questions
+      const sourceSubjects = Array.isArray(parsed?.subjects)
+        ? parsed.subjects
+        : (parsed?.subject && typeof parsed.subject === 'object' ? [parsed.subject] : []);
+      if (sourceSubjects.length) {
+        const chapters: {s:any;c:any}[] = [];
+        for (const s of sourceSubjects) {
+          for (const c of (s.chapters || [])) {
+            if (pickQuestions(c).length) chapters.push({s,c});
+          }
+        }
+        if (!chapters.length) throw new Error('No chapter question arrays were found.');
+
+        setProgress({done:0,total:chapters.length,label:'Starting import…'});
+
+        for (let i=0;i<chapters.length;i++) {
+          const {s,c}=chapters[i];
+          setProgress({done:i,total:chapters.length,label:`${s.name || s.title} → ${c.name || c.title}`});
+          const r = await fetch('/api/question-bank/admin/import', {
+            method:'POST',
+            headers:adminHeaders(),
+            body:JSON.stringify(chapterPayload(s,c))
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(`${s.name || s.title} / ${c.name || c.title}: ${d.error || 'Import failed'}`);
+          setProgress({done:i+1,total:chapters.length,label:`Imported ${d.imported} questions • ${d.imageUploads || 0} images`});
+        }
+
+        toast.success(`Imported ${chapters.length} chapters successfully.`);
+        await load();
+        return;
       }
-      toast.success(`Imported ${chapters.length} chapters successfully.`);
+
+      // Direct chapter JSON: { questions: [...] }
+      const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+      if (!questions.length) {
+        throw new Error('This JSON contains no questions. Expected either subjects → chapters → questions or a questions array.');
+      }
+
+      const sourceChapterId = questions.find((q:any) => q?.chapterId != null)?.chapterId;
+      const metadataSubject = String(parsed?.subject?.name ?? parsed?.subjectName ?? '').trim();
+      const metadataChapter = String(parsed?.chapter?.name ?? parsed?.chapterName ?? '').trim();
+
+      // Pause here and let the admin choose the subject/chapter mapping.
+      setChapterSubject(metadataSubject);
+      setChapterName(metadataChapter || (sourceChapterId != null ? `Chapter ${sourceChapterId}` : ''));
+      setPendingChapter({
+        questions,
+        chapterId: sourceChapterId,
+        subjectName: metadataSubject,
+        chapterName: metadataChapter
+      });
+      opensChapterDialog = true;
+      setProgress({done:0,total:1,label:`Ready: ${questions.length} questions${sourceChapterId != null ? ` • source chapter ${sourceChapterId}` : ''}`});
+    } catch(e:any) {
+      console.error(e);
+      toast.error(e.message || 'Import failed.');
+    } finally {
+      // A direct chapter JSON stays open for the mapping dialog.
+      if (!opensChapterDialog) setImporting(false);
+    }
+  };
+
+  const importDirectChapter = async () => {
+    if (!pendingChapter) return;
+    const subject = chapterSubject.trim();
+    const chapter = chapterName.trim();
+    if (!subject || !chapter) {
+      toast.error('Enter both Subject name and Chapter name.');
+      return;
+    }
+
+    setImporting(true);
+    setProgress({done:0,total:1,label:`${subject} → ${chapter}`});
+
+    try {
+      const fakeSubject = {
+        id: undefined,
+        name: subject,
+        description: null,
+        order: 0
+      };
+      const fakeChapter = {
+        id: pendingChapter.chapterId,
+        name: chapter,
+        description: null,
+        order: 0,
+        questions: pendingChapter.questions
+      };
+
+      const r = await fetch('/api/question-bank/admin/import', {
+        method:'POST',
+        headers:adminHeaders(),
+        body:JSON.stringify(chapterPayload(fakeSubject, fakeChapter))
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Import failed.');
+
+      setProgress({done:1,total:1,label:`Imported ${d.imported} questions • ${d.imageUploads || 0} images`});
+      toast.success(`Imported ${d.imported} questions into ${subject} → ${chapter}.`);
+      setPendingChapter(null);
+      setChapterSubject('');
+      setChapterName('');
       await load();
     } catch(e:any) {
       console.error(e);
       toast.error(e.message || 'Import failed.');
-    } finally { setImporting(false); }
+    } finally {
+      setImporting(false);
+    }
   };
 
   const toggle = async (kind:'subject'|'chapter', id:string, value:boolean) => {
@@ -105,6 +206,49 @@ export default function AdminQuestionBank() {
   const totalQuestions = subjects.reduce((n,s)=>n+(s.chapters||[]).reduce((m,c)=>m+(c.question_count||0),0),0);
 
   return (
+    <>
+    {pendingChapter && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl p-6">
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[.2em] text-emerald-400">Chapter JSON detected</div>
+              <h2 className="text-xl font-black text-white mt-1">Choose where to import it</h2>
+              <p className="text-sm text-zinc-500 mt-2">
+                {pendingChapter.questions.length.toLocaleString()} questions
+                {pendingChapter.chapterId != null ? ` • source chapter ID ${pendingChapter.chapterId}` : ''}
+              </p>
+            </div>
+            <button onClick={()=>{setPendingChapter(null);setImporting(false)}} className="p-2 text-zinc-500 hover:text-white"><X size={18}/></button>
+          </div>
+
+          <label className="block text-xs font-bold text-zinc-400 mb-2">Subject</label>
+          <input
+            value={chapterSubject}
+            onChange={e=>setChapterSubject(e.target.value)}
+            placeholder="e.g. Signals and Systems"
+            className="w-full rounded-xl border border-white/10 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500/50 mb-4"
+          />
+
+          <label className="block text-xs font-bold text-zinc-400 mb-2">Chapter</label>
+          <input
+            value={chapterName}
+            onChange={e=>setChapterName(e.target.value)}
+            placeholder="e.g. Fourier Transform"
+            className="w-full rounded-xl border border-white/10 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500/50 mb-5"
+          />
+
+          <div className="flex gap-3 justify-end">
+            <button onClick={()=>{setPendingChapter(null);setImporting(false)}} className="px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-300 font-bold">
+              Cancel
+            </button>
+            <button onClick={()=>void importDirectChapter()} className="px-5 py-2.5 rounded-xl bg-emerald-500 text-black font-black">
+              Import Chapter
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-wrap items-end justify-between gap-5 mb-8">
         <div>
@@ -170,6 +314,7 @@ export default function AdminQuestionBank() {
         ))}
       </div>}
     </div>
+    </>
   );
 }
 
