@@ -313,9 +313,30 @@ export async function POST(req: Request) {
       uploadedImages += imageUrls.length;
     }
 
-    const { error: qError } = await client
-      .from('qb_questions')
-      .upsert(rows, { onConflict: 'chapter_id,external_id' });
+    // Repair mode: replace the existing database question in-place. This prevents
+    // a repair JSON with a changed external id from creating a duplicate question.
+    const replaceQuestionId = body.replaceQuestionId ? String(body.replaceQuestionId) : '';
+    let qError: any = null;
+    if (replaceQuestionId && rows.length === 1) {
+      const { data: existing, error: findError } = await client
+        .from('qb_questions')
+        .select('id,chapter_id,external_id')
+        .eq('id', replaceQuestionId)
+        .maybeSingle();
+      if (findError) return NextResponse.json({ error: findError.message }, { status: 500 });
+      if (!existing) return NextResponse.json({ error: 'The reported question no longer exists.' }, { status: 404 });
+
+      rows[0].id = existing.id;
+      rows[0].chapter_id = existing.chapter_id;
+      rows[0].external_id = existing.external_id;
+      const { error } = await client.from('qb_questions').update(rows[0]).eq('id', existing.id);
+      qError = error;
+    } else {
+      const { error } = await client
+        .from('qb_questions')
+        .upsert(rows, { onConflict: 'chapter_id,external_id' });
+      qError = error;
+    }
     if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
 
     const { count } = await client
