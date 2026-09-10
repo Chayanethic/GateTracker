@@ -13,9 +13,10 @@ function optionKey(o:any,i:number){return String(o?.key ?? o?.id ?? o?.value ?? 
 function cleanAnswer(a:any):string[]{return Array.isArray(a)?a.map(String):a==null?[]:[String(a)]}
 function optionImage(o:any,q:Q,i:number){
   const key=optionKey(o,i);
-  const map=q.option_image_urls||{};
+  const map:any=q.option_image_urls||{};
   const direct=o?.imageUrl ?? o?.image_url ?? o?.image ?? o?.src ?? (typeof o==='string' && /^https?:\/\//.test(o) ? o : '');
-  return String(direct || map[key] || map[String(i)] || '');
+  const mapped=map[key] ?? map[String(i)] ?? map[String.fromCharCode(65+i)] ?? map[String.fromCharCode(97+i)];
+  return String(direct || mapped || '');
 }
 
 export default function ChapterPractice(){
@@ -156,7 +157,7 @@ export default function ChapterPractice(){
                 {(q.options||[]).map((o,i)=>{
                   const key=optionKey(o,i); const active=selected.includes(key); const correctKey=result?.correctAnswer?.map(String).includes(key); const img=optionImage(o,q,i); const html=optionHtml(o);
                   return <button key={key} disabled={Boolean(result)} onClick={()=>choose(key)} className={`group w-full text-left p-4 md:p-5 rounded-2xl border-2 transition-all duration-200 ${result&&correctKey?'border-emerald-400 bg-emerald-50':result&&active&&!correctKey?'border-red-300 bg-red-50':active?'border-orange-400 bg-orange-50 shadow-sm':'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-px'}`}>
-                    <div className="flex gap-3 md:gap-4 items-start"><span className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black border-2 transition ${active?'bg-orange-500 border-orange-500 text-white':'bg-white border-slate-300 text-slate-500 group-hover:border-orange-300'}`}>{result&&correctKey?<Check size={15}/>:String.fromCharCode(65+i)}</span><div className="min-w-0 flex-1 prose prose-slate max-w-none text-sm md:text-[15px] leading-6 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:my-2" dangerouslySetInnerHTML={{__html:html}}/>{img&&!html.includes('<img')&&<img src={img} alt={`Option ${String.fromCharCode(65+i)}`} loading="lazy" className="max-w-[min(100%,520px)] max-h-64 object-contain rounded-lg border border-slate-100"/>}</div>
+                    <div className="flex gap-3 md:gap-4 items-start"><span className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black border-2 transition ${active?'bg-orange-500 border-orange-500 text-white':'bg-white border-slate-300 text-slate-500 group-hover:border-orange-300'}`}>{result&&correctKey?<Check size={15}/>:String.fromCharCode(65+i)}</span><div className="min-w-0 flex-1 prose prose-slate max-w-none text-sm md:text-[15px] leading-6 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:my-2" dangerouslySetInnerHTML={{__html:html}}/>{img&&!/<img\b/i.test(html)&&<img src={img} alt={`Option ${String.fromCharCode(65+i)}`} loading="lazy" className="block max-w-full w-auto max-h-72 object-contain rounded-lg border border-slate-100" onError={(e)=>{e.currentTarget.style.display='none'}}/>}</div>
                   </button>
                 })}
               </div>}
