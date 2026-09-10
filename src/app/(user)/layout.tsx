@@ -16,6 +16,10 @@ import {
   ArrowLeftRight,
   Trophy,
   FileQuestion,
+  Sun,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 
 export default function UserLayout({
@@ -32,11 +36,40 @@ export default function UserLayout({
     useState<'cut' | 'reveal'>('cut');
   const [gateDaysRemaining, setGateDaysRemaining] = useState(0);
   const [previousGateDays, setPreviousGateDays] = useState(0);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // The examination route is rendered as a dedicated full-screen app.
   // Do not show the normal dashboard/sidebar/mobile navigation while an exam is open.
   const isExamRoute = /^\/test-series\/[^/]+$/.test(pathname || '');
   const isAnalysisRoute = /^\/test-series\/[^/]+\/analysis$/.test(pathname || '');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('gateTrackerTheme');
+    const nextTheme = savedTheme === 'light' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    document.documentElement.classList.toggle('light-theme', nextTheme === 'light');
+    document.documentElement.classList.toggle('dark-theme', nextTheme === 'dark');
+
+    const savedSidebar = localStorage.getItem('gateTrackerSidebarCollapsed');
+    setSidebarCollapsed(savedSidebar === 'true');
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('gateTrackerTheme', nextTheme);
+    document.documentElement.classList.toggle('light-theme', nextTheme === 'light');
+    document.documentElement.classList.toggle('dark-theme', nextTheme === 'dark');
+  };
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((value) => {
+      const next = !value;
+      localStorage.setItem('gateTrackerSidebarCollapsed', String(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     const verifyUser = async () => {
@@ -344,10 +377,10 @@ export default function UserLayout({
         </div>
       )}
 
-      <div className="flex h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-emerald-500/30 overflow-hidden relative">
+      <div className="flex h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-emerald-500/30 overflow-hidden relative theme-transition">
         {/* Desktop Sidebar */}
-        <aside className="hidden lg:flex w-[260px] flex-col bg-zinc-950/80 backdrop-blur-2xl border-r border-white/5 relative z-50 shadow-[5px_0_30px_rgba(0,0,0,0.5)]">
-          <div className="p-7 flex items-center gap-3 border-b border-white/5">
+        <aside className={`hidden lg:flex ${sidebarCollapsed ? 'w-[82px]' : 'w-[260px]'} flex-col bg-zinc-950/80 backdrop-blur-2xl border-r border-white/5 relative z-50 shadow-[5px_0_30px_rgba(0,0,0,0.5)] transition-[width] duration-300 ease-out shrink-0`}>
+          <div className={`p-5 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-3 border-b border-white/5`}>
             <div className="w-10 h-10 rounded-[10px] bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shadow-inner relative overflow-hidden group">
               <div className="absolute inset-0 bg-emerald-500/20 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300" />
 
@@ -357,7 +390,7 @@ export default function UserLayout({
               />
             </div>
 
-            <div className="flex flex-col">
+            <div className={`${sidebarCollapsed ? 'hidden' : 'flex'} flex-col min-w-0`}>
               <span className="text-sm font-black text-zinc-100 tracking-tight leading-tight">
                 Target Gate Platform
               </span>
@@ -365,12 +398,23 @@ export default function UserLayout({
                 Neural Engine
               </span>
             </div>
+
+            <button
+              onClick={toggleSidebar}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 ring-1 ring-transparent hover:ring-emerald-500/20 transition-all duration-200"
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
           </div>
 
-          <nav className="flex-1 px-4 py-8 flex flex-col gap-2">
-            <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2 px-2">
-              Main Menu
-            </span>
+          <nav className="flex-1 px-3 py-6 flex flex-col gap-2 overflow-y-auto">
+            {!sidebarCollapsed && (
+              <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2 px-2">
+                Main Menu
+              </span>
+            )}
 
             {navLinks.map((link) => {
               const isActive =
@@ -384,7 +428,7 @@ export default function UserLayout({
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-xs group relative overflow-hidden ${
+                  className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-xs group relative overflow-hidden ${
                     isActive
                       ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
                       : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.03]'
@@ -403,37 +447,46 @@ export default function UserLayout({
                     }
                   />
 
-                  {link.name}
+                  {!sidebarCollapsed && link.name}
                 </Link>
               );
             })}
 
-            <div className="mt-4 flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-xs text-zinc-600 cursor-not-allowed bg-black/20 ring-1 ring-white/5 relative overflow-hidden">
+            <div className={`mt-4 flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3.5 rounded-xl font-bold text-xs text-zinc-600 cursor-not-allowed bg-black/20 ring-1 ring-white/5 relative overflow-hidden`}>
               <div className="absolute top-0 right-0 w-16 h-16 bg-zinc-800/10 rounded-full blur-xl" />
 
               <User size={18} className="opacity-50" />
 
-              Analytics (Locked)
+              {!sidebarCollapsed && 'Analytics (Locked)'}
             </div>
           </nav>
 
-          <div className="p-5 border-t border-white/5 bg-white/[0.01] space-y-2">
+          <div className="p-4 border-t border-white/5 bg-white/[0.01] space-y-2">
             <button
-              onClick={() =>
-                router.push('/branch-selection?change=1')
-              }
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all duration-300 text-[11px] uppercase tracking-widest text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 ring-1 ring-transparent hover:ring-emerald-500/20"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} px-4 py-3 rounded-xl font-bold transition-all duration-300 text-[11px] uppercase tracking-widest text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 ring-1 ring-transparent hover:ring-amber-500/20`}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              {!sidebarCollapsed && (theme === 'dark' ? 'Light Mode' : 'Dark Mode')}
+            </button>
+
+            <button
+              onClick={() => router.push('/branch-selection?change=1')}
+              title="Switch Branch"
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} px-4 py-3 rounded-xl font-bold transition-all duration-300 text-[11px] uppercase tracking-widest text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 ring-1 ring-transparent hover:ring-emerald-500/20`}
             >
               <ArrowLeftRight size={16} />
-              Switch Branch
+              {!sidebarCollapsed && 'Switch Branch'}
             </button>
 
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all duration-300 text-[11px] uppercase tracking-widest text-zinc-500 hover:text-red-400 hover:bg-red-500/10 ring-1 ring-transparent hover:ring-red-500/20"
+              title="Disconnect"
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} px-4 py-3 rounded-xl font-bold transition-all duration-300 text-[11px] uppercase tracking-widest text-zinc-500 hover:text-red-400 hover:bg-red-500/10 ring-1 ring-transparent hover:ring-red-500/20`}
             >
               <LogOut size={16} />
-              Disconnect
+              {!sidebarCollapsed && 'Disconnect'}
             </button>
           </div>
         </aside>
@@ -465,6 +518,13 @@ export default function UserLayout({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              className="p-2 text-zinc-500 hover:text-amber-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors"
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
             <button
               onClick={() => router.push('/leaderboard')}
               title="Leaderboard"
