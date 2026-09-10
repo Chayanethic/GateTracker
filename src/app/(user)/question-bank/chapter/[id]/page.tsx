@@ -14,8 +14,10 @@ function cleanAnswer(a:any):string[]{return Array.isArray(a)?a.map(String):a==nu
 function optionImage(o:any,q:Q,i:number){
   const key=optionKey(o,i);
   const map:any=q.option_image_urls||{};
+  const arrayImages:any=(q as any).optionImages;
   const candidates:any[] = [
     o?.imageUrl, o?.image_url, o?.image, o?.src,
+    Array.isArray(arrayImages) ? arrayImages[i] : '',
     map[key], map[String(i)], map[String(i+1)],
     map[String.fromCharCode(65+i)], map[String.fromCharCode(97+i)],
   ];
@@ -26,10 +28,12 @@ function optionImage(o:any,q:Q,i:number){
 }
 
 function optionHtmlWithImage(o:any,q:Q,i:number){
-  let html=optionHtml(o);
+  const html=optionHtml(o);
   const img=optionImage(o,q,i);
-  if (img && !/<img\b/i.test(html)) html += `${html ? '<div>' : ''}<img src="${img}" alt="" class="qb-option-image" />${html ? '</div>' : ''}`;
-  return {html,img};
+  // If a real option image exists, render ONLY that image. The image already
+  // contains the option's visual/text content, so rendering the text as well
+  // creates the duplicate option shown in the user site.
+  return {html:img ? '' : html,img};
 }
 
 function normalizedQType(q:any){const t=String(q?.question_type||q?.source_question_type||'').trim().toUpperCase();if(['MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT','MSQ'].includes(t))return 'MSQ';if(['INTEGER','NUMERIC','NAT'].includes(t))return 'NAT';if(['MCQ','SINGLE','SINGLE_CHOICE'].includes(t))return 'MCQ';return t||'UNKNOWN'}
