@@ -262,8 +262,13 @@ export async function POST(req: Request) {
       });
       const explanationHtml = String(cleaned.explanationHtml ?? cleaned.explanation ?? cleaned.solution ?? q.explanationHtml ?? q.explanation ?? q.solution ?? '');
 
-      const rawType = String(q.questionType ?? q.type ?? q.kind ?? '').toUpperCase();
-      const questionType = rawType === 'INTEGER' || rawType === 'NUMERIC' || rawType === 'NAT' ? 'NAT' : rawType === 'MCQ' || rawType === 'MSQ' ? rawType : 'UNKNOWN';
+      const rawType = String(q.questionType ?? q.type ?? q.kind ?? '').trim().toUpperCase();
+      // Source exports use `multi` for multi-select questions. Normalize every
+      // known spelling so MSQs never fall into UNKNOWN.
+      const questionType = ['INTEGER','NUMERIC','NAT'].includes(rawType) ? 'NAT'
+        : ['MCQ','SINGLE','SINGLE_CHOICE'].includes(rawType) ? 'MCQ'
+        : ['MSQ','MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT'].includes(rawType) ? 'MSQ'
+        : 'UNKNOWN';
       const difficultyRaw = String(q.difficulty ?? q.level ?? '').toLowerCase();
       const difficulty = ['easy','medium','hard'].includes(difficultyRaw) ? difficultyRaw : null;
       const topicValue = q.topic ?? q.topicTag ?? null;
@@ -280,7 +285,7 @@ export async function POST(req: Request) {
       rows.push({
         chapter_id: ch.id,
         external_id: externalId,
-        question_number: Number.isFinite(Number(q.questionNumber ?? q.number ?? q.order)) ? Number(q.questionNumber ?? q.number ?? q.order) : i + 1,
+        question_number: Number.isFinite(Number(q.questionNumber ?? q.number)) ? Number(q.questionNumber ?? q.number) : i + 1,
         question_type: questionType,
         question_html: String(cleaned.questionHtml ?? cleaned.question ?? cleaned.questionText ?? questionHtml),
         options,
