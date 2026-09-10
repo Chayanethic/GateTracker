@@ -92,9 +92,26 @@ async function replaceImages(
     for (const [key, item] of Object.entries(value)) {
       const child = await replaceImages(client, item, prefix, imageUrls, optionImageUrls);
       out[key] = child;
+      // Option images may arrive as an object ({"0": "...", "1": "..."}),
+      // an array (["...", "...", ...]), or nested option objects. Preserve
+      // the option index/key so every image is available to the user renderer.
       if (/optionimages?/i.test(key) && child && typeof child === 'object') {
-        for (const [k, v] of Object.entries(child as Record<string, any>)) {
-          if (typeof v === 'string' && /^https?:\/\//.test(v)) optionImageUrls[k] = v;
+        if (Array.isArray(child)) {
+          child.forEach((v: any, i: number) => {
+            if (typeof v === 'string' && /^https?:\/\//.test(v)) optionImageUrls[String(i)] = v;
+            else if (v && typeof v === 'object') {
+              const url = v.url ?? v.imageUrl ?? v.image_url ?? v.src;
+              if (typeof url === 'string' && /^https?:\/\//.test(url)) optionImageUrls[String(i)] = url;
+            }
+          });
+        } else {
+          for (const [k, v] of Object.entries(child as Record<string, any>)) {
+            if (typeof v === 'string' && /^https?:\/\//.test(v)) optionImageUrls[String(k)] = v;
+            else if (v && typeof v === 'object') {
+              const url = (v as any).url ?? (v as any).imageUrl ?? (v as any).image_url ?? (v as any).src;
+              if (typeof url === 'string' && /^https?:\/\//.test(url)) optionImageUrls[String(k)] = url;
+            }
+          }
         }
       }
     }
@@ -213,10 +230,17 @@ export async function POST(req: Request) {
       const rawOptions = cleaned.options ?? cleaned.choices ?? q.options ?? q.choices ?? [];
       const options = normalizeOptions(rawOptions).map((option: any, optionIndex: number) => {
         const image = optionImageUrls[String(option.key)] ?? optionImageUrls[String(optionIndex)];
-        if (image && !String(option.html || '').includes(image)) {
-          return { ...option, html: `${String(option.html || '')}<div class="qb-option-image"><img src="${image}" alt="" /></div>` };
+        const directImage = option?.imageUrl ?? option?.image_url ?? option?.image ?? option?.src;
+        const resolvedImage = image ?? (typeof directImage === 'string' ? directImage : '');
+        let html = String(option.html || '');
+        // If an option itself is a data URI, upload it and render it.
+        if (/^data:image\//i.test(html)) {
+          html = '';
         }
-        return option;
+        if (resolvedImage && !/<img\b/i.test(html)) {
+          html += `${html ? '<div>' : ''}<img src="${resolvedImage}" alt="" class="qb-option-image" />${html ? '</div>' : ''}`;
+        }
+        return { ...option, html };
       });
       const explanationHtml = String(cleaned.explanationHtml ?? cleaned.explanation ?? cleaned.solution ?? q.explanationHtml ?? q.explanation ?? q.solution ?? '');
 
