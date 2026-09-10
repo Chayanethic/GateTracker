@@ -89,7 +89,7 @@ export default function AdminQuestionBank(){
 
   const load=async()=>{setLoading(true);try{const r=await fetch('/api/question-bank/admin',{headers:adminHeaders(),cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to load question bank.');setSubjects(d.subjects||[])}catch(e:any){toast.error(e.message)}finally{setLoading(false)}};
   const loadReports=async()=>{setReportsLoading(true);try{const r=await fetch('/api/question-bank/admin/reports',{headers:adminHeaders(),cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to load reports.');setReports(d.reports||[])}catch(e:any){toast.error(e.message)}finally{setReportsLoading(false)}};
-  useEffect(()=>{void load();void loadReports();const timer=window.setInterval(()=>void loadReports(),30000);return()=>window.clearInterval(timer)},[]);
+  useEffect(()=>{void load();void loadReports()},[]);
 
   const filtered=useMemo(()=>{const q=search.trim().toLowerCase();if(!q)return subjects;return subjects.map(s=>({...s,chapters:(s.chapters||[]).filter(c=>c.name.toLowerCase().includes(q)||s.name.toLowerCase().includes(q))})).filter(s=>s.name.toLowerCase().includes(q)||s.chapters.length)},[subjects,search]);
   const openReports=reports.filter(r=>r.status==='open');
