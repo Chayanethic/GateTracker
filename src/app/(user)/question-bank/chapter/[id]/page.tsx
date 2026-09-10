@@ -32,10 +32,13 @@ function optionHtmlWithImage(o:any,q:Q,i:number){
   return {html,img};
 }
 
+const normalizedQType=(q:any)=>{const t=String(q?.question_type||q?.source_question_type||'').trim().toUpperCase();if(['MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT','MSQ'].includes(t))return 'MSQ';if(['INTEGER','NUMERIC','NAT'].includes(t))return 'NAT';if(['MCQ','SINGLE','SINGLE_CHOICE'].includes(t))return 'MCQ';return t||'UNKNOWN'};
+
 export default function ChapterPractice(){
   const {id}=useParams<{id:string}>();
   const router=useRouter();
   const [initialQuestionId,setInitialQuestionId]=useState<string|null>(null);
+  const [returnSubjectId,setReturnSubjectId]=useState<string|null>(null);
   const [questions,setQuestions]=useState<Q[]>([]);
   const [index,setIndex]=useState(0);
   const [selected,setSelected]=useState<string[]>([]);
@@ -63,6 +66,7 @@ export default function ChapterPractice(){
   useEffect(()=>{
     const qs=new URLSearchParams(window.location.search);
     setInitialQuestionId(qs.get('questionId'));
+    setReturnSubjectId(qs.get('subjectId'));
     void load();
   },[id]);
 
@@ -107,7 +111,6 @@ export default function ChapterPractice(){
     setQuestions(prev=>prev.map(x=>x.id===q.id?{...x,progress:{...x.progress,[action==='bookmark'?'bookmarked':'marked_for_review']:value}}:x));
   };
 
-  const normalizedQType=(q:any)=>{const t=String(q?.question_type||q?.source_question_type||'').trim().toUpperCase();if(['MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT','MSQ'].includes(t))return 'MSQ';if(['INTEGER','NUMERIC','NAT'].includes(t))return 'NAT';if(['MCQ','SINGLE','SINGLE_CHOICE'].includes(t))return 'MCQ';return t||'UNKNOWN'};
 
   const choose=(key:string)=>{
     if(result||normalizedQType(q)==='NAT')return;
@@ -130,7 +133,7 @@ export default function ChapterPractice(){
   };
 
   if(loading)return <div className="min-h-[70vh] flex items-center justify-center text-slate-500"><Loader2 className="animate-spin mr-2" size={20}/>Loading questions…</div>;
-  if(!q)return <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center"><div className="text-slate-900 font-black text-xl">No questions in this filter</div><button onClick={()=>{setFilter('all');setBookmarkedOnly(false)}} className="mt-4 px-4 py-2.5 bg-orange-500 text-white rounded-xl font-bold shadow-sm">Show all questions</button></div>;
+  if(!q)return <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center"><div className="text-slate-900 font-black text-xl">No questions in this filter</div><button type="button" onClick={()=>{setFilter('all');setBookmarkedOnly(false)}} className="mt-4 px-4 py-2.5 bg-orange-500 text-white rounded-xl font-bold shadow-sm">Show all questions</button></div>;
 
   const attemptedCount=questions.filter(x=>(x.progress?.attempted_count||0)>0).length;
   const correct=Boolean(result?.correct);
@@ -142,7 +145,7 @@ export default function ChapterPractice(){
   return <div className="qb-theme min-h-full bg-slate-50/70 text-slate-900">
     <div className="max-w-[1500px] mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6">
       <div className="flex items-center gap-3 mb-4">
-        <button onClick={()=>router.push('/question-bank')} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 transition shadow-sm"><ArrowLeft size={16}/>Back</button>
+        <button type="button" onClick={()=>returnSubjectId?router.push(`/question-bank?subjectId=${encodeURIComponent(returnSubjectId)}`):router.back()} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 transition shadow-sm"><ArrowLeft size={16}/>Back</button>
         <div className="min-w-0 flex-1 flex items-center gap-2 text-xs text-slate-400">
           <span>GATE EC</span><span>/</span><span>Question Bank</span><span>/</span><span className="font-semibold text-slate-600 truncate">Chapter Practice</span>
         </div>
@@ -160,12 +163,12 @@ export default function ChapterPractice(){
           </div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex flex-wrap gap-2">
-              {(['all','unattempted','attempted'] as const).map(v=><button key={v} onClick={()=>setFilter(v)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition ${filter===v?'bg-orange-500 text-white shadow-sm':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{v}</button>)}
-              <button onClick={()=>setBookmarkedOnly(v=>!v)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition ${bookmarkedOnly?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}><Bookmark size={11} className="inline mr-1" fill={bookmarkedOnly?'currentColor':'none'}/>Saved</button>
+              {(['all','unattempted','attempted'] as const).map(v=><button type="button" key={v} onClick={()=>setFilter(v)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition ${filter===v?'bg-orange-500 text-white shadow-sm':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{v}</button>)}
+              <button type="button" onClick={()=>setBookmarkedOnly(v=>!v)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition ${bookmarkedOnly?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}><Bookmark size={11} className="inline mr-1" fill={bookmarkedOnly?'currentColor':'none'}/>Saved</button>
             </div>
             <div className="mt-3 pt-3 border-t border-slate-100">
               <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Question type</div>
-              <div className="flex flex-wrap gap-2">{(['all','MCQ','MSQ','NAT'] as const).map(v=><button key={v} onClick={()=>setTypeFilter(v)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition ${typeFilter===v?'bg-slate-800 text-white':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{v==='all'?`All (${questions.length})`:`${v} (${v==='MCQ'?typeCounts.MCQ:v==='MSQ'?typeCounts.MSQ:typeCounts.NAT})`}</button>)}</div>
+              <div className="flex flex-wrap gap-2">{(['all','MCQ','MSQ','NAT'] as const).map(v=><button type="button" key={v} onClick={()=>setTypeFilter(v)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition ${typeFilter===v?'bg-slate-800 text-white':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{v==='all'?`All (${questions.length})`:`${v} (${v==='MCQ'?typeCounts.MCQ:v==='MSQ'?typeCounts.MSQ:typeCounts.NAT})`}</button>)}</div>
             </div>
           </div>
           <div className="p-4">
@@ -173,7 +176,7 @@ export default function ChapterPractice(){
             <div className="grid grid-cols-7 gap-1.5 max-h-[390px] overflow-y-auto pr-1">
               {visible.map((x,i)=>{
                 const attempted=Boolean(x.progress?.attempted_count); const marked=x.progress?.marked_for_review;
-                return <button key={x.id} title={`Question ${x.question_number}`} onClick={()=>{setIndex(i);setSelected([]);setNatValue('');setResult(null)}} className={`relative h-9 rounded-lg text-[10px] font-black transition-all ${i===index?'bg-orange-500 text-white shadow-md scale-[1.03]':x.progress?.last_result==='correct'?'bg-emerald-50 text-emerald-700 hover:bg-emerald-100':x.progress?.last_result==='incorrect'?'bg-red-50 text-red-600 hover:bg-red-100':attempted?'bg-amber-50 text-amber-700 hover:bg-amber-100':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{x.question_number}{marked&&<span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-violet-500"/>}</button>
+                return <button type="button" key={x.id} title={`Question ${x.question_number}`} onClick={()=>{setIndex(i);setSelected([]);setNatValue('');setResult(null)}} className={`relative h-9 rounded-lg text-[10px] font-black transition-all ${i===index?'bg-orange-500 text-white shadow-md scale-[1.03]':x.progress?.last_result==='correct'?'bg-emerald-50 text-emerald-700 hover:bg-emerald-100':x.progress?.last_result==='incorrect'?'bg-red-50 text-red-600 hover:bg-red-100':attempted?'bg-amber-50 text-amber-700 hover:bg-amber-100':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{x.question_number}{marked&&<span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-violet-500"/>}</button>
               })}
             </div>
           </div>
@@ -187,9 +190,9 @@ export default function ChapterPractice(){
               {q.topic&&<span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 text-xs">{q.topic}</span>}
               <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-[10px] font-black">{q.marks ?? 1} {Number(q.marks ?? 1)===1?'mark':'marks'}</span>
               <div className="ml-auto flex gap-1">
-                <button title="Bookmark" onClick={()=>void toggleProgress('bookmark',!q.progress?.bookmarked)} className={`p-2 rounded-lg transition ${q.progress?.bookmarked?'text-amber-600 bg-amber-50':'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}><Bookmark size={17} fill={q.progress?.bookmarked?'currentColor':'none'}/></button>
-                <button title="Mark for review" onClick={()=>void toggleProgress('review',!q.progress?.marked_for_review)} className={`p-2 rounded-lg transition ${q.progress?.marked_for_review?'text-violet-600 bg-violet-50':'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}><Flag size={17} fill={q.progress?.marked_for_review?'currentColor':'none'}/></button>
-                <button title="Report question" onClick={()=>setReportOpen(true)} className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"><AlertTriangle size={17}/></button>
+                <button type="button" title="Bookmark" onClick={()=>void toggleProgress('bookmark',!q.progress?.bookmarked)} className={`p-2 rounded-lg transition ${q.progress?.bookmarked?'text-amber-600 bg-amber-50':'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}><Bookmark size={17} fill={q.progress?.bookmarked?'currentColor':'none'}/></button>
+                <button type="button" title="Mark for review" onClick={()=>void toggleProgress('review',!q.progress?.marked_for_review)} className={`p-2 rounded-lg transition ${q.progress?.marked_for_review?'text-violet-600 bg-violet-50':'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}><Flag size={17} fill={q.progress?.marked_for_review?'currentColor':'none'}/></button>
+                <button type="button" title="Report question" onClick={()=>setReportOpen(true)} className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"><AlertTriangle size={17}/></button>
               </div>
             </div>
 
@@ -205,7 +208,7 @@ export default function ChapterPractice(){
               </div> : <div className="mt-8 space-y-3">
                 {(q.options||[]).map((o,i)=>{
                   const key=optionKey(o,i); const active=selected.includes(key); const correctKey=result?.correctAnswer?.map(String).includes(key); const {img,html}=optionHtmlWithImage(o,q,i);
-                  return <button key={key} disabled={Boolean(result)} onClick={()=>choose(key)} className={`group w-full text-left p-4 md:p-5 rounded-2xl border-2 transition-all duration-200 ${result&&correctKey?'border-emerald-400 bg-emerald-50':result&&active&&!correctKey?'border-red-300 bg-red-50':active?'border-orange-400 bg-orange-50 shadow-sm':'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-px'}`}>
+                  return <button type="button" key={key} disabled={Boolean(result)} onClick={()=>choose(key)} className={`group w-full text-left p-4 md:p-5 rounded-2xl border-2 transition-all duration-200 ${result&&correctKey?'border-emerald-400 bg-emerald-50':result&&active&&!correctKey?'border-red-300 bg-red-50':active?'border-orange-400 bg-orange-50 shadow-sm':'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-px'}`}>
                     <div className="flex gap-3 md:gap-4 items-start"><span className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black border-2 transition ${active?'bg-orange-500 border-orange-500 text-white':'bg-white border-slate-300 text-slate-500 group-hover:border-orange-300'}`}>{result&&correctKey?<Check size={15}/>:String.fromCharCode(65+i)}</span><div className="min-w-0 flex-1 prose prose-slate max-w-none text-sm md:text-[15px] leading-6 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:my-2" dangerouslySetInnerHTML={{__html:html}}/>{img&&!/<img\b/i.test(html)&&<img src={img} alt={`Option ${String.fromCharCode(65+i)}`} loading="lazy" className="block max-w-full w-auto max-h-72 object-contain rounded-lg border border-slate-100" onError={(e)=>{e.currentTarget.style.display='none'}}/>}</div>
                   </button>
                 })}
@@ -219,9 +222,9 @@ export default function ChapterPractice(){
             </div>
 
             <div className="px-5 md:px-8 py-4 border-t border-slate-100 flex items-center gap-2 bg-slate-50/60">
-              <button onClick={()=>move(-1)} disabled={index===0} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 transition"><ChevronLeft size={17}/>Previous</button>
-              <button onClick={()=>{setSelected([]);setNatValue('');setResult(null)}} title="Reset answer" className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition"><RotateCcw size={15}/></button>
-              <div className="ml-auto flex items-center gap-2">{!result&&<button onClick={()=>void submit()} disabled={submitting} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black shadow-sm hover:shadow transition disabled:opacity-50">{submitting?<Loader2 size={16} className="animate-spin"/>:<Send size={16}/>}Submit Answer</button>}<button onClick={()=>move(1)} disabled={isLast} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-black transition disabled:opacity-30">{isLast?'Last Question':'Next Question'}<ChevronRight size={17}/></button></div>
+              <button type="button" onClick={()=>move(-1)} disabled={index===0} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 transition"><ChevronLeft size={17}/>Previous</button>
+              <button type="button" onClick={()=>{setSelected([]);setNatValue('');setResult(null)}} title="Reset answer" className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition"><RotateCcw size={15}/></button>
+              <div className="ml-auto flex items-center gap-2">{!result&&<button type="button" onClick={()=>void submit()} disabled={submitting} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black shadow-sm hover:shadow transition disabled:opacity-50">{submitting?<Loader2 size={16} className="animate-spin"/>:<Send size={16}/>}Submit Answer</button>}<button type="button" onClick={()=>move(1)} disabled={isLast} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-black transition disabled:opacity-30">{isLast?'Last Question':'Next Question'}<ChevronRight size={17}/></button></div>
             </div>
           </div>
         </main>
@@ -230,12 +233,12 @@ export default function ChapterPractice(){
 
     {reportOpen&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white border border-slate-200 shadow-2xl p-6">
-        <div className="flex items-start gap-3"><div className="w-10 h-10 rounded-xl bg-red-50 text-red-500 flex items-center justify-center"><AlertTriangle size={20}/></div><div className="flex-1"><h3 className="font-black text-slate-900 text-lg">Report Question {q.question_number}</h3><p className="text-xs text-slate-500 mt-1">Tell the admin what is wrong with this question.</p></div><button onClick={()=>setReportOpen(false)} className="text-slate-400 hover:text-slate-700">×</button></div>
+        <div className="flex items-start gap-3"><div className="w-10 h-10 rounded-xl bg-red-50 text-red-500 flex items-center justify-center"><AlertTriangle size={20}/></div><div className="flex-1"><h3 className="font-black text-slate-900 text-lg">Report Question {q.question_number}</h3><p className="text-xs text-slate-500 mt-1">Tell the admin what is wrong with this question.</p></div><button type="button" onClick={()=>setReportOpen(false)} className="text-slate-400 hover:text-slate-700">×</button></div>
         <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mt-6 mb-2">Reason</label>
         <select value={reportReason} onChange={e=>setReportReason(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-orange-400"><option value="">Select a reason</option><option>Wrong answer</option><option>Question statement error</option><option>Option/image not loading</option><option>Explanation error</option><option>Typo / formatting</option><option>Other</option></select>
         <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mt-4 mb-2">Details (optional)</label>
         <textarea value={reportDetails} onChange={e=>setReportDetails(e.target.value)} rows={4} placeholder="Describe the issue…" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-orange-400 resize-none"/>
-        <div className="flex justify-end gap-2 mt-5"><button onClick={()=>setReportOpen(false)} className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold">Cancel</button><button onClick={()=>void reportQuestion()} disabled={!reportReason.trim()||reporting} className="px-5 py-2.5 rounded-xl bg-red-500 text-white font-black disabled:opacity-50">{reporting?'Sending…':'Send Report'}</button></div>
+        <div className="flex justify-end gap-2 mt-5"><button type="button" onClick={()=>setReportOpen(false)} className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold">Cancel</button><button type="button" onClick={()=>void reportQuestion()} disabled={!reportReason.trim()||reporting} className="px-5 py-2.5 rounded-xl bg-red-500 text-white font-black disabled:opacity-50">{reporting?'Sending…':'Send Report'}</button></div>
       </div>
     </div>}
   </div>
