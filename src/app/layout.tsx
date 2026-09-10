@@ -1,4 +1,5 @@
 import './globals.css';
+import ThemeProvider from '@/components/ThemeProvider';
 
 export const metadata = {
   title: 'GateTracker',
@@ -13,7 +14,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-950 text-white min-h-screen">
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
