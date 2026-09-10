@@ -161,6 +161,23 @@ function normalizeOptions(raw: any): any[] {
   });
 }
 
+function imageFromOption(option:any): string {
+  if (!option) return '';
+  if (typeof option === 'string' && (/^(https?:|data:image\/)/i.test(option))) return option;
+  if (typeof option !== 'object') return '';
+  const image=option.image;
+  if (typeof image==='string') return image;
+  if (image && typeof image==='object') return String(image.url ?? image.imageUrl ?? image.image_url ?? image.src ?? '');
+  return String(option.imageUrl ?? option.image_url ?? option.src ?? '');
+}
+
+function appendImageToOption(option:any, url:string): any {
+  if (!url) return option;
+  const html=String(option?.html ?? option?.text ?? option?.content ?? option?.label ?? '');
+  if (/<img\b/i.test(html)) return {...option, html};
+  return {...option, html: `${html ? '<div>' : ''}<img src="${url}" alt="" class="qb-option-image" />${html ? '</div>' : ''}`};
+}
+
 export async function POST(req: Request) {
   if (!adminOk(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
@@ -229,18 +246,19 @@ export async function POST(req: Request) {
 
       const rawOptions = cleaned.options ?? cleaned.choices ?? q.options ?? q.choices ?? [];
       const options = normalizeOptions(rawOptions).map((option: any, optionIndex: number) => {
-        const image = optionImageUrls[String(option.key)] ?? optionImageUrls[String(optionIndex)];
-        const directImage = option?.imageUrl ?? option?.image_url ?? option?.image ?? option?.src;
-        const resolvedImage = image ?? (typeof directImage === 'string' ? directImage : '');
-        let html = String(option.html || '');
-        // If an option itself is a data URI, upload it and render it.
-        if (/^data:image\//i.test(html)) {
-          html = '';
-        }
-        if (resolvedImage && !/<img\b/i.test(html)) {
-          html += `${html ? '<div>' : ''}<img src="${resolvedImage}" alt="" class="qb-option-image" />${html ? '</div>' : ''}`;
-        }
-        return { ...option, html };
+        const directImage = imageFromOption(option);
+        const mapImage = optionImageUrls[String(option.key)] ?? optionImageUrls[String(optionIndex)] ?? optionImageUrls[String(optionIndex + 1)] ?? optionImageUrls[String.fromCharCode(65 + optionIndex)] ?? optionImageUrls[String.fromCharCode(97 + optionIndex)];
+        const resolvedImage = mapImage || directImage;
+        return appendImageToOption(option, resolvedImage);
+      });
+
+      // Always rebuild the canonical option_image_urls map from the final options.
+      // This guarantees future JSON formats cannot silently lose B/C/D images.
+      options.forEach((option:any, optionIndex:number) => {
+        const html=String(option?.html||'');
+        const match=html.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
+        const url=match?.[1] || imageFromOption(option);
+        if(url) optionImageUrls[String(optionIndex)] = url;
       });
       const explanationHtml = String(cleaned.explanationHtml ?? cleaned.explanation ?? cleaned.solution ?? q.explanationHtml ?? q.explanation ?? q.solution ?? '');
 
