@@ -15,6 +15,12 @@ function equalAnswers(a: any[], b: any[]) {
   return aa.length === bb.length && aa.every((v, i) => v === bb[i]);
 }
 
+function toNumber(value: any) {
+  if (value == null || String(value).trim() === '') return null;
+  const n = Number(String(value).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function POST(req: Request) {
   const user = await getUser(req);
   if (!user) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
@@ -27,7 +33,7 @@ export async function POST(req: Request) {
 
     const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const { data: q, error: qError } = await db.from('qb_questions')
-      .select('id,chapter_id,correct_answer,options,question_type,marks,negative_marks')
+      .select('id,chapter_id,correct_answer,options,question_type,marks,negative_marks,metadata,raw_data')
       .eq('id', questionId).single();
     if (qError || !q) return NextResponse.json({ error: 'Question not found.' }, { status: 404 });
 
@@ -42,17 +48,41 @@ export async function POST(req: Request) {
     }
 
     const answer = Array.isArray(body.answer) ? body.answer.map(String) : body.answer == null ? [] : [String(body.answer)];
-    const rawExpected = Array.isArray(q.correct_answer) ? q.correct_answer.map(String) : [];
-    const optionList = Array.isArray(q.options) ? q.options : [];
-    const expected = rawExpected.map((value) => {
-      if (/^\d+$/.test(value)) {
-        const idx = Number(value);
-        const option = optionList[idx];
-        if (option?.key != null) return String(option.key);
+    const rawQuestionType = q.raw_data && typeof q.raw_data === 'object' ? String((q.raw_data as any).questionType || (q.raw_data as any).type || '').toUpperCase() : '';
+    const isNat = String(q.question_type).toUpperCase() === 'NAT' || rawQuestionType === 'INTEGER' || rawQuestionType === 'NUMERIC' || rawQuestionType === 'NAT';
+    let expected: string[] = [];
+    let correct = false;
+
+    if (isNat) {
+      const source = (q.metadata && typeof q.metadata === 'object' ? q.metadata : {}) as any;
+      const raw = (q.raw_data && typeof q.raw_data === 'object' ? q.raw_data : {}) as any;
+      const min = toNumber(source.answerMin ?? raw.correctAnswerMin);
+      const max = toNumber(source.answerMax ?? raw.correctAnswerMax);
+      const value = toNumber(answer[0]);
+      if (min != null || max != null) {
+        const lo = min != null && max != null ? Math.min(min, max) : (min ?? max!);
+        const hi = min != null && max != null ? Math.max(min, max) : (max ?? min!);
+        correct = value != null && value >= lo && value <= hi;
+        expected = min != null && max != null ? [String(min), String(max)] : [String(lo)];
+      } else {
+        const expectedNumber = toNumber(Array.isArray(q.correct_answer) ? q.correct_answer[0] : q.correct_answer);
+        correct = value != null && expectedNumber != null && value === expectedNumber;
+        expected = expectedNumber != null ? [String(expectedNumber)] : [];
       }
-      return value;
-    });
-    const correct = answer.length > 0 && equalAnswers(answer, expected);
+    } else {
+      const rawExpected = Array.isArray(q.correct_answer) ? q.correct_answer.map(String) : [];
+      const optionList = Array.isArray(q.options) ? q.options : [];
+      expected = rawExpected.map((value) => {
+        if (/^\d+$/.test(value)) {
+          const idx = Number(value);
+          const option = optionList[idx];
+          if (option?.key != null) return String(option.key);
+        }
+        return value;
+      });
+      correct = answer.length > 0 && equalAnswers(answer, expected);
+    }
+
     const result = answer.length ? (correct ? 'correct' : 'incorrect') : 'not_answered';
     const positive = q.marks != null ? Number(q.marks) : 1;
     const negative = q.negative_marks != null ? Number(q.negative_marks) : (q.question_type === 'MCQ' ? Math.floor((positive / 3) * 100) / 100 : 0);
@@ -76,6 +106,7 @@ export async function POST(req: Request) {
       ok: true, correct, result, score,
       correctAnswer: expected,
       marks: positive, negativeMarks: negative,
+      natRange: isNat ? expected : null,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unable to record attempt.' }, { status: 500 });
