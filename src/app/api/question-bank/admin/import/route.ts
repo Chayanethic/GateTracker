@@ -221,7 +221,7 @@ export async function POST(req: Request) {
       const explanationHtml = String(cleaned.explanationHtml ?? cleaned.explanation ?? cleaned.solution ?? q.explanationHtml ?? q.explanation ?? q.solution ?? '');
 
       const rawType = String(q.questionType ?? q.type ?? q.kind ?? '').toUpperCase();
-      const questionType = ['MCQ','MSQ','NAT'].includes(rawType) ? rawType : 'UNKNOWN';
+      const questionType = rawType === 'INTEGER' || rawType === 'NUMERIC' || rawType === 'NAT' ? 'NAT' : rawType === 'MCQ' || rawType === 'MSQ' ? rawType : 'UNKNOWN';
       const difficultyRaw = String(q.difficulty ?? q.level ?? '').toLowerCase();
       const difficulty = ['easy','medium','hard'].includes(difficultyRaw) ? difficultyRaw : null;
       const topicValue = q.topic ?? q.topicTag ?? null;
@@ -256,6 +256,8 @@ export async function POST(req: Request) {
         metadata: {
           originalKeys: Object.keys(q).slice(0, 100),
           importedAt: new Date().toISOString(),
+          answerMin: q.correctAnswerMin ?? null,
+          answerMax: q.correctAnswerMax ?? null,
         },
         raw_data: safeRaw,
         is_published: true,
