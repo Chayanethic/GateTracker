@@ -1,5 +1,5 @@
 'use client';
-import { Database, Users, ClipboardCheck } from 'lucide-react';
+import { Database, Users, ClipboardCheck, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminDashboard() {
@@ -21,6 +21,11 @@ export default function AdminDashboard() {
           <ClipboardCheck size={40} className="text-emerald-400 mb-4 group-hover:scale-110 transition-transform" />
           <h2 className="text-2xl font-bold mb-2">Test Series</h2>
           <p className="text-gray-400 text-sm">Upload mock-test HTML files and approve candidate access requests.</p>
+        </Link>
+        <Link href="/admin/question-bank" className="bg-gray-900 border border-gray-800 p-8 rounded-2xl hover:border-violet-500 transition-all group">
+          <BookOpen size={40} className="text-violet-400 mb-4 group-hover:scale-110 transition-transform" />
+          <h2 className="text-2xl font-bold mb-2">Question Bank</h2>
+          <p className="text-gray-400 text-sm">Import subjects, chapters and questions with automatic Base64 image extraction, tags and difficulty.</p>
         </Link>
 
         <Link href="/admin/users" className="bg-gray-900 border border-gray-800 p-8 rounded-2xl hover:border-blue-500 transition-all group">
