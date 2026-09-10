@@ -285,7 +285,7 @@ export async function POST(req: Request) {
       rows.push({
         chapter_id: ch.id,
         external_id: externalId,
-        question_number: Number.isFinite(Number(q.questionNumber ?? q.number)) ? Number(q.questionNumber ?? q.number) : i + 1,
+        question_number: i + 1,
         question_type: questionType,
         question_html: String(cleaned.questionHtml ?? cleaned.question ?? cleaned.questionText ?? questionHtml),
         options,
@@ -320,7 +320,7 @@ export async function POST(req: Request) {
     if (replaceQuestionId && rows.length === 1) {
       const { data: existing, error: findError } = await client
         .from('qb_questions')
-        .select('id,chapter_id,external_id')
+        .select('id,chapter_id,external_id,question_number')
         .eq('id', replaceQuestionId)
         .maybeSingle();
       if (findError) return NextResponse.json({ error: findError.message }, { status: 500 });
@@ -329,6 +329,7 @@ export async function POST(req: Request) {
       rows[0].id = existing.id;
       rows[0].chapter_id = existing.chapter_id;
       rows[0].external_id = existing.external_id;
+      rows[0].question_number = existing.question_number;
       const { error } = await client.from('qb_questions').update(rows[0]).eq('id', existing.id);
       qError = error;
     } else {
