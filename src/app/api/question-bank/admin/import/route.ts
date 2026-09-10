@@ -224,9 +224,10 @@ export async function POST(req: Request) {
       const questionType = ['MCQ','MSQ','NAT'].includes(rawType) ? rawType : 'UNKNOWN';
       const difficultyRaw = String(q.difficulty ?? q.level ?? '').toLowerCase();
       const difficulty = ['easy','medium','hard'].includes(difficultyRaw) ? difficultyRaw : null;
+      const topicValue = q.topic ?? q.topicTag ?? null;
       const tags = Array.isArray(q.tags)
         ? q.tags.map(String).map((s: string) => s.trim()).filter(Boolean).slice(0, 50)
-        : (q.topic ? [String(q.topic)] : []);
+        : (topicValue != null ? [String(topicValue).trim()] : []);
 
       // Remove the largest image payloads from raw_data; everything else is retained.
       const safeRaw = JSON.parse(JSON.stringify(cleaned));
@@ -237,16 +238,16 @@ export async function POST(req: Request) {
       rows.push({
         chapter_id: ch.id,
         external_id: externalId,
-        question_number: Number.isFinite(Number(q.questionNumber ?? q.number)) ? Number(q.questionNumber ?? q.number) : i + 1,
+        question_number: Number.isFinite(Number(q.questionNumber ?? q.number ?? q.order)) ? Number(q.questionNumber ?? q.number ?? q.order) : i + 1,
         question_type: questionType,
         question_html: String(cleaned.questionHtml ?? cleaned.question ?? cleaned.questionText ?? questionHtml),
         options,
         correct_answer: answerArray(q),
         explanation_html: explanationHtml,
         difficulty,
-        topic: q.topic != null ? String(q.topic) : null,
+        topic: topicValue != null ? String(topicValue) : null,
         tags,
-        marks: q.marks != null && Number.isFinite(Number(q.marks)) ? Number(q.marks) : null,
+        marks: (q.marks ?? q.points) != null && Number.isFinite(Number(q.marks ?? q.points)) ? Number(q.marks ?? q.points) : null,
         negative_marks: (q.negativeMarks != null || q.negative_marks != null) ? Number(q.negativeMarks ?? q.negative_marks) : null,
         source: q.source != null ? String(q.source) : null,
         exam_year: q.examYear != null && Number.isFinite(Number(q.examYear)) ? Number(q.examYear) : null,
