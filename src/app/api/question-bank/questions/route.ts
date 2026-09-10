@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   let query = db.from('qb_questions')
-    .select('id,external_id,question_number,question_type,question_html,options,explanation_html,difficulty,topic,tags,marks,negative_marks,source,exam_year,image_urls,option_image_urls')
+    .select('id,external_id,question_number,question_type,question_html,options,explanation_html,difficulty,topic,tags,marks,negative_marks,source,exam_year,image_urls,option_image_urls,source_question_type:raw_data->>questionType')
     .eq('chapter_id', chapterId).eq('is_published', true).order('question_number');
   if (difficulty && ['easy','medium','hard'].includes(difficulty)) query = query.eq('difficulty', difficulty);
   if (topic) query = query.ilike('topic', `%${topic}%`);
@@ -36,10 +36,15 @@ export async function GET(req: Request) {
     progress = data || [];
   }
   const progressMap = new Map(progress.map(p => [p.question_id, p]));
-  const safeQuestions = (questions || []).map(q => ({
-    ...q,
+  const safeQuestions = (questions || []).map(q => {
+    const sourceType = String((q as any).source_question_type || '').toUpperCase();
+    const normalizedType = q.question_type === 'NAT' || sourceType === 'NAT' || sourceType === 'INTEGER' || sourceType === 'NUMERIC' ? 'NAT' : q.question_type;
+    const { source_question_type: _sourceType, ...publicQuestion } = q as any;
+    return {
+    ...publicQuestion,
+    question_type: normalizedType,
     progress: progressMap.get(q.id) || { attempted_count: 0, correct_count: 0, incorrect_count: 0, last_result: null, bookmarked: false, marked_for_review: false },
-  }));
+  }});
 
   return NextResponse.json({
     chapter: chapterId,
