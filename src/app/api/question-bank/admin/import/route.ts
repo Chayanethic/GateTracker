@@ -318,18 +318,88 @@ export async function POST(req: Request) {
     const replaceQuestionId = body.replaceQuestionId ? String(body.replaceQuestionId) : '';
     let qError: any = null;
     if (replaceQuestionId && rows.length === 1) {
+      // Repair mode: preserve the options that are already on the user site and
+      // APPEND options from the corrected JSON. A repair file may intentionally
+      // contain only the newly-added options, so replacing rows[0].options would
+      // incorrectly overwrite an existing option (for example A).
       const { data: existing, error: findError } = await client
         .from('qb_questions')
-        .select('id,chapter_id,external_id,question_number')
+        .select('id,chapter_id,external_id,question_number,options,option_image_urls,correct_answer')
         .eq('id', replaceQuestionId)
         .maybeSingle();
       if (findError) return NextResponse.json({ error: findError.message }, { status: 500 });
       if (!existing) return NextResponse.json({ error: 'The reported question no longer exists.' }, { status: 404 });
 
+      const existingOptions = Array.isArray(existing.options) ? existing.options : [];
+      const incomingOptions = Array.isArray(rows[0].options) ? rows[0].options : [];
+
+      // Append, never overwrite. Keep the existing option objects exactly as-is.
+      if (existingOptions.length && incomingOptions.length) {
+        rows[0].options = [...existingOptions, ...incomingOptions];
+      } else if (existingOptions.length) {
+        rows[0].options = existingOptions;
+      }
+
+      // Preserve existing option-image mappings and shift incoming image indexes
+      // by the number of existing options so A's image can never be overwritten
+      // by the new B/C/D images.
+      const existingImageMap =
+        existing.option_image_urls && typeof existing.option_image_urls === 'object'
+          ? existing.option_image_urls
+          : {};
+      const incomingImageMap =
+        rows[0].option_image_urls && typeof rows[0].option_image_urls === 'object'
+          ? rows[0].option_image_urls
+          : {};
+
+      const mergedImageMap: Record<string, string> = { ...existingImageMap };
+      const optionOffset = existingOptions.length;
+
+      Object.entries(incomingImageMap).forEach(([key, value]) => {
+        const numericKey = Number(key);
+        if (Number.isInteger(numericKey) && numericKey >= 0) {
+          mergedImageMap[String(numericKey + optionOffset)] = String(value);
+        } else if (!(key in mergedImageMap)) {
+          mergedImageMap[key] = String(value);
+        }
+      });
+
+      rows[0].option_image_urls = mergedImageMap;
+
+      // The corrected JSON's answer indexes refer to its incoming option list.
+      // Shift numeric/letter option answers by the number of preserved options.
+      // NAT answers are not shifted because they are values, not option indexes.
+      const incomingAnswers = Array.isArray(rows[0].correct_answer)
+        ? rows[0].correct_answer.map(String)
+        : [];
+
+      const questionType = String(rows[0].question_type || '').toUpperCase();
+
+      if (questionType === 'MCQ' || questionType === 'MSQ') {
+        rows[0].correct_answer = incomingAnswers.map((answer: string) => {
+          const trimmed = answer.trim();
+
+          // 0-based numeric answer index.
+          if (/^\\d+$/.test(trimmed)) {
+            return String(Number(trimmed) + optionOffset);
+          }
+
+          // Letter answer (A/B/C/D) from a corrected JSON.
+          if (/^[A-Da-d]$/.test(trimmed)) {
+            const index = trimmed.toUpperCase().charCodeAt(0) - 65;
+            return String(index + optionOffset);
+          }
+
+          // Preserve non-index answers untouched.
+          return answer;
+        });
+      }
+
       rows[0].id = existing.id;
       rows[0].chapter_id = existing.chapter_id;
       rows[0].external_id = existing.external_id;
       rows[0].question_number = existing.question_number;
+
       const { error } = await client.from('qb_questions').update(rows[0]).eq('id', existing.id);
       qError = error;
     } else {
