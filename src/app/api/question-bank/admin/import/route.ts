@@ -371,7 +371,7 @@ export async function POST(req: Request) {
 
       // Convert each incoming source position into one canonical option.
       // Empty text + an image is a REAL option and must not be discarded.
-      const incomingCanonical = incomingOptions.map((option: any, index: number) => {
+      const incomingCanonical: Array<{ option: any; sourceIndex: number; image: string }> = incomingOptions.map((option: any, index: number) => {
         const mapImage =
           incomingImageMap[String(index)] ||
           incomingImageMap[String(index + 1)] ||
@@ -473,7 +473,7 @@ export async function POST(req: Request) {
       // their final indexes. This prevents the correct answer from moving.
       const sourceToFinal = new Map<number, number>();
 
-      incomingCanonical.forEach((item) => {
+      incomingCanonical.forEach((item: { option: any; sourceIndex: number; image: string }) => {
         const sig = optionSignature(item.option);
         if (!sig || sig === '|') return;
 
