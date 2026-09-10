@@ -32,7 +32,7 @@ function optionHtmlWithImage(o:any,q:Q,i:number){
   return {html,img};
 }
 
-const normalizedQType=(q:any)=>{const t=String(q?.question_type||q?.source_question_type||'').trim().toUpperCase();if(['MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT','MSQ'].includes(t))return 'MSQ';if(['INTEGER','NUMERIC','NAT'].includes(t))return 'NAT';if(['MCQ','SINGLE','SINGLE_CHOICE'].includes(t))return 'MCQ';return t||'UNKNOWN'};
+function normalizedQType(q:any){const t=String(q?.question_type||q?.source_question_type||'').trim().toUpperCase();if(['MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT','MSQ'].includes(t))return 'MSQ';if(['INTEGER','NUMERIC','NAT'].includes(t))return 'NAT';if(['MCQ','SINGLE','SINGLE_CHOICE'].includes(t))return 'MCQ';return t||'UNKNOWN'}
 
 export default function ChapterPractice(){
   const {id}=useParams<{id:string}>();
