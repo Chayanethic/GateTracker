@@ -225,7 +225,7 @@ export async function POST(req: Request) {
       const difficultyRaw = String(q.difficulty ?? q.level ?? '').toLowerCase();
       const difficulty = ['easy','medium','hard'].includes(difficultyRaw) ? difficultyRaw : null;
       const tags = Array.isArray(q.tags)
-        ? q.tags.map(String).map(s => s.trim()).filter(Boolean).slice(0, 50)
+        ? q.tags.map(String).map((s: string) => s.trim()).filter(Boolean).slice(0, 50)
         : (q.topic ? [String(q.topic)] : []);
 
       // Remove the largest image payloads from raw_data; everything else is retained.
