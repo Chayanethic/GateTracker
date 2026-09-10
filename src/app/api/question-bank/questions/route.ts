@@ -37,8 +37,11 @@ export async function GET(req: Request) {
   }
   const progressMap = new Map(progress.map(p => [p.question_id, p]));
   const safeQuestions = (questions || []).map(q => {
-    const sourceType = String((q as any).source_question_type || '').toUpperCase();
-    const normalizedType = q.question_type === 'NAT' || sourceType === 'NAT' || sourceType === 'INTEGER' || sourceType === 'NUMERIC' ? 'NAT' : q.question_type;
+    const sourceType = String((q as any).source_question_type || '').trim().toUpperCase();
+    const normalizedType = ['NAT','INTEGER','NUMERIC'].includes(sourceType) || q.question_type === 'NAT' ? 'NAT'
+      : ['MSQ','MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT'].includes(sourceType) || q.question_type === 'MSQ' ? 'MSQ'
+      : ['MCQ','SINGLE','SINGLE_CHOICE'].includes(sourceType) || q.question_type === 'MCQ' ? 'MCQ'
+      : q.question_type;
     const { source_question_type: _sourceType, ...publicQuestion } = q as any;
     return {
     ...publicQuestion,
