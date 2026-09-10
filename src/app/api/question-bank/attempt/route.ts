@@ -48,7 +48,8 @@ export async function POST(req: Request) {
     }
 
     const answer = Array.isArray(body.answer) ? body.answer.map(String) : body.answer == null ? [] : [String(body.answer)];
-    const rawQuestionType = q.raw_data && typeof q.raw_data === 'object' ? String((q.raw_data as any).questionType || (q.raw_data as any).type || '').toUpperCase() : '';
+    const rawQuestionType = q.raw_data && typeof q.raw_data === 'object' ? String((q.raw_data as any).questionType || (q.raw_data as any).type || '').trim().toUpperCase() : '';
+    const normalizedType = ['MSQ','MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT'].includes(rawQuestionType) ? 'MSQ' : (q.question_type as string);
     const isNat = String(q.question_type).toUpperCase() === 'NAT' || rawQuestionType === 'INTEGER' || rawQuestionType === 'NUMERIC' || rawQuestionType === 'NAT';
     let expected: string[] = [];
     let correct = false;
