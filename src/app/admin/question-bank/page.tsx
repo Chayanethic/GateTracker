@@ -27,6 +27,81 @@ function chapterPayload(subject: any, chapter: any) {
   };
 }
 
+
+async function uploadBase64ImageToStorage(dataUri: string, prefix: string) {
+  const blob = await fetch(dataUri).then(r => {
+    if (!r.ok) throw new Error('Unable to read embedded image.');
+    return r.blob();
+  });
+  const ext = (blob.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+  const form = new FormData();
+  form.append('file', blob, `image.${ext}`);
+  form.append('prefix', prefix);
+
+  const r = await fetch('/api/question-bank/admin/upload-image', {
+    method: 'POST',
+    headers: {
+      'x-admin-email': process.env.NEXT_PUBLIC_ADMIN_EMAIL || '',
+      'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '',
+    },
+    body: form,
+  });
+  const text = await r.text();
+  let d: any = {};
+  try { d = text ? JSON.parse(text) : {}; } catch { d = { error: text || 'Image upload failed.' }; }
+  if (!r.ok || !d.url) throw new Error(d.error || `Image upload failed (${r.status}).`);
+  return d.url as string;
+}
+
+async function replaceBase64ImagesBeforeImport(
+  value: any,
+  prefix: string,
+  cache: Map<string, Promise<string>>,
+  onImage: () => void
+): Promise<any> {
+  if (typeof value === 'string') {
+    if (/^data:image\//i.test(value)) {
+      if (!cache.has(value)) {
+        cache.set(value, uploadBase64ImageToStorage(value, prefix));
+      }
+      const url = await cache.get(value)!;
+      onImage();
+      return url;
+    }
+
+    if (/<img\b[^>]*src\s*=\s*["']data:image\//i.test(value)) {
+      const re = /(<img\b[^>]*\bsrc\s*=\s*["'])(data:image\/[^"']+)(["'][^>]*>)/gi;
+      let out = value;
+      const matches = [...value.matchAll(re)];
+      for (const m of matches) {
+        const dataUri = m[2];
+        if (!cache.has(dataUri)) cache.set(dataUri, uploadBase64ImageToStorage(dataUri, prefix));
+        const url = await cache.get(dataUri)!;
+        out = out.split(dataUri).join(url);
+        onImage();
+      }
+      return out;
+    }
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const out = [];
+    for (const item of value) out.push(await replaceBase64ImagesBeforeImport(item, prefix, cache, onImage));
+    return out;
+  }
+
+  if (value && typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [key, item] of Object.entries(value)) {
+      out[key] = await replaceBase64ImagesBeforeImport(item, prefix, cache, onImage);
+    }
+    return out;
+  }
+
+  return value;
+}
+
 export default function AdminQuestionBank() {
   const input = useRef<HTMLInputElement>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -94,20 +169,56 @@ export default function AdminQuestionBank() {
 
         setProgress({done:0,total:chapters.length,label:'Starting import…'});
 
+        let totalImported = 0;
+        let totalImages = 0;
         for (let i=0;i<chapters.length;i++) {
           const {s,c}=chapters[i];
-          setProgress({done:i,total:chapters.length,label:`${s.name || s.title} → ${c.name || c.title}`});
+          const subjectName = s.name || s.title;
+          const chapterName = c.name || c.title;
+          const questions = pickQuestions(c);
+          const cache = new Map<string, Promise<string>>();
+          let convertedImages = 0;
+
+          setProgress({
+            done:i,
+            total:chapters.length,
+            label:`Preparing images: ${subjectName} → ${chapterName}`
+          });
+
+          // Convert embedded Base64 images to Supabase Storage URLs BEFORE
+          // sending the question JSON. This keeps API requests small enough
+          // for hosting/proxy request limits.
+          const cleanedQuestions = [];
+          for (let qi=0; qi<questions.length; qi++) {
+            setProgress({
+              done:i,
+              total:chapters.length,
+              label:`${subjectName} → ${chapterName} • processing question ${qi+1}/${questions.length} • ${convertedImages} images`
+            });
+            const cleaned = await replaceBase64ImagesBeforeImport(
+              questions[qi],
+              `qb/${sessionStorage.getItem('adminStream') || 'ece'}`,
+              cache,
+              () => { convertedImages += 1; }
+            );
+            cleanedQuestions.push(cleaned);
+          }
+
           const r = await fetch('/api/question-bank/admin/import', {
             method:'POST',
             headers:adminHeaders(),
-            body:JSON.stringify(chapterPayload(s,c))
+            body:JSON.stringify(chapterPayload(s,{...c, questions: cleanedQuestions}))
           });
-          const d = await r.json();
-          if (!r.ok) throw new Error(`${s.name || s.title} / ${c.name || c.title}: ${d.error || 'Import failed'}`);
-          setProgress({done:i+1,total:chapters.length,label:`Imported ${d.imported} questions • ${d.imageUploads || 0} images`});
+          const text = await r.text();
+          let d:any = {};
+          try { d = text ? JSON.parse(text) : {}; } catch { d = { error: text || `Import failed (${r.status})` }; }
+          if (!r.ok) throw new Error(`${subjectName} / ${chapterName}: ${d.error || `Import failed (${r.status})`}`);
+          totalImported += Number(d.imported || 0);
+          totalImages += convertedImages;
+          setProgress({done:i+1,total:chapters.length,label:`Imported ${d.imported} questions • ${convertedImages} images converted to URLs`});
         }
 
-        toast.success(`Imported ${chapters.length} chapters successfully.`);
+        toast.success(`Imported ${chapters.length} chapters • ${totalImported} questions • ${totalImages} images.`);
         await load();
         return;
       }
@@ -169,15 +280,30 @@ export default function AdminQuestionBank() {
         questions: pendingChapter.questions
       };
 
+      const cache = new Map<string, Promise<string>>();
+      let convertedImages = 0;
+      const cleanedQuestions = [];
+      for (let qi=0; qi<pendingChapter.questions.length; qi++) {
+        setProgress({done:0,total:1,label:`Processing question ${qi+1}/${pendingChapter.questions.length} • ${convertedImages} images`});
+        cleanedQuestions.push(await replaceBase64ImagesBeforeImport(
+          pendingChapter.questions[qi],
+          `qb/${sessionStorage.getItem('adminStream') || 'ece'}`,
+          cache,
+          () => { convertedImages += 1; }
+        ));
+      }
+
       const r = await fetch('/api/question-bank/admin/import', {
         method:'POST',
         headers:adminHeaders(),
-        body:JSON.stringify(chapterPayload(fakeSubject, fakeChapter))
+        body:JSON.stringify(chapterPayload(fakeSubject, {...fakeChapter, questions: cleanedQuestions}))
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Import failed.');
+      const text = await r.text();
+      let d:any = {};
+      try { d = text ? JSON.parse(text) : {}; } catch { d = { error: text || `Import failed (${r.status})` }; }
+      if (!r.ok) throw new Error(d.error || `Import failed (${r.status}).`);
 
-      setProgress({done:1,total:1,label:`Imported ${d.imported} questions • ${d.imageUploads || 0} images`});
+      setProgress({done:1,total:1,label:`Imported ${d.imported} questions • ${convertedImages} images converted to URLs`});
       toast.success(`Imported ${d.imported} questions into ${subject} → ${chapter}.`);
       setPendingChapter(null);
       setChapterSubject('');
@@ -269,7 +395,7 @@ export default function AdminQuestionBank() {
       >
         <FileJson className="mx-auto text-zinc-500 mb-2" size={28}/>
         <p className="text-sm font-bold text-zinc-300">Drop the Question Bank JSON here</p>
-        <p className="text-xs text-zinc-600 mt-1">The importer processes one chapter at a time. Do not upload Base64 images separately.</p>
+        <p className="text-xs text-zinc-600 mt-1">Upload one subject JSON. Chapters are processed automatically, and embedded Base64 images are uploaded to Supabase Storage and replaced with URLs before questions are saved.</p>
       </div>
 
       {importing && (
