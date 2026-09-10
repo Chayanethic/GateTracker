@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Bookmark, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Flag, Loader2, RotateCcw, Send, XCircle, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-type Q={id:string;question_number:number;question_type:string;question_html:string;options:any[];explanation_html:string;difficulty?:string|null;topic?:string|null;tags?:string[];marks?:number|null;negative_marks?:number|null;image_urls?:string[];option_image_urls?:Record<string,string>;progress?:any};
+type Q={id:string;question_number:number;question_type:string;source_question_type?:string|null;question_html:string;options:any[];explanation_html:string;difficulty?:string|null;topic?:string|null;tags?:string[];marks?:number|null;negative_marks?:number|null;image_urls?:string[];option_image_urls?:Record<string,string>;progress?:any};
 
 function optionHtml(o:any){return String(o?.html ?? o?.text ?? o?.content ?? o?.label ?? (typeof o === 'string' ? o : '') ?? '')}
 function optionKey(o:any,i:number){return String(o?.key ?? o?.id ?? o?.value ?? i)}
@@ -71,7 +71,7 @@ export default function ChapterPractice(){
     if(filter==='attempted'&&!attempted)return false;
     if(filter==='unattempted'&&attempted)return false;
     if(bookmarkedOnly&&!q.progress?.bookmarked)return false;
-    if(typeFilter!=='all'&&String(q.question_type).toUpperCase()!==typeFilter)return false;
+    if(typeFilter!=='all'&&normalizedQType(q)!==typeFilter)return false;
     return true;
   }),[questions,filter,bookmarkedOnly,typeFilter]);
 
@@ -86,7 +86,7 @@ export default function ChapterPractice(){
 
   const submit=async()=>{
     if(!q||submitting)return;
-    const isNat=q.question_type==='NAT';
+    const isNat=normalizedQType(q)==='NAT';
     const answer=isNat ? [natValue.trim()] : selected;
     if(!answer.length || !answer[0]){toast.error(isNat?'Enter a numerical answer first.':'Select an answer first.');return}
     if(isNat && !Number.isFinite(Number(natValue.trim()))){toast.error('Enter a valid number.');return}
@@ -107,9 +107,11 @@ export default function ChapterPractice(){
     setQuestions(prev=>prev.map(x=>x.id===q.id?{...x,progress:{...x.progress,[action==='bookmark'?'bookmarked':'marked_for_review']:value}}:x));
   };
 
+  const normalizedQType=(q:any)=>{const t=String(q?.question_type||q?.source_question_type||'').trim().toUpperCase();if(['MULTI','MULTIPLE','MULTIPLE_CHOICE','MULTI_SELECT','MULTISELECT','MSQ'].includes(t))return 'MSQ';if(['INTEGER','NUMERIC','NAT'].includes(t))return 'NAT';if(['MCQ','SINGLE','SINGLE_CHOICE'].includes(t))return 'MCQ';return t||'UNKNOWN'};
+
   const choose=(key:string)=>{
-    if(result||q?.question_type==='NAT')return;
-    setSelected(prev=>q.question_type==='MSQ'?(prev.includes(key)?prev.filter(x=>x!==key):[...prev,key]):[key]);
+    if(result||normalizedQType(q)==='NAT')return;
+    setSelected(prev=>normalizedQType(q)==='MSQ'?(prev.includes(key)?prev.filter(x=>x!==key):[...prev,key]):[key]);
   };
   const move=(delta:number)=>{
     const next=Math.max(0,Math.min(visible.length-1,index+delta));
@@ -134,8 +136,8 @@ export default function ChapterPractice(){
   const correct=Boolean(result?.correct);
   const isLast=index===visible.length-1;
   const progressPct=visible.length ? ((index+1)/visible.length)*100 : 0;
-  const isNat=q.question_type==='NAT';
-  const typeCounts={MCQ:questions.filter(x=>String(x.question_type).toUpperCase()==='MCQ').length,MSQ:questions.filter(x=>String(x.question_type).toUpperCase()==='MSQ').length,NAT:questions.filter(x=>String(x.question_type).toUpperCase()==='NAT').length};
+  const isNat=normalizedQType(q)==='NAT';
+  const typeCounts={MCQ:questions.filter(x=>normalizedQType(x)==='MCQ').length,MSQ:questions.filter(x=>normalizedQType(x)==='MSQ').length,NAT:questions.filter(x=>normalizedQType(x)==='NAT').length};
 
   return <div className="qb-theme min-h-full bg-slate-50/70 text-slate-900">
     <div className="max-w-[1500px] mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6">
@@ -180,7 +182,7 @@ export default function ChapterPractice(){
         <main className="min-w-0">
           <div className="bg-white border border-slate-200 rounded-2xl md:rounded-3xl shadow-sm overflow-hidden">
             <div className="px-5 md:px-8 py-4 border-b border-slate-100 flex flex-wrap gap-2.5 items-center">
-              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-wide">{q.question_type}</span>
+              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-wide">{normalizedQType(q)}</span>
               {q.difficulty&&<span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide ${q.difficulty==='hard'?'bg-red-50 text-red-600':q.difficulty==='medium'?'bg-amber-50 text-amber-700':'bg-emerald-50 text-emerald-700'}`}>{q.difficulty}</span>}
               {q.topic&&<span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 text-xs">{q.topic}</span>}
               <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-[10px] font-black">{q.marks ?? 1} {Number(q.marks ?? 1)===1?'mark':'marks'}</span>
