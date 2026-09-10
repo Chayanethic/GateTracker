@@ -176,6 +176,11 @@ export default function UserLayout({
       href: '/test-series',
       icon: FileQuestion,
     },
+    {
+      name: 'Question Bank',
+      href: '/question-bank',
+      icon: BookOpen,
+    },
   ];
 
   if (isExamRoute) {
