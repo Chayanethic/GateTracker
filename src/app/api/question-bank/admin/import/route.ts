@@ -333,47 +333,169 @@ export async function POST(req: Request) {
       const existingOptions = Array.isArray(existing.options) ? existing.options : [];
       const incomingOptions = Array.isArray(rows[0].options) ? rows[0].options : [];
 
-      // Repair files can contain ONLY the newly-added options. Never let the
-      // incoming option at index 0/key "0" overwrite the existing A option.
-      // First append, then re-key the complete merged list sequentially so the
-      // user renderer never sees duplicate option keys (0/0, A/A, etc.).
-      const mergedOptions = [...existingOptions, ...incomingOptions];
-      rows[0].options = mergedOptions.map((option: any, index: number) => {
+      // Repair files from the Question Bank exporter represent the source's
+      // option positions. Some of those positions can be empty because their
+      // real content lives in option_image_urls. A repair must therefore:
+      //   1) NEVER overwrite an option that already exists in the database.
+      //   2) NEVER append the same existing option again (the corrected JSON
+      //      commonly contains the already-present A option).
+      //   3) Append only genuinely NEW incoming options, preserving their
+      //      image data.
+      // This makes a DB with [old A, old B] plus a corrected JSON containing
+      // [old A, new B, new C, new D] become [old A, old B, new B, new C, new D].
+
+      const optionText = (option: any): string => {
+        if (option == null) return '';
+        if (typeof option === 'string') return option.trim();
+        return String(option.html ?? option.text ?? option.content ?? option.label ?? '').trim();
+      };
+
+      const stripHtml = (value: string): string =>
+        value
+          .replace(/<[^>]*>/g, ' ')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLowerCase();
+
+      const optionSignature = (option: any): string => {
+        const html = optionText(option);
+        const image = imageFromOption(option);
+        return `${stripHtml(html)}|${String(image || '').trim()}`;
+      };
+
+      const incomingImageMap =
+        rows[0].option_image_urls && typeof rows[0].option_image_urls === 'object'
+          ? rows[0].option_image_urls
+          : {};
+
+      // Convert each incoming source position into one canonical option.
+      // Empty text + an image is a REAL option and must not be discarded.
+      const incomingCanonical = incomingOptions.map((option: any, index: number) => {
+        const mapImage =
+          incomingImageMap[String(index)] ||
+          incomingImageMap[String(index + 1)] ||
+          incomingImageMap[String.fromCharCode(65 + index)] ||
+          incomingImageMap[String.fromCharCode(97 + index)] ||
+          '';
+
+        const directImage = imageFromOption(option);
+        const resolvedImage = mapImage || directImage;
+
+        let canonical = option && typeof option === 'object' && !Array.isArray(option)
+          ? { ...option }
+          : { html: String(option ?? '') };
+
+        if (resolvedImage) {
+          canonical = appendImageToOption(canonical, String(resolvedImage));
+        }
+
+        return {
+          option: canonical,
+          sourceIndex: index,
+          image: String(resolvedImage || '')
+        };
+      });
+
+      // Existing options are authoritative. Only use their signatures to
+      // identify duplicates; never replace them with incoming content.
+      const existingSignatures = new Set<string>();
+      for (const option of existingOptions) {
+        const sig = optionSignature(option);
+        if (sig !== '|') existingSignatures.add(sig);
+      }
+
+      const mergedOptions = existingOptions.map((option: any, index: number) => {
         if (option && typeof option === 'object' && !Array.isArray(option)) {
           return { ...option, key: String(index) };
         }
         return { key: String(index), html: String(option ?? '') };
       });
 
-      // Preserve existing option-image mappings and shift incoming image indexes
-      // by the number of existing options so A's image can never be overwritten
-      // by the new B/C/D images.
+      // Preserve the incoming image mapping by the FINAL option index.
+      const mergedImageMap: Record<string, string> = {};
+
+      // Existing option-image mappings stay exactly where they were.
       const existingImageMap =
         existing.option_image_urls && typeof existing.option_image_urls === 'object'
           ? existing.option_image_urls
           : {};
-      const incomingImageMap =
-        rows[0].option_image_urls && typeof rows[0].option_image_urls === 'object'
-          ? rows[0].option_image_urls
-          : {};
-
-      const mergedImageMap: Record<string, string> = { ...existingImageMap };
-      const optionOffset = existingOptions.length;
-
-      Object.entries(incomingImageMap).forEach(([key, value]) => {
-        const numericKey = Number(key);
-        if (Number.isInteger(numericKey) && numericKey >= 0) {
-          mergedImageMap[String(numericKey + optionOffset)] = String(value);
-        } else if (!(key in mergedImageMap)) {
-          mergedImageMap[key] = String(value);
+      Object.entries(existingImageMap).forEach(([key, value]) => {
+        if (value != null && String(value).trim()) {
+          mergedImageMap[String(key)] = String(value);
         }
       });
 
+      let addedIncoming = 0;
+
+      for (const item of incomingCanonical) {
+        const textSig = stripHtml(optionText(item.option));
+        const imageSig = String(item.image || '').trim();
+        const sig = `${textSig}|${imageSig}`;
+
+        // Ignore completely empty source positions.
+        if (!textSig && !imageSig) continue;
+
+        // Exact duplicate of an existing option: preserve the DB option and
+        // do not append it. This is the key fix for the repeated A option.
+        if (existingSignatures.has(sig)) continue;
+
+        // If text matches an existing text option but the incoming option adds
+        // an image, it is still the same logical option. Preserve the existing
+        // position rather than creating a duplicate.
+        const sameText = existingOptions.some((old: any) => {
+          const oldText = stripHtml(optionText(old));
+          return textSig && oldText && textSig === oldText;
+        });
+        if (sameText) continue;
+
+        const finalIndex = mergedOptions.length;
+        const canonical = item.option && typeof item.option === 'object' && !Array.isArray(item.option)
+          ? { ...item.option, key: String(finalIndex) }
+          : { key: String(finalIndex), html: String(item.option ?? '') };
+
+        mergedOptions.push(canonical);
+
+        if (item.image) {
+          mergedImageMap[String(finalIndex)] = item.image;
+        }
+
+        existingSignatures.add(sig);
+        addedIncoming++;
+      }
+
+      rows[0].options = mergedOptions;
       rows[0].option_image_urls = mergedImageMap;
 
-      // The corrected JSON's answer indexes refer to its incoming option list.
-      // Shift numeric/letter option answers by the number of preserved options.
-      // NAT answers are not shifted because they are values, not option indexes.
+      // Answers in a repair file refer to the SOURCE option positions. If an
+      // incoming option was skipped because it already exists, map that source
+      // position to the existing DB position. Newly appended options map to
+      // their final indexes. This prevents the correct answer from moving.
+      const sourceToFinal = new Map<number, number>();
+
+      incomingCanonical.forEach((item) => {
+        const sig = optionSignature(item.option);
+        if (!sig || sig === '|') return;
+
+        // Prefer an existing matching option.
+        let finalIndex = existingOptions.findIndex((old: any) => {
+          const oldSig = optionSignature(old);
+          if (oldSig === sig) return true;
+          const a = stripHtml(optionText(old));
+          const b = stripHtml(optionText(item.option));
+          return Boolean(a && b && a === b);
+        });
+
+        // Otherwise locate the appended option by signature.
+        if (finalIndex < 0) {
+          finalIndex = mergedOptions.findIndex((merged: any) => optionSignature(merged) === sig);
+        }
+
+        if (finalIndex >= 0) {
+          sourceToFinal.set(item.sourceIndex, finalIndex);
+        }
+      });
+
       const incomingAnswers = Array.isArray(rows[0].correct_answer)
         ? rows[0].correct_answer.map(String)
         : [];
@@ -384,18 +506,20 @@ export async function POST(req: Request) {
         rows[0].correct_answer = incomingAnswers.map((answer: string) => {
           const trimmed = answer.trim();
 
-          // 0-based numeric answer index.
-          if (/^\\d+$/.test(trimmed)) {
-            return String(Number(trimmed) + optionOffset);
+          if (/^\d+$/.test(trimmed)) {
+            const sourceIndex = Number(trimmed);
+            return sourceToFinal.has(sourceIndex)
+              ? String(sourceToFinal.get(sourceIndex))
+              : trimmed;
           }
 
-          // Letter answer (A/B/C/D) from a corrected JSON.
-          if (/^[A-Da-d]$/.test(trimmed)) {
-            const index = trimmed.toUpperCase().charCodeAt(0) - 65;
-            return String(index + optionOffset);
+          if (/^[A-Z]$/i.test(trimmed)) {
+            const sourceIndex = trimmed.toUpperCase().charCodeAt(0) - 65;
+            return sourceToFinal.has(sourceIndex)
+              ? String(sourceToFinal.get(sourceIndex))
+              : trimmed;
           }
 
-          // Preserve non-index answers untouched.
           return answer;
         });
       }
