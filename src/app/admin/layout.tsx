@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { ShieldAlert, Database, Users, LayoutDashboard, LogOut, ArrowLeftRight, ClipboardCheck } from 'lucide-react';
+import { ShieldAlert, Database, Users, LayoutDashboard, LogOut, ArrowLeftRight, ClipboardCheck, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -65,6 +65,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
           <Link href="/admin/test-series" className="flex items-center gap-3 text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800">
             <ClipboardCheck size={20} /> Test Series
+          </Link>
+          <Link href="/admin/question-bank" className="flex items-center gap-3 text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800">
+            <BookOpen size={20} /> Question Bank
           </Link>
           <Link href="/admin/users" className="flex items-center gap-3 text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800">
             <Users size={20} /> Candidate Data
