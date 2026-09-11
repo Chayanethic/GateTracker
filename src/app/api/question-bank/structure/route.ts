@@ -14,12 +14,28 @@ export async function GET(req: Request) {
   if (!u) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const stream = searchParams.get('stream') || 'ece';
+  const requestedStream = String(searchParams.get('stream') || '').trim().toLowerCase();
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
+  // Question Bank follows the stream selected by the logged-in user. The old
+  // implementation always defaulted to ECE, which made the whole Question
+  // Bank appear empty for users whose profile is on another stream. Keep an
+  // explicit ?stream= override for navigation/debugging, otherwise resolve it
+  // from the user's profile.
+  let stream = requestedStream;
+  if (!stream) {
+    const { data: profile } = await db
+      .from('user_profiles')
+      .select('branch')
+      .eq('user_id', u.id)
+      .maybeSingle();
+    stream = String(profile?.branch || '').trim().toLowerCase();
+  }
+  if (!stream) stream = 'ece';
 
   const { data: subjects, error } = await db.from('qb_subjects')
     .select('id,name,description,sort_order,chapters:qb_chapters(id,name,description,sort_order,question_count,is_published)')
-    .eq('stream', stream).eq('is_published', true).order('sort_order');
+    .ilike('stream', stream).eq('is_published', true).order('sort_order');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const subjectRows = (subjects || []).map((s: any) => ({ ...s, chapters: (s.chapters || []).filter((c: any) => c.is_published) }));
