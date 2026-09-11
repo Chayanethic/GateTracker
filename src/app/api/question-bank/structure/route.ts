@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-async function user(req: Request) {
-  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+async function getUser(req: Request) {
+  const token = req.headers
+    .get('authorization')
+    ?.replace(/^Bearer\s+/i, '');
+
   if (!token) return null;
 
   const client = createClient(
@@ -23,311 +26,512 @@ async function user(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const u = await user(req);
+  try {
+    // ------------------------------------------------------------
+    // AUTHENTICATION
+    // ------------------------------------------------------------
+    const user = await getUser(req);
 
-  if (!u) {
-    return NextResponse.json(
-      { error: 'Authentication required.' },
-      { status: 401 }
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required.' },
+        { status: 401 }
+      );
+    }
+
+    // ------------------------------------------------------------
+    // DATABASE
+    // ------------------------------------------------------------
+    const db = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
-  }
 
-  const { searchParams } = new URL(req.url);
+    const { searchParams } = new URL(req.url);
 
-  const requestedStream = String(
-    searchParams.get('stream') || ''
-  )
-    .trim()
-    .toLowerCase();
-
-  const db = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  let stream = requestedStream;
-
-  if (!stream) {
-    const { data: profile } = await db
-      .from('user_profiles')
-      .select('branch')
-      .eq('user_id', u.id)
-      .maybeSingle();
-
-    stream = String(profile?.branch || '')
+    /*
+     * Optional stream filter.
+     *
+     * If ?stream=ece is supplied, only ECE subjects are returned.
+     * If no stream is supplied, ALL published subjects are returned.
+     *
+     * This fixes the situation where the user's profile branch does
+     * not exactly match the stream value stored in qb_subjects.
+     */
+    const requestedStream = String(
+      searchParams.get('stream') || ''
+    )
       .trim()
       .toLowerCase();
-  }
 
-  if (!stream) {
-    stream = 'ece';
-  }
+    // ------------------------------------------------------------
+    // FETCH PUBLISHED SUBJECTS + CHAPTERS
+    // ------------------------------------------------------------
+    let subjectQuery = db
+      .from('qb_subjects')
+      .select(
+        `
+        id,
+        name,
+        description,
+        sort_order,
+        stream,
+        exam_key,
+        chapters:qb_chapters(
+          id,
+          name,
+          description,
+          sort_order,
+          question_count,
+          is_published
+        )
+        `
+      )
+      .eq('is_published', true)
+      .order('sort_order', { ascending: true });
 
-  const { data: subjects, error } = await db
-    .from('qb_subjects')
-    .select(
-      'id,name,description,sort_order,chapters:qb_chapters(id,name,description,sort_order,question_count,is_published)'
-    )
-    .eq('stream', stream)
-    .eq('is_published', true)
-    .order('sort_order');
-
-  if (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
-  }
-
-  const subjectRows = (subjects || []).map((s: any) => ({
-    ...s,
-    chapters: (s.chapters || []).filter(
-      (c: any) => c.is_published
-    ),
-  }));
-
-  const chapterIds = subjectRows.flatMap((s: any) =>
-    s.chapters.map((c: any) => c.id)
-  );
-
-  const questionToChapter = new Map<string, string>();
-  const questionToSubject = new Map<string, string>();
-
-  const chapterStats = new Map<
-    string,
-    {
-      total: number;
-      mcq: number;
-      msq: number;
-      nat: number;
-      unknown: number;
-      attempted: number;
-      saved: number;
+    if (requestedStream) {
+      subjectQuery = subjectQuery.eq(
+        'stream',
+        requestedStream
+      );
     }
-  >();
 
-  const attemptedIds = new Set<string>();
-  const bookmarkedIds = new Set<string>();
+    const {
+      data: subjects,
+      error: subjectError,
+    } = await subjectQuery;
 
-  if (chapterIds.length) {
-    const { data: qs, error: qError } = await db
-      .from('qb_questions')
-      .select('id,chapter_id,question_type')
-      .in('chapter_id', chapterIds)
-      .eq('is_published', true);
+    if (subjectError) {
+      console.error(
+        '[QUESTION BANK] Subject fetch failed:',
+        subjectError
+      );
 
-    if (qError) {
       return NextResponse.json(
-        { error: qError.message },
+        {
+          error: `Unable to load subjects: ${subjectError.message}`,
+        },
         { status: 500 }
       );
     }
 
-    (qs || []).forEach((q: any) => {
-      questionToChapter.set(q.id, q.chapter_id);
+    // ------------------------------------------------------------
+    // REMOVE UNPUBLISHED CHAPTERS
+    // ------------------------------------------------------------
+    const subjectRows = (subjects || []).map((subject: any) => ({
+      ...subject,
 
-      const stat =
-        chapterStats.get(q.chapter_id) || {
-          total: 0,
-          mcq: 0,
-          msq: 0,
-          nat: 0,
-          unknown: 0,
-          attempted: 0,
-          saved: 0,
-        };
+      chapters: (subject.chapters || [])
+        .filter((chapter: any) => chapter.is_published)
+        .sort(
+          (a: any, b: any) =>
+            Number(a.sort_order || 0) -
+            Number(b.sort_order || 0)
+        ),
+    }));
 
-      stat.total++;
-
-      const type = String(q.question_type || '').toUpperCase();
-
-      if (type === 'MCQ') {
-        stat.mcq++;
-      } else if (type === 'MSQ') {
-        stat.msq++;
-      } else if (type === 'NAT') {
-        stat.nat++;
-      } else {
-        stat.unknown++;
-      }
-
-      chapterStats.set(q.chapter_id, stat);
-    });
-
-    const qids = (qs || []).map((q: any) => q.id);
-
-    if (qids.length) {
-      const { data: p, error: pError } = await db
-        .from('qb_question_progress')
-        .select(
-          'question_id,attempted_count,bookmarked'
+    // ------------------------------------------------------------
+    // COLLECT CHAPTER IDS
+    // ------------------------------------------------------------
+    const chapterIds = subjectRows.flatMap(
+      (subject: any) =>
+        subject.chapters.map(
+          (chapter: any) => chapter.id
         )
-        .eq('user_id', u.id)
-        .in('question_id', qids);
+    );
 
-      if (pError) {
+    const questionToChapter = new Map<
+      string,
+      string
+    >();
+
+    const chapterStats = new Map<
+      string,
+      {
+        total: number;
+        mcq: number;
+        msq: number;
+        nat: number;
+        unknown: number;
+        attempted: number;
+        saved: number;
+      }
+    >();
+
+    const attemptedIds = new Set<string>();
+    const bookmarkedIds = new Set<string>();
+
+    // ------------------------------------------------------------
+    // FETCH QUESTIONS
+    // ------------------------------------------------------------
+    if (chapterIds.length > 0) {
+      const {
+        data: questions,
+        error: questionError,
+      } = await db
+        .from('qb_questions')
+        .select(
+          `
+          id,
+          chapter_id,
+          question_type,
+          raw_data
+          `
+        )
+        .in('chapter_id', chapterIds)
+        .eq('is_published', true);
+
+      if (questionError) {
+        console.error(
+          '[QUESTION BANK] Question statistics fetch failed:',
+          questionError
+        );
+
         return NextResponse.json(
-          { error: pError.message },
+          {
+            error: `Unable to load question statistics: ${questionError.message}`,
+          },
           { status: 500 }
         );
       }
 
-      (p || []).forEach((row: any) => {
-        if (Number(row.attempted_count || 0) > 0) {
-          attemptedIds.add(row.question_id);
+      // ----------------------------------------------------------
+      // BUILD QUESTION STATISTICS
+      // ----------------------------------------------------------
+      (questions || []).forEach((question: any) => {
+        questionToChapter.set(
+          question.id,
+          question.chapter_id
+        );
+
+        const stat =
+          chapterStats.get(question.chapter_id) || {
+            total: 0,
+            mcq: 0,
+            msq: 0,
+            nat: 0,
+            unknown: 0,
+            attempted: 0,
+            saved: 0,
+          };
+
+        stat.total++;
+
+        /*
+         * Prefer raw_data.questionType when available because
+         * imported questions may have the correct source type
+         * there.
+         */
+        const sourceType = String(
+          question?.raw_data?.questionType || ''
+        )
+          .trim()
+          .toUpperCase();
+
+        const databaseType = String(
+          question?.question_type || ''
+        )
+          .trim()
+          .toUpperCase();
+
+        const type = sourceType || databaseType;
+
+        if (
+          ['MCQ', 'SINGLE', 'SINGLE_CHOICE'].includes(type)
+        ) {
+          stat.mcq++;
+        } else if (
+          [
+            'MSQ',
+            'MULTI',
+            'MULTIPLE',
+            'MULTIPLE_CHOICE',
+            'MULTI_SELECT',
+            'MULTISELECT',
+          ].includes(type)
+        ) {
+          stat.msq++;
+        } else if (
+          ['NAT', 'INTEGER', 'NUMERIC'].includes(type)
+        ) {
+          stat.nat++;
+        } else {
+          stat.unknown++;
         }
 
-        if (row.bookmarked) {
-          bookmarkedIds.add(row.question_id);
-        }
+        chapterStats.set(
+          question.chapter_id,
+          stat
+        );
       });
-    }
-  }
 
-  attemptedIds.forEach((qid) => {
-    const cid = questionToChapter.get(qid);
+      // ----------------------------------------------------------
+      // FETCH USER PROGRESS
+      // ----------------------------------------------------------
+      const questionIds = (questions || []).map(
+        (question: any) => question.id
+      );
 
-    if (cid) {
-      const s = chapterStats.get(cid);
+      if (questionIds.length > 0) {
+        const {
+          data: progress,
+          error: progressError,
+        } = await db
+          .from('qb_question_progress')
+          .select(
+            `
+            question_id,
+            attempted_count,
+            bookmarked
+            `
+          )
+          .eq('user_id', user.id)
+          .in('question_id', questionIds);
 
-      if (s) {
-        s.attempted++;
+        /*
+         * Progress failure should not make the whole Question Bank
+         * disappear. The subjects/questions can still be displayed.
+         */
+        if (progressError) {
+          console.error(
+            '[QUESTION BANK] Progress fetch failed:',
+            progressError
+          );
+        } else {
+          (progress || []).forEach((row: any) => {
+            if (
+              Number(row.attempted_count || 0) > 0
+            ) {
+              attemptedIds.add(
+                row.question_id
+              );
+            }
+
+            if (row.bookmarked) {
+              bookmarkedIds.add(
+                row.question_id
+              );
+            }
+          });
+        }
       }
     }
-  });
 
-  bookmarkedIds.forEach((qid) => {
-    const cid = questionToChapter.get(qid);
+    // ------------------------------------------------------------
+    // APPLY ATTEMPTED COUNTS
+    // ------------------------------------------------------------
+    attemptedIds.forEach((questionId) => {
+      const chapterId =
+        questionToChapter.get(questionId);
 
-    if (cid) {
-      const s = chapterStats.get(cid);
+      if (!chapterId) return;
 
-      if (s) {
-        s.saved++;
+      const stat =
+        chapterStats.get(chapterId);
+
+      if (stat) {
+        stat.attempted++;
       }
-    }
-  });
-
-  const subjectByChapter = new Map<string, string>();
-
-  subjectRows.forEach((s: any) =>
-    s.chapters.forEach((c: any) =>
-      subjectByChapter.set(c.id, s.id)
-    )
-  );
-
-  const result = subjectRows.map((s: any) => {
-    const chapters = s.chapters.map((c: any) => {
-      const st =
-        chapterStats.get(c.id) || {
-          total: 0,
-          mcq: 0,
-          msq: 0,
-          nat: 0,
-          unknown: 0,
-          attempted: 0,
-          saved: 0,
-        };
-
-      const total = st.total;
-
-      return {
-        ...c,
-
-        question_count: total,
-
-        attempted_count: st.attempted,
-
-        remaining_count: Math.max(
-          0,
-          total - st.attempted
-        ),
-
-        progress_percent: total
-          ? Math.round(
-              (st.attempted / total) * 100
-            )
-          : 0,
-
-        mcq_count: st.mcq,
-
-        msq_count: st.msq,
-
-        nat_count: st.nat,
-
-        unknown_count: st.unknown,
-
-        saved_count: st.saved,
-      };
     });
 
-    const total = chapters.reduce(
-      (n: number, c: any) =>
-        n + Number(c.question_count || 0),
-      0
+    // ------------------------------------------------------------
+    // APPLY SAVED COUNTS
+    // ------------------------------------------------------------
+    bookmarkedIds.forEach((questionId) => {
+      const chapterId =
+        questionToChapter.get(questionId);
+
+      if (!chapterId) return;
+
+      const stat =
+        chapterStats.get(chapterId);
+
+      if (stat) {
+        stat.saved++;
+      }
+    });
+
+    // ------------------------------------------------------------
+    // BUILD FINAL RESPONSE
+    // ------------------------------------------------------------
+    const result = subjectRows.map(
+      (subject: any) => {
+        const chapters =
+          subject.chapters.map(
+            (chapter: any) => {
+              const stat =
+                chapterStats.get(chapter.id) || {
+                  total: 0,
+                  mcq: 0,
+                  msq: 0,
+                  nat: 0,
+                  unknown: 0,
+                  attempted: 0,
+                  saved: 0,
+                };
+
+              const total = stat.total;
+
+              return {
+                ...chapter,
+
+                question_count: total,
+
+                attempted_count:
+                  stat.attempted,
+
+                remaining_count:
+                  Math.max(
+                    0,
+                    total - stat.attempted
+                  ),
+
+                progress_percent:
+                  total > 0
+                    ? Math.round(
+                        (stat.attempted /
+                          total) *
+                          100
+                      )
+                    : 0,
+
+                mcq_count: stat.mcq,
+                msq_count: stat.msq,
+                nat_count: stat.nat,
+                unknown_count:
+                  stat.unknown,
+
+                saved_count: stat.saved,
+              };
+            }
+          );
+
+        const totalQuestions =
+          chapters.reduce(
+            (sum: number, chapter: any) =>
+              sum +
+              Number(
+                chapter.question_count || 0
+              ),
+            0
+          );
+
+        const attempted =
+          chapters.reduce(
+            (sum: number, chapter: any) =>
+              sum +
+              Number(
+                chapter.attempted_count || 0
+              ),
+            0
+          );
+
+        const saved =
+          chapters.reduce(
+            (sum: number, chapter: any) =>
+              sum +
+              Number(
+                chapter.saved_count || 0
+              ),
+            0
+          );
+
+        return {
+          id: subject.id,
+          name: subject.name,
+          description: subject.description,
+          sort_order: subject.sort_order,
+          stream: subject.stream,
+          exam_key: subject.exam_key,
+
+          chapters,
+
+          total_questions:
+            totalQuestions,
+
+          attempted_count:
+            attempted,
+
+          remaining_count:
+            Math.max(
+              0,
+              totalQuestions - attempted
+            ),
+
+          progress_percent:
+            totalQuestions > 0
+              ? Math.round(
+                  (attempted /
+                    totalQuestions) *
+                    100
+                )
+              : 0,
+
+          mcq_count:
+            chapters.reduce(
+              (sum: number, chapter: any) =>
+                sum +
+                Number(
+                  chapter.mcq_count || 0
+                ),
+              0
+            ),
+
+          msq_count:
+            chapters.reduce(
+              (sum: number, chapter: any) =>
+                sum +
+                Number(
+                  chapter.msq_count || 0
+                ),
+              0
+            ),
+
+          nat_count:
+            chapters.reduce(
+              (sum: number, chapter: any) =>
+                sum +
+                Number(
+                  chapter.nat_count || 0
+                ),
+              0
+            ),
+
+          unknown_count:
+            chapters.reduce(
+              (sum: number, chapter: any) =>
+                sum +
+                Number(
+                  chapter.unknown_count || 0
+                ),
+              0
+            ),
+
+          saved_count: saved,
+        };
+      }
     );
 
-    const attempted = chapters.reduce(
-      (n: number, c: any) =>
-        n + Number(c.attempted_count || 0),
-      0
+    // ------------------------------------------------------------
+    // FINAL RESPONSE
+    // ------------------------------------------------------------
+    return NextResponse.json({
+      subjects: result,
+    });
+  } catch (error: any) {
+    console.error(
+      '[QUESTION BANK] Unexpected structure error:',
+      error
     );
 
-    const saved = chapters.reduce(
-      (n: number, c: any) =>
-        n + Number(c.saved_count || 0),
-      0
+    return NextResponse.json(
+      {
+        error:
+          error?.message ||
+          'Unexpected error while loading Question Bank.',
+      },
+      { status: 500 }
     );
-
-    return {
-      ...s,
-
-      chapters,
-
-      total_questions: total,
-
-      attempted_count: attempted,
-
-      remaining_count: Math.max(
-        0,
-        total - attempted
-      ),
-
-      progress_percent: total
-        ? Math.round(
-            (attempted / total) * 100
-          )
-        : 0,
-
-      mcq_count: chapters.reduce(
-        (n: number, c: any) =>
-          n + Number(c.mcq_count || 0),
-        0
-      ),
-
-      msq_count: chapters.reduce(
-        (n: number, c: any) =>
-          n + Number(c.msq_count || 0),
-        0
-      ),
-
-      nat_count: chapters.reduce(
-        (n: number, c: any) =>
-          n + Number(c.nat_count || 0),
-        0
-      ),
-
-      unknown_count: chapters.reduce(
-        (n: number, c: any) =>
-          n + Number(c.unknown_count || 0),
-        0
-      ),
-
-      saved_count: saved,
-    };
-  });
-
-  return NextResponse.json({
-    subjects: result,
-  });
+  }
 }
