@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import {
   ArrowLeft,
   BookOpen,
@@ -11,7 +12,6 @@ import {
   Loader2,
   Search,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 type Chapter = {
   id: string;
@@ -50,19 +50,20 @@ export default function QuestionBankHome() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [selectedSubject, setSelectedSubject] =
+    useState<Subject | null>(null);
 
-  /**
-   * Load the complete question-bank structure.
+  /*
+   * Load latest Question Bank structure.
    *
-   * Important:
-   * We intentionally fetch this again whenever the page becomes active
-   * so that attempted/saved/progress values are not stale after returning
-   * from a chapter.
+   * This is the important fix.
+   * The chapter page already saves the attempt to the database.
+   * We simply fetch the structure again when coming back so that
+   * subject/chapter attempted counts and progress are fresh.
    */
-  const loadStructure = useCallback(async (showLoader = false) => {
+  const loadStructure = useCallback(async (showLoading = false) => {
     try {
-      if (showLoader) {
+      if (showLoading) {
         setLoading(true);
       }
 
@@ -73,7 +74,6 @@ export default function QuestionBankHome() {
       if (!session) {
         setSubjects([]);
         setSelectedSubject(null);
-        setLoading(false);
         return;
       }
 
@@ -95,29 +95,54 @@ export default function QuestionBankHome() {
         return;
       }
 
-      setSubjects(Array.isArray(data?.subjects) ? data.subjects : []);
+      const freshSubjects = Array.isArray(data?.subjects)
+        ? data.subjects
+        : [];
+
+      setSubjects(freshSubjects);
+
+      /*
+       * If the page was opened from a chapter using:
+       *
+       * /question-bank?subjectId=...
+       *
+       * make sure the selected subject also uses the newly
+       * fetched progress values.
+       */
+      if (subjectIdFromUrl) {
+        const freshSelectedSubject = freshSubjects.find(
+          (subject: Subject) =>
+            String(subject.id) === String(subjectIdFromUrl)
+        );
+
+        if (freshSelectedSubject) {
+          setSelectedSubject(freshSelectedSubject);
+        }
+      }
     } catch (error) {
-      console.error('Failed to load question bank structure:', error);
+      console.error(
+        'Failed to load question bank structure:',
+        error
+      );
     } finally {
-      if (showLoader) {
+      if (showLoading) {
         setLoading(false);
       }
     }
-  }, []);
+  }, [subjectIdFromUrl]);
 
-  /**
-   * Initial structure load.
+  /*
+   * Initial load.
    */
   useEffect(() => {
     void loadStructure(true);
   }, [loadStructure]);
 
-  /**
-   * Refresh whenever the user comes back to this page/tab.
+  /*
+   * Refresh when the Question Bank page becomes visible/focused.
    *
-   * This fixes the situation where a question was attempted inside
-   * a chapter but the subject/chapter progress on this page still
-   * displayed the old values.
+   * This handles cases where the user returns to this page
+   * using browser navigation or another tab.
    */
   useEffect(() => {
     const handleFocus = () => {
@@ -131,7 +156,10 @@ export default function QuestionBankHome() {
     };
 
     window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange
+    );
 
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -142,567 +170,558 @@ export default function QuestionBankHome() {
     };
   }, [loadStructure]);
 
-  /**
-   * Keep selected subject synchronized with the URL.
+  /*
+   * If chapter page navigates back to:
    *
-   * useSearchParams is important here because router.push()
-   * does not necessarily trigger a browser popstate event.
+   * /question-bank?subjectId=...
+   *
+   * Next.js updates searchParams even when the page component
+   * itself is preserved. Make sure the correct subject is selected.
    */
   useEffect(() => {
     if (!subjectIdFromUrl) {
-      setSelectedSubject(null);
-      return;
-    }
-
-    if (!subjects.length) {
       return;
     }
 
     const match = subjects.find(
-      (subject) => String(subject.id) === String(subjectIdFromUrl)
+      (subject) =>
+        String(subject.id) === String(subjectIdFromUrl)
     );
 
-    setSelectedSubject(match || null);
+    if (match) {
+      setSelectedSubject(match);
+    }
   }, [subjectIdFromUrl, subjects]);
 
-  /**
-   * Search subjects and their chapters.
-   */
-  const filteredSubjects = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
 
-    if (!query) {
-      return subjects;
-    }
-
-    return subjects.filter((subject) => {
-      const subjectMatches = subject.name
-        .toLowerCase()
-        .includes(query);
-
-      const chapterMatches = (subject.chapters || []).some((chapter) =>
-        chapter.name.toLowerCase().includes(query)
-      );
-
-      return subjectMatches || chapterMatches;
-    });
+    return subjects.filter(
+      (s) =>
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        (s.chapters || []).some((c) =>
+          c.name.toLowerCase().includes(q)
+        )
+    );
   }, [subjects, search]);
 
-  /**
-   * Total saved questions across all subjects.
-   */
-  const totalSaved = useMemo(() => {
-    return subjects.reduce(
-      (total, subject) => total + Number(subject.saved_count || 0),
-      0
-    );
-  }, [subjects]);
+  const totalSaved = subjects.reduce(
+    (n, s) => n + Number(s.saved_count || 0),
+    0
+  );
 
-  /**
-   * Subject details page.
-   */
-  if (selectedSubject) {
+  if (loading)
     return (
-      <main className="min-h-screen bg-slate-50 dark:bg-slate-950">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mb-6">
-            <Link
-              href="/question-bank"
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white"
+      <div className="qb-theme min-h-full flex items-center justify-center text-slate-500">
+        <Loader2 className="animate-spin mr-2" />
+        Loading Question Bank…
+      </div>
+    );
+
+  if (selectedSubject) {
+    /*
+     * Always use the latest subject from `subjects`.
+     *
+     * This prevents the UI from displaying the old object that
+     * was selected before the question was attempted.
+     */
+    const s =
+      subjects.find((x) => x.id === selectedSubject.id) ||
+      selectedSubject;
+
+    const chapters = (s.chapters || []).filter(
+      (c) =>
+        !search.trim() ||
+        c.name
+          .toLowerCase()
+          .includes(search.trim().toLowerCase())
+    );
+
+    const total = s.total_questions ?? 0;
+    const attempted = s.attempted_count ?? 0;
+    const pct =
+      s.progress_percent ??
+      (total
+        ? Math.round((attempted / total) * 100)
+        : 0);
+
+    return (
+      <div className="qb-theme min-h-full bg-slate-50/70 text-slate-900">
+        <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
+          <div className="flex items-center gap-3 mb-5">
+            <button
+              onClick={async () => {
+                /*
+                 * IMPORTANT:
+                 * Refresh before going back to the subject list.
+                 *
+                 * This is the main fix for:
+                 *
+                 * Chapter:
+                 * Attempted = 1
+                 *
+                 * but Subject/Home:
+                 * Attempted = 0
+                 *
+                 * The attempt is already stored in DB, so we only
+                 * need to reload the structure here.
+                 */
+                await loadStructure(false);
+
+                setSelectedSubject(null);
+                setSearch('');
+              }}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 shadow-sm"
             >
-              <ArrowLeft className="h-4 w-4" />
-              All Subjects
-            </Link>
+              <ArrowLeft size={16} />
+              Back
+            </button>
+
+            <span className="text-xs text-slate-400">
+              Question Bank /
+            </span>
+
+            <span className="text-xs font-bold text-slate-700">
+              {s.name}
+            </span>
           </div>
 
-          <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <div className="mb-3 flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-                    <BookOpen className="h-6 w-6" />
-                  </div>
-
-                  <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                      {selectedSubject.name}
-                    </h1>
-
-                    {selectedSubject.description && (
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                        {selectedSubject.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
+          <section className="bg-white border border-slate-200 rounded-3xl p-5 md:p-6 shadow-sm mb-6">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500">
+                <BookOpen size={21} />
               </div>
 
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Metric
+              <div className="flex-1">
+                <h1 className="text-xl md:text-2xl font-black">
+                  {s.name}
+                </h1>
+
+                <p className="text-sm text-slate-500 mt-1">
+                  {s.chapters?.length || 0} chapters • {total}{' '}
+                  questions
+                </p>
+              </div>
+
+              <div className="hidden sm:flex gap-7 text-center">
+                <ProgressStat
                   label="Questions"
-                  value={Number(selectedSubject.total_questions || 0)}
+                  value={total}
                 />
 
-                <Metric
+                <ProgressStat
                   label="Attempted"
-                  value={Number(selectedSubject.attempted_count || 0)}
+                  value={attempted}
                 />
 
-                <Metric
+                <ProgressStat
                   label="Remaining"
-                  value={Number(selectedSubject.remaining_count || 0)}
+                  value={Math.max(0, total - attempted)}
                 />
 
-                <Metric
+                <ProgressStat
                   label="Saved"
-                  value={Number(selectedSubject.saved_count || 0)}
+                  value={s.saved_count || 0}
+                />
+
+                <ProgressStat
+                  label="Progress"
+                  value={`${pct}%`}
                 />
               </div>
             </div>
 
-            <div className="mt-6">
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-600 dark:text-slate-300">
-                  Overall Progress
+            <div className="mt-5">
+              <div className="flex justify-between text-[11px] font-bold text-slate-500 mb-1">
+                <span>
+                  {attempted}/{total} attempted
                 </span>
 
-                <span className="font-semibold text-slate-900 dark:text-white">
-                  {Number(selectedSubject.progress_percent || 0)}%
-                </span>
+                <span>{pct}%</span>
               </div>
 
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-blue-600 transition-all"
+                  className="h-full bg-orange-500 rounded-full"
                   style={{
-                    width: `${Math.min(
-                      100,
-                      Math.max(
-                        0,
-                        Number(selectedSubject.progress_percent || 0)
-                      )
-                    )}%`,
+                    width: `${pct}%`,
                   }}
                 />
               </div>
             </div>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <TypeBadge
-                label="MCQ"
-                value={Number(selectedSubject.mcq_count || 0)}
-              />
-
-              <TypeBadge
-                label="MSQ"
-                value={Number(selectedSubject.msq_count || 0)}
-              />
-
-              <TypeBadge
-                label="NAT"
-                value={Number(selectedSubject.nat_count || 0)}
-              />
-
-              <TypeBadge
-                label="Saved"
-                value={Number(selectedSubject.saved_count || 0)}
-                icon={<Bookmark className="h-3.5 w-3.5" />}
-              />
-            </div>
           </section>
 
-          <section>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                  Chapters
-                </h2>
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <TypeStat
+              label="MCQ"
+              value={s.mcq_count || 0}
+            />
 
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Choose a chapter to practice questions.
-                </p>
-              </div>
-            </div>
+            <TypeStat
+              label="MSQ"
+              value={s.msq_count || 0}
+            />
 
-            {selectedSubject.chapters?.length ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {selectedSubject.chapters.map((chapter) => (
-                  <Link
-                    key={chapter.id}
-                    href={`/question-bank/chapter/${encodeURIComponent(
-                      chapter.id
-                    )}?subjectId=${encodeURIComponent(selectedSubject.id)}`}
-                    className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-base font-semibold text-slate-900 dark:text-white">
-                          {chapter.name}
-                        </h3>
+            <TypeStat
+              label="NAT"
+              value={s.nat_count || 0}
+            />
+          </div>
 
-                        {chapter.description && (
-                          <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
-                            {chapter.description}
-                          </p>
-                        )}
-                      </div>
+          <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3 mb-5 shadow-sm">
+            <Search
+              size={18}
+              className="text-slate-400"
+            />
 
-                      <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-blue-600" />
-                    </div>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search chapters…"
+              className="bg-transparent outline-none flex-1 text-sm text-slate-900 placeholder:text-slate-400"
+            />
+          </div>
 
-                    <div className="mt-5 grid grid-cols-3 gap-2">
-                      <SmallMetric
-                        label="Total"
-                        value={Number(chapter.question_count || 0)}
-                      />
-
-                      <SmallMetric
-                        label="Attempted"
-                        value={Number(chapter.attempted_count || 0)}
-                      />
-
-                      <SmallMetric
-                        label="Remaining"
-                        value={Number(chapter.remaining_count || 0)}
-                      />
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="mb-2 flex items-center justify-between text-xs">
-                        <span className="text-slate-500 dark:text-slate-400">
-                          Progress
-                        </span>
-
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">
-                          {Number(chapter.progress_percent || 0)}%
-                        </span>
-                      </div>
-
-                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div
-                          className="h-full rounded-full bg-blue-600 transition-all"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              Math.max(
-                                0,
-                                Number(chapter.progress_percent || 0)
-                              )
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <TypeBadge
-                        label="MCQ"
-                        value={Number(chapter.mcq_count || 0)}
-                      />
-
-                      <TypeBadge
-                        label="MSQ"
-                        value={Number(chapter.msq_count || 0)}
-                      />
-
-                      <TypeBadge
-                        label="NAT"
-                        value={Number(chapter.nat_count || 0)}
-                      />
-
-                      {Number(chapter.saved_count || 0) > 0 && (
-                        <TypeBadge
-                          label="Saved"
-                          value={Number(chapter.saved_count || 0)}
-                          icon={<Bookmark className="h-3.5 w-3.5" />}
-                        />
-                      )}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <EmptyState message="No published chapters are available for this subject yet." />
-            )}
-          </section>
-        </div>
-      </main>
-    );
-  }
-
-  /**
-   * Main Question Bank home page.
-   */
-  return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-                  <BookOpen className="h-6 w-6" />
-                </div>
-
-                <div>
-                  <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                    Question Bank
-                  </h1>
-
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Practice questions chapter by chapter and track your
-                    progress.
-                  </p>
-                </div>
-              </div>
-            </div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-black">
+              Chapters
+            </h2>
 
             <Link
               href="/question-bank/saved"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-700 dark:hover:bg-blue-950/30 dark:hover:text-blue-400"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 text-amber-700 text-xs font-black"
             >
-              <Bookmark className="h-4 w-4" />
-              Saved Questions
-              {totalSaved > 0 && (
-                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                  {totalSaved}
-                </span>
-              )}
+              <Bookmark
+                size={14}
+                fill="currentColor"
+              />
+              Saved {s.saved_count || 0}
             </Link>
           </div>
 
-          <div className="mt-6">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <div className="grid sm:grid-cols-2 gap-3">
+            {chapters.map((c) => {
+              const ct = c.question_count || 0;
+              const ca = c.attempted_count || 0;
 
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search subject or chapter..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-              />
-            </div>
-          </div>
-        </section>
+              const cp =
+                c.progress_percent ??
+                (ct
+                  ? Math.round((ca / ct) * 100)
+                  : 0);
 
-        {loading ? (
-          <div className="flex min-h-[300px] items-center justify-center">
-            <div className="flex items-center gap-3 text-sm font-medium text-slate-500 dark:text-slate-400">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Loading Question Bank...
-            </div>
-          </div>
-        ) : filteredSubjects.length === 0 ? (
-          <EmptyState
-            message={
-              search.trim()
-                ? 'No subjects or chapters match your search.'
-                : 'No published subjects are available yet.'
-            }
-          />
-        ) : (
-          <section>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                  All Subjects
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  {filteredSubjects.length}{' '}
-                  {filteredSubjects.length === 1
-                    ? 'subject'
-                    : 'subjects'}{' '}
-                  available
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {filteredSubjects.map((subject) => (
+              return (
                 <Link
-                  key={subject.id}
-                  href={`/question-bank?subjectId=${encodeURIComponent(
-                    subject.id
+                  key={c.id}
+                  href={`/question-bank/chapter/${c.id}?subjectId=${encodeURIComponent(
+                    String(s.id)
                   )}`}
-                  className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700"
+                  className="group bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-orange-300 transition"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-                        <BookOpen className="h-5 w-5" />
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1">
+                      <div className="font-black text-slate-800">
+                        {c.name}
                       </div>
 
-                      <div className="min-w-0">
-                        <h3 className="truncate text-lg font-bold text-slate-900 dark:text-white">
-                          {subject.name}
-                        </h3>
-
-                        <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                          {subject.chapters?.length || 0}{' '}
-                          {subject.chapters?.length === 1
-                            ? 'chapter'
-                            : 'chapters'}
-                        </p>
+                      <div className="text-xs text-slate-500 mt-1">
+                        {ct} questions
                       </div>
                     </div>
 
-                    <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-blue-600" />
-                  </div>
-
-                  {subject.description && (
-                    <p className="mt-4 line-clamp-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                      {subject.description}
-                    </p>
-                  )}
-
-                  <div className="mt-5 grid grid-cols-3 gap-2">
-                    <SmallMetric
-                      label="Questions"
-                      value={Number(subject.total_questions || 0)}
-                    />
-
-                    <SmallMetric
-                      label="Attempted"
-                      value={Number(subject.attempted_count || 0)}
-                    />
-
-                    <SmallMetric
-                      label="Remaining"
-                      value={Number(subject.remaining_count || 0)}
+                    <ChevronRight
+                      size={18}
+                      className="text-slate-400 group-hover:text-orange-500"
                     />
                   </div>
 
-                  <div className="mt-4">
-                    <div className="mb-2 flex items-center justify-between text-xs">
-                      <span className="text-slate-500 dark:text-slate-400">
-                        Progress
-                      </span>
-
-                      <span className="font-semibold text-slate-700 dark:text-slate-200">
-                        {Number(subject.progress_percent || 0)}%
-                      </span>
-                    </div>
-
-                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                      <div
-                        className="h-full rounded-full bg-blue-600 transition-all"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            Math.max(
-                              0,
-                              Number(subject.progress_percent || 0)
-                            )
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <TypeBadge
+                  <div className="grid grid-cols-4 gap-2 mt-4 text-center">
+                    <MiniStat
                       label="MCQ"
-                      value={Number(subject.mcq_count || 0)}
+                      value={c.mcq_count || 0}
                     />
 
-                    <TypeBadge
+                    <MiniStat
                       label="MSQ"
-                      value={Number(subject.msq_count || 0)}
+                      value={c.msq_count || 0}
                     />
 
-                    <TypeBadge
+                    <MiniStat
                       label="NAT"
-                      value={Number(subject.nat_count || 0)}
+                      value={c.nat_count || 0}
                     />
 
-                    {Number(subject.saved_count || 0) > 0 && (
-                      <TypeBadge
-                        label="Saved"
-                        value={Number(subject.saved_count || 0)}
-                        icon={<Bookmark className="h-3.5 w-3.5" />}
-                      />
-                    )}
+                    <MiniStat
+                      label="Saved"
+                      value={c.saved_count || 0}
+                    />
+                  </div>
+
+                  <div className="mt-4 flex justify-between text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <span>
+                      {ca}/{ct} attempted
+                    </span>
+
+                    <span>{cp}%</span>
+                  </div>
+
+                  <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-orange-400"
+                      style={{
+                        width: `${cp}%`,
+                      }}
+                    />
                   </div>
                 </Link>
-              ))}
+              );
+            })}
+          </div>
+
+          {!chapters.length && (
+            <div className="py-16 text-center text-slate-500">
+              No matching chapters.
             </div>
-          </section>
-        )}
+          )}
+        </div>
       </div>
-    </main>
-  );
-}
+    );
+  }
 
-function Metric({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-950">
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-        {label}
-      </div>
+    <div className="qb-theme min-h-full bg-slate-50/70 text-slate-900">
+      <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
+        <div className="mb-5">
+          <div className="flex items-center gap-3 text-orange-500">
+            <BookOpen size={24} />
 
-      <div className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
-        {value}
-      </div>
-    </div>
-  );
-}
+            <span className="text-xs font-black uppercase tracking-[.3em]">
+              Practice Engine
+            </span>
+          </div>
 
-function SmallMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
-      <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-        {label}
-      </div>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight mt-2">
+            Question Bank
+          </h1>
 
-      <div className="mt-0.5 text-sm font-bold text-slate-900 dark:text-white">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function TypeBadge({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: number;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-      {icon}
-      {label}: {value}
-    </span>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
-      <div>
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-800">
-          <BookOpen className="h-6 w-6" />
+          <p className="text-slate-500 mt-2 max-w-2xl">
+            Practice chapter-wise and track MCQ, MSQ, NAT,
+            attempted and saved questions.
+          </p>
         </div>
 
-        <p className="mt-4 text-sm font-medium text-slate-600 dark:text-slate-300">
-          {message}
-        </p>
+        <Link
+          href="/question-bank/saved"
+          className="group flex items-center gap-4 bg-white border border-amber-200 rounded-2xl p-5 mb-6 shadow-sm hover:border-amber-300 transition"
+        >
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <Bookmark
+              size={22}
+              fill="currentColor"
+            />
+          </div>
+
+          <div className="flex-1">
+            <div className="font-black text-lg">
+              Saved Questions
+            </div>
+
+            <div className="text-sm text-slate-500 mt-1">
+              All questions you bookmarked across every subject.
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="text-2xl font-black text-amber-600">
+              {totalSaved}
+            </div>
+
+            <div className="text-[9px] uppercase font-black tracking-widest text-slate-400">
+              Saved
+            </div>
+          </div>
+
+          <ChevronRight className="text-slate-400 group-hover:text-amber-600" />
+        </Link>
+
+        <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3 mb-7 shadow-sm">
+          <Search
+            size={18}
+            className="text-slate-400"
+          />
+
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search subjects…"
+            className="bg-transparent outline-none flex-1 text-sm text-slate-900 placeholder:text-slate-400"
+          />
+        </div>
+
+        <h2 className="text-lg font-black mb-3">
+          Subjects
+        </h2>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          {filtered.map((s) => {
+            const total = s.total_questions ?? 0;
+            const attempted = s.attempted_count ?? 0;
+
+            const pct =
+              s.progress_percent ??
+              (total
+                ? Math.round(
+                    (attempted / total) * 100
+                  )
+                : 0);
+
+            return (
+              <button
+                key={s.id}
+                onClick={() => {
+                  setSelectedSubject(s);
+                  setSearch('');
+                }}
+                className="text-left bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:border-orange-300 hover:shadow-md transition"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-11 h-11 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center">
+                    <BookOpen size={20} />
+                  </div>
+
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-lg">
+                        {s.name}
+                      </h3>
+
+                      <ChevronRight
+                        size={17}
+                        className="ml-auto text-slate-400"
+                      />
+                    </div>
+
+                    <p className="text-xs text-slate-500 mt-1">
+                      {s.chapters?.length || 0} chapters •{' '}
+                      {total} questions
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-5 gap-2 mt-5 text-center">
+                  <MiniStat
+                    label="Questions"
+                    value={total}
+                  />
+
+                  <MiniStat
+                    label="Attempted"
+                    value={attempted}
+                  />
+
+                  <MiniStat
+                    label="MCQ"
+                    value={s.mcq_count || 0}
+                  />
+
+                  <MiniStat
+                    label="MSQ"
+                    value={s.msq_count || 0}
+                  />
+
+                  <MiniStat
+                    label="NAT"
+                    value={s.nat_count || 0}
+                  />
+                </div>
+
+                <div className="mt-4 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  <span>
+                    {s.saved_count || 0} saved
+                  </span>
+
+                  <span>{pct}% progress</span>
+                </div>
+
+                <div className="mt-1.5 h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-orange-500"
+                    style={{
+                      width: `${pct}%`,
+                    }}
+                  />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {!filtered.length && (
+          <div className="py-20 text-center text-slate-500">
+            No matching subjects.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProgressStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div>
+      <div className="text-lg font-black">
+        {value}
+      </div>
+
+      <div className="text-[9px] uppercase font-black tracking-wider text-slate-400">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div>
+      <div className="text-sm font-black">
+        {value}
+      </div>
+
+      <div className="text-[8px] uppercase font-black tracking-wider text-slate-400">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function TypeStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
+      <div className="text-xl font-black">
+        {value}
+      </div>
+
+      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">
+        {label}
       </div>
     </div>
   );
