@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Bookmark, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Flag, Loader2, RotateCcw, Send, XCircle, AlertTriangle } from 'lucide-react';
@@ -87,6 +87,32 @@ export default function ChapterPractice(){
     }
   },[questions,initialQuestionId]);
   const q=visible[index];
+
+  const questionContentRef=useRef<HTMLDivElement|null>(null);
+
+  // Imported question HTML often contains small equation/symbol images mixed into
+  // the sentence. Those must stay inline, while genuinely large diagram images
+  // should occupy their own line. Classify images by their intrinsic dimensions
+  // after they load instead of treating every <img> as a block.
+  useEffect(()=>{
+    const root=questionContentRef.current;
+    if(!root)return;
+    const classify=()=>{
+      root.querySelectorAll('img').forEach((img)=>{
+        const w=img.naturalWidth||img.getBoundingClientRect().width;
+        const h=img.naturalHeight||img.getBoundingClientRect().height;
+        const isLarge=w>=320 || h>=180;
+        img.classList.toggle('qb-large-image',isLarge);
+        const parent=img.closest('p,div,figure,section');
+        if(parent instanceof HTMLElement) parent.classList.toggle('qb-has-large-image',isLarge);
+      });
+    };
+    const images=Array.from(root.querySelectorAll('img'));
+    images.forEach(img=>{if(img.complete)classify();else img.addEventListener('load',classify,{once:true});});
+    classify();
+    return()=>images.forEach(img=>img.removeEventListener('load',classify));
+  },[q?.id,q?.question_html]);
+
 
   const submit=async()=>{
     if(!q||submitting)return;
@@ -198,7 +224,7 @@ export default function ChapterPractice(){
 
             <div className="p-5 md:p-8 lg:p-10">
               <div className="flex items-center justify-between mb-5"><div className="text-xs font-black uppercase tracking-[.18em] text-slate-400">Question {q.question_number}</div><div className="text-xs font-bold text-slate-400">{index+1} of {visible.length}</div></div>
-              <div className="qb-question-content prose prose-slate max-w-none text-[15px] md:text-base leading-7 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-xl [&_img]:mx-auto [&_img]:my-4" dangerouslySetInnerHTML={{__html:q.question_html||''}}/>
+              <div ref={questionContentRef} className="qb-question-content prose prose-slate max-w-none text-[15px] md:text-base leading-7" dangerouslySetInnerHTML={{__html:q.question_html||''}}/>
 
               {isNat ? <div className="mt-8 max-w-xl">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:p-6">
