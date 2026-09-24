@@ -73,7 +73,7 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
     const subject = material?.subject_name || task?.subject || 'Other';
     const topic = material?.topic_name || task?.topic || 'Other';
     const key = `${subject}|||${topic}`;
-    const existing = topicMap.get(key) || { subject, topic, total: 0, completed: 0, materialIds: [] };
+    const existing: TopicStat = topicMap.get(key) || { subject, topic, total: 0, completed: 0, materialIds: [] };
     existing.total += 1;
     existing.completed += completedIds.has(id) ? 1 : 0;
     existing.materialIds.push(id);
