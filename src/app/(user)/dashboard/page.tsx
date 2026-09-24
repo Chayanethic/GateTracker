@@ -10,6 +10,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { getUserProfile } from '../../../lib/dataService';
 import toast from 'react-hot-toast';
+import WeeklyTargetPanel from '../../../components/dashboard/WeeklyTargetPanel';
 
 // --- FULL GATE ECE SYLLABUS ---
 const GATE_SYLLABUS = [
@@ -40,6 +41,8 @@ export default function UserDashboard() {
   const [todayBlocks, setTodayBlocks] = useState<any[]>([]);
   const [taskUrls, setTaskUrls] = useState<Record<string, string>>({});
   const [globalProgress, setGlobalProgress] = useState<Set<string>>(new Set());
+  const [curriculumMaterials, setCurriculumMaterials] = useState<any[]>([]);
+  const [activeGoal, setActiveGoal] = useState<any | null>(null);
   
   const [showSyllabusModal, setShowSyllabusModal] = useState(false);
   const [expandedSubjects, setExpandedSubjects] = useState<string[]>([]);
@@ -72,6 +75,12 @@ export default function UserDashboard() {
       const { data: trackingData } = await supabase.from('daily_tracking').select('xp_earned').eq('user_id', session.user.id).eq('date_str', todayStr).maybeSingle();
       const { data: progData } = await supabase.from('user_progress').select('material_id').eq('user_id', session.user.id);
 
+      let curriculumQuery = supabase
+        .from('study_materials')
+        .select('id, subject_name, topic_name, title, stream');
+      if (userProfileData?.branch) curriculumQuery = curriculumQuery.eq('stream', userProfileData.branch);
+      const { data: curriculumData } = await curriculumQuery;
+
       const { data: goalData } = await supabase.from('study_goals')
         .select('*')
         .eq('user_id', session.user.id)
@@ -88,6 +97,8 @@ export default function UserDashboard() {
           setTempDate(userProfileData.target_exam_date);
         }
         if (progData) setGlobalProgress(new Set(progData.map(p => p.material_id)));
+        setCurriculumMaterials(curriculumData || []);
+        setActiveGoal(goalData || null);
         
         if (goalData && goalData.routine_data[todayStr]) {
           const blocks = goalData.routine_data[todayStr];
@@ -399,6 +410,16 @@ export default function UserDashboard() {
             </div>
           )}
         </div>
+
+        {/* ======================================================== */}
+        {/* WEEKLY TARGET + CURRICULUM PROGRESS */}
+        {/* ======================================================== */}
+        <WeeklyTargetPanel
+          goal={activeGoal}
+          curriculum={curriculumMaterials}
+          completedIds={globalProgress}
+          today={getISTDateString(getISTNow())}
+        />
 
         {/* ======================================================== */}
         {/* LOWER SECTION: SPLIT MATRIX PLANNERS */}
