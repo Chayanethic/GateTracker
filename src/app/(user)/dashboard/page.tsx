@@ -105,7 +105,7 @@ export default function UserDashboard() {
           setTodayBlocks(blocks);
           
           const matIds: string[] = [];
-          blocks.forEach((b:any) => b.tasks.forEach((t:any) => { if (t.originalId) matIds.push(t.originalId); }));
+          blocks.forEach((b:any) => b.tasks.forEach((t:any) => { if (t.originalId || t.id) matIds.push(t.originalId || t.id); }));
           if (matIds.length > 0) {
             let matQuery = supabase.from('study_materials').select('id, url').in('id', matIds);
             if (userProfileData?.branch) matQuery = matQuery.eq('stream', userProfileData.branch);
