@@ -1,9 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, CalendarDays, CheckCircle2, Plus, Target, X } from 'lucide-react';
+import {
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  Flame,
+  Play,
+  Plus,
+  Sparkles,
+  Target,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { syncDailyLectureCompletion } from '../../lib/dataService';
 import toast from 'react-hot-toast';
 
 type WeeklyTargetPanelProps = {
@@ -22,9 +36,18 @@ type WeeklyTarget = {
   endDate: string;
 };
 
-type TopicStat = WeeklyTarget & {
-  total: number;
+type TopicGroup = {
+  subject: string;
+  topic: string;
+  materials: any[];
   completed: number;
+};
+
+type SubjectGroup = {
+  subject: string;
+  topics: TopicGroup[];
+  completed: number;
+  total: number;
 };
 
 const dateOnly = (value: string) => new Date(`${value}T00:00:00Z`);
@@ -40,24 +63,19 @@ const getWeekRange = (today: string) => {
   const sunday = new Date(monday);
   sunday.setUTCDate(monday.getUTCDate() + 6);
 
-  const toKey = (date: Date) => {
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const dayOfMonth = String(date.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${dayOfMonth}`;
-  };
+  const key = (date: Date) =>
+    `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 
-  return { start: toKey(monday), end: toKey(sunday) };
+  return { start: key(monday), end: key(sunday) };
 };
 
-const getLegacyTargets = (goal: any | null, curriculum: any[], completedIds: Set<string>): WeeklyTarget[] => {
+const getLegacyTargets = (goal: any | null, curriculum: any[]): WeeklyTarget[] => {
   if (!goal?.routine_data) return [];
 
   const materialById = new Map(curriculum.map((m: any) => [m.id, m]));
   const grouped = new Map<string, WeeklyTarget>();
-  const routine = goal.routine_data || {};
 
-  Object.entries(routine).forEach(([dateStr, blocks]: [string, any]) => {
+  Object.entries(goal.routine_data).forEach(([dateStr, blocks]: [string, any]) => {
     if (dateStr.startsWith('__')) return;
     (blocks || []).forEach((block: any) => {
       (block?.tasks || []).forEach((task: any) => {
@@ -87,13 +105,28 @@ const getLegacyTargets = (goal: any | null, curriculum: any[], completedIds: Set
   return [...grouped.values()];
 };
 
+const colorFor = (index: number) => {
+  const colors = [
+    { dot: 'bg-cyan-400', bar: 'from-cyan-400 to-blue-500', soft: 'bg-cyan-500/10 ring-cyan-500/20', text: 'text-cyan-300' },
+    { dot: 'bg-violet-400', bar: 'from-violet-400 to-fuchsia-500', soft: 'bg-violet-500/10 ring-violet-500/20', text: 'text-violet-300' },
+    { dot: 'bg-amber-400', bar: 'from-amber-400 to-orange-500', soft: 'bg-amber-500/10 ring-amber-500/20', text: 'text-amber-300' },
+    { dot: 'bg-emerald-400', bar: 'from-emerald-400 to-teal-500', soft: 'bg-emerald-500/10 ring-emerald-500/20', text: 'text-emerald-300' },
+    { dot: 'bg-pink-400', bar: 'from-pink-400 to-rose-500', soft: 'bg-pink-500/10 ring-pink-500/20', text: 'text-pink-300' },
+  ];
+  return colors[index % colors.length];
+};
+
 export default function WeeklyTargetPanel({ goal, curriculum, completedIds, today }: WeeklyTargetPanelProps) {
   const week = getWeekRange(today);
   const [localGoal, setLocalGoal] = useState<any | null>(goal);
+  const [localCompleted, setLocalCompleted] = useState<Set<string>>(new Set(completedIds));
   const [showAdd, setShowAdd] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('');
   const [saving, setSaving] = useState(false);
+  const [expandedSubjects, setExpandedSubjects] = useState<string[]>([]);
+  const [expandedTopics, setExpandedTopics] = useState<string[]>([]);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const subjects = useMemo(
     () => [...new Set(curriculum.map((m: any) => m.subject_name).filter(Boolean))].sort(),
@@ -116,47 +149,72 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
   );
 
   const storedTargets: WeeklyTarget[] = useMemo(() => {
-    const explicit = Array.isArray(localGoal?.routine_data?.__weekly_targets)
-      ? localGoal.routine_data.__weekly_targets
-      : [];
-    const legacy = explicit.length === 0 ? getLegacyTargets(localGoal, curriculum, completedIds) : [];
-    return [...explicit, ...legacy];
-  }, [localGoal, curriculum, completedIds]);
-
-  const topicStats: TopicStat[] = useMemo(() => storedTargets.map(target => {
-    const ids = [...new Set(target.materialIds || [])];
-    return {
-      ...target,
-      materialIds: ids,
-      total: ids.length,
-      completed: ids.filter(id => completedIds.has(id)).length,
-    };
-  }), [storedTargets, completedIds]);
-
-  const subjectStats = useMemo(() => {
-    const map = new Map<string, { subject: string; total: number; completed: number }>();
-    curriculum.forEach((material: any) => {
-      const subject = material.subject_name || 'Other';
-      const current = map.get(subject) || { subject, total: 0, completed: 0 };
-      current.total += 1;
-      if (completedIds.has(material.id)) current.completed += 1;
-      map.set(subject, current);
+    const hasExplicitTargets = Array.isArray(localGoal?.routine_data?.__weekly_targets);
+    const explicit = hasExplicitTargets ? localGoal.routine_data.__weekly_targets : [];
+    const all = hasExplicitTargets ? explicit : getLegacyTargets(localGoal, curriculum);
+    return all.filter((target: WeeklyTarget) => {
+      const start = target.startDate || week.start;
+      const end = target.endDate || week.end;
+      return start <= week.end && end >= week.start;
     });
-    return [...map.values()].sort((a, b) => a.subject.localeCompare(b.subject));
-  }, [curriculum, completedIds]);
+  }, [localGoal, curriculum, week.start, week.end]);
 
-  const targetTotal = topicStats.reduce((sum, item) => sum + item.total, 0);
-  const targetCompleted = topicStats.reduce((sum, item) => sum + item.completed, 0);
+  const subjectGroups: SubjectGroup[] = useMemo(() => {
+    const subjectsMap = new Map<string, Map<string, TopicGroup>>();
+
+    storedTargets.forEach(target => {
+      const materialMap = new Map(curriculum.map((m: any) => [m.id, m]));
+      const materials = [...new Set(target.materialIds || [])]
+        .map(id => materialMap.get(id))
+        .filter(Boolean);
+
+      const key = `${target.subject}|||${target.topic}`;
+      if (!subjectsMap.has(target.subject)) subjectsMap.set(target.subject, new Map());
+      const topicMap = subjectsMap.get(target.subject)!;
+      const current = topicMap.get(key);
+
+      if (current) {
+        const ids = new Set(current.materials.map(m => m.id));
+        current.materials = [...current.materials, ...materials.filter(m => !ids.has(m.id))];
+        current.completed = current.materials.filter(m => localCompleted.has(m.id)).length;
+      } else {
+        topicMap.set(key, {
+          subject: target.subject,
+          topic: target.topic,
+          materials,
+          completed: materials.filter(m => localCompleted.has(m.id)).length,
+        });
+      }
+    });
+
+    return [...subjectsMap.entries()].map(([subject, topicMap]) => {
+      const topics = [...topicMap.values()];
+      const total = topics.reduce((sum, topic) => sum + topic.materials.length, 0);
+      const completed = topics.reduce((sum, topic) => sum + topic.completed, 0);
+      return { subject, topics, completed, total };
+    });
+  }, [storedTargets, curriculum, localCompleted]);
+
+  const targetTotal = subjectGroups.reduce((sum, subject) => sum + subject.total, 0);
+  const targetCompleted = subjectGroups.reduce((sum, subject) => sum + subject.completed, 0);
   const targetPercent = targetTotal ? Math.round((targetCompleted / targetTotal) * 100) : 0;
+  const allDone = targetTotal > 0 && targetCompleted === targetTotal;
+
+  const toggleSubject = (subject: string) => {
+    setExpandedSubjects(prev => prev.includes(subject) ? prev.filter(s => s !== subject) : [...prev, subject]);
+  };
+
+  const toggleTopic = (key: string) => {
+    setExpandedTopics(prev => prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key]);
+  };
 
   const addTarget = async () => {
     if (!selectedSubject || !selectedTopic || materialForSelection.length === 0) {
       toast.error('Select a subject and topic first.');
       return;
     }
-
-    if (topicStats.some(t => t.subject === selectedSubject && t.topic === selectedTopic)) {
-      toast.error('This topic is already in this week\'s target.');
+    if (subjectGroups.some(s => s.topics.some(t => t.subject === selectedSubject && t.topic === selectedTopic))) {
+      toast.error('This topic is already in this week’s target.');
       return;
     }
 
@@ -179,12 +237,8 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
         : {};
       const currentTargets: WeeklyTarget[] = Array.isArray(currentRoutine.__weekly_targets)
         ? currentRoutine.__weekly_targets
-        : getLegacyTargets(localGoal, curriculum, completedIds);
-
-      const nextRoutine = {
-        ...currentRoutine,
-        __weekly_targets: [...currentTargets, newTarget],
-      };
+        : getLegacyTargets(localGoal, curriculum);
+      const nextRoutine = { ...currentRoutine, __weekly_targets: [...currentTargets, newTarget] };
 
       let savedGoal = localGoal;
       if (localGoal?.id) {
@@ -218,7 +272,7 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
       setSelectedSubject('');
       setSelectedTopic('');
       setShowAdd(false);
-      toast.success('Weekly target added.');
+      toast.success('Target added to this week.');
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || 'Could not save the weekly target.');
@@ -227,13 +281,16 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
     }
   };
 
-  const removeTarget = async (targetId: string) => {
+  const removeTarget = async (subject: string, topic: string) => {
     if (!localGoal?.id) return;
     setSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Please sign in again.');
-      const nextTargets = storedTargets.filter(t => t.id !== targetId);
+      const allTargets: WeeklyTarget[] = Array.isArray(localGoal.routine_data?.__weekly_targets)
+        ? localGoal.routine_data.__weekly_targets
+        : [];
+      const nextTargets = allTargets.filter(t => !(t.subject === subject && t.topic === topic));
       const nextRoutine = { ...(localGoal.routine_data || {}), __weekly_targets: nextTargets };
       const { data, error } = await supabase
         .from('study_goals')
@@ -252,122 +309,246 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
     }
   };
 
+  const toggleLecture = async (material: any) => {
+    const id = material.id;
+    if (!id || togglingId) return;
+    setTogglingId(id);
+
+    const wasDone = localCompleted.has(id);
+    const next = new Set(localCompleted);
+    if (wasDone) next.delete(id); else next.add(id);
+    setLocalCompleted(next);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Please sign in again.');
+
+      if (wasDone) {
+        const { error } = await supabase.from('user_progress').delete().match({
+          user_id: session.user.id,
+          material_id: id,
+        });
+        if (error) throw error;
+        await syncDailyLectureCompletion(session.user.id, material, false);
+      } else {
+        const { error } = await supabase.from('user_progress').upsert({
+          user_id: session.user.id,
+          material_id: id,
+          completed: true,
+        });
+        if (error) throw error;
+        await syncDailyLectureCompletion(session.user.id, material, true);
+      }
+    } catch (error: any) {
+      setLocalCompleted(localCompleted);
+      toast.error(error?.message || 'Could not update progress.');
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   return (
-    <section className="mb-10 space-y-5">
-      <div className="rounded-[1.5rem] bg-zinc-900/40 ring-1 ring-zinc-800/80 overflow-hidden">
-        <div className="p-5 sm:p-6 border-b border-zinc-800/80">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <section className="mb-10">
+      <div className="relative overflow-hidden rounded-[1.75rem] bg-zinc-950/90 ring-1 ring-white/10 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -left-24 bottom-0 h-56 w-56 rounded-full bg-cyan-500/10 blur-3xl" />
+
+        <div className="relative border-b border-white/5 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-indigo-400 mb-2">
-                <Target size={12} /> Weekly Target
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">
+                <Target size={13} /> Weekly Target
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-zinc-100">This Week</h2>
-              <div className="flex items-center gap-2 mt-1 text-[10px] font-bold text-zinc-500">
-                <CalendarDays size={12} /> {formatDate(week.start)} – {formatDate(week.end)}
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-black tracking-tight text-white">Your targets</h2>
+                <span className="rounded-full bg-white/5 px-2.5 py-1 text-[9px] font-bold text-zinc-400 ring-1 ring-white/10">
+                  {formatDate(week.start)} – {formatDate(week.end)}
+                </span>
               </div>
+              <p className="mt-1 text-[11px] text-zinc-500">Pick a topic. Finish the lectures. Watch the bar move.</p>
             </div>
+
             <div className="flex items-center gap-3">
-              <div className="text-right hidden sm:block">
-                <div className="text-[9px] uppercase tracking-widest font-black text-zinc-600">Completed</div>
-                <div className="text-sm font-black text-emerald-400">{targetCompleted}/{targetTotal} · {targetPercent}%</div>
+              <div className={`rounded-2xl px-4 py-2.5 text-right ring-1 ${allDone ? 'bg-emerald-500/10 ring-emerald-400/30' : 'bg-white/[0.03] ring-white/10'}`}>
+                <div className="flex items-center justify-end gap-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                  {allDone && <Sparkles size={11} className="text-emerald-400" />} This week
+                </div>
+                <div className={`text-lg font-black ${allDone ? 'text-emerald-300' : 'text-white'}`}>{targetCompleted}<span className="text-zinc-600">/{targetTotal}</span></div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAdd(v => !v)}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-zinc-950 hover:bg-emerald-400 transition-colors"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5 hover:brightness-110"
               >
-                {showAdd ? <X size={13} /> : <Plus size={13} />}
-                {showAdd ? 'Close' : 'Add Target'}
+                {showAdd ? <X size={14} /> : <Plus size={14} />}
+                {showAdd ? 'Close' : 'Add target'}
               </button>
             </div>
           </div>
 
-          <div className="mt-4 h-2 rounded-full bg-black/60 overflow-hidden">
-            <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${targetPercent}%` }} />
+          <div className="mt-5 flex items-center gap-3">
+            <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/70 ring-1 ring-white/5">
+              <div
+                className={`h-full rounded-full bg-gradient-to-r transition-all duration-700 ${allDone ? 'from-emerald-400 to-cyan-400' : 'from-cyan-400 via-blue-500 to-violet-500'}`}
+                style={{ width: `${targetPercent}%` }}
+              />
+            </div>
+            <span className={`min-w-10 text-right text-xs font-black ${allDone ? 'text-emerald-300' : 'text-cyan-300'}`}>{targetPercent}%</span>
           </div>
+
+          {allDone && (
+            <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-emerald-300">
+              <Flame size={13} /> Weekly target cleared. Add another topic or keep the momentum going.
+            </div>
+          )}
         </div>
 
         {showAdd && (
-          <div className="p-5 sm:p-6 bg-black/20 border-b border-zinc-800/80">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-black text-zinc-100">Add a target for this week</h3>
-                <p className="text-[10px] text-zinc-500 mt-1">Choose a subject and a complete topic.</p>
-              </div>
-              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">{formatDate(week.start)} – {formatDate(week.end)}</span>
+          <div className="relative border-b border-white/5 bg-white/[0.025] p-5 sm:p-6">
+            <div className="mb-4">
+              <h3 className="text-sm font-black text-white">Add a subject + topic</h3>
+              <p className="mt-1 text-[10px] text-zinc-500">The complete topic is added to this week automatically.</p>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]">
               <select
                 value={selectedSubject}
                 onChange={e => { setSelectedSubject(e.target.value); setSelectedTopic(''); }}
-                className="w-full rounded-xl bg-zinc-950 ring-1 ring-zinc-800 px-3 py-3 text-xs text-zinc-200 outline-none focus:ring-indigo-500/50"
+                className="w-full rounded-xl bg-zinc-950 px-3 py-3 text-xs font-semibold text-zinc-200 outline-none ring-1 ring-white/10 focus:ring-cyan-400/50"
               >
-                <option value="">Select subject</option>
+                <option value="">Choose subject</option>
                 {subjects.map(subject => <option key={subject} value={subject}>{subject}</option>)}
               </select>
-
               <select
                 value={selectedTopic}
                 onChange={e => setSelectedTopic(e.target.value)}
                 disabled={!selectedSubject}
-                className="w-full rounded-xl bg-zinc-950 ring-1 ring-zinc-800 px-3 py-3 text-xs text-zinc-200 outline-none focus:ring-indigo-500/50 disabled:opacity-40"
+                className="w-full rounded-xl bg-zinc-950 px-3 py-3 text-xs font-semibold text-zinc-200 outline-none ring-1 ring-white/10 focus:ring-violet-400/50 disabled:opacity-40"
               >
-                <option value="">Select topic</option>
+                <option value="">Choose topic</option>
                 {topics.map(topic => <option key={topic} value={topic}>{topic}</option>)}
               </select>
-
               <button
                 type="button"
                 onClick={addTarget}
                 disabled={saving || !selectedTopic}
-                className="rounded-xl bg-indigo-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-indigo-400 disabled:opacity-40 transition-colors"
+                className="rounded-xl bg-white px-5 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {saving ? 'Saving...' : 'Add'}
               </button>
             </div>
-
-            {selectedTopic && (
-              <p className="mt-3 text-[10px] text-zinc-600">This topic contains {materialForSelection.length} curriculum lecture{materialForSelection.length === 1 ? '' : 's'}.</p>
-            )}
+            {selectedTopic && <p className="mt-3 text-[10px] text-zinc-600">{materialForSelection.length} lecture{materialForSelection.length === 1 ? '' : 's'} will appear below.</p>}
           </div>
         )}
 
-        <div className="p-5 sm:p-6">
-          {topicStats.length === 0 ? (
-            <div className="rounded-xl bg-black/20 ring-1 ring-zinc-800/70 p-6 text-center">
-              <p className="text-sm font-bold text-zinc-300">No weekly targets yet.</p>
-              <p className="text-[10px] text-zinc-600 mt-1">Click <span className="text-zinc-400">Add Target</span> and choose a subject + topic.</p>
+        <div className="relative p-3 sm:p-5">
+          {subjectGroups.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-10 text-center">
+              <Target size={25} className="mx-auto text-zinc-700" />
+              <p className="mt-3 text-sm font-black text-zinc-300">No targets yet</p>
+              <p className="mt-1 text-[10px] text-zinc-600">Add your first subject and topic above.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {topicStats.map(item => {
-                const percent = item.total ? Math.round((item.completed / item.total) * 100) : 0;
+              {subjectGroups.map((subjectGroup, subjectIndex) => {
+                const subjectOpen = expandedSubjects.includes(subjectGroup.subject);
+                const subjectPercent = subjectGroup.total ? Math.round((subjectGroup.completed / subjectGroup.total) * 100) : 0;
+                const color = colorFor(subjectIndex);
+
                 return (
-                  <div key={item.id} className="rounded-2xl bg-black/25 ring-1 ring-zinc-800/80 p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="text-[9px] font-black uppercase tracking-widest text-indigo-400">{item.subject}</div>
-                        <div className="text-sm font-bold text-zinc-100 mt-1 truncate">{item.topic}</div>
+                  <div key={subjectGroup.subject} className="overflow-hidden rounded-2xl bg-zinc-900/70 ring-1 ring-white/10 transition hover:ring-white/15">
+                    <button
+                      type="button"
+                      onClick={() => toggleSubject(subjectGroup.subject)}
+                      className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-white/[0.025]"
+                    >
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${color.soft} ring-1`}>
+                        {subjectPercent === 100 ? <CheckCircle2 size={17} className="text-emerald-400" /> : <Target size={16} className={color.text} />}
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className={`text-[10px] font-black ${percent === 100 ? 'text-emerald-400' : 'text-zinc-400'}`}>
-                          {item.completed}/{item.total} · {percent}%
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-black text-white">{subjectGroup.subject}</span>
+                          <span className="rounded-full bg-black/30 px-2 py-0.5 text-[8px] font-black text-zinc-500">{subjectGroup.topics.length} topic{subjectGroup.topics.length === 1 ? '' : 's'}</span>
                         </div>
-                        {localGoal?.id && (
-                          <button type="button" onClick={() => removeTarget(item.id)} disabled={saving} className="text-zinc-700 hover:text-rose-400 transition-colors" title="Remove target">
-                            <X size={14} />
-                          </button>
-                        )}
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/60">
+                          <div className={`h-full rounded-full bg-gradient-to-r ${color.bar} transition-all duration-500`} style={{ width: `${subjectPercent}%` }} />
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-3 h-2 rounded-full bg-zinc-900 overflow-hidden">
-                      <div className={`h-full rounded-full transition-all duration-500 ${percent === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${percent}%` }} />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[8px] font-bold uppercase tracking-widest text-zinc-600">
-                      <span>{percent === 100 ? 'Target completed' : `${item.total - item.completed} lectures remaining`}</span>
-                      <Link href="/resources" className="text-indigo-400 hover:text-indigo-300">Open Curriculum</Link>
-                    </div>
+                      <div className="shrink-0 text-right">
+                        <div className={`text-xs font-black ${subjectPercent === 100 ? 'text-emerald-300' : 'text-zinc-200'}`}>{subjectPercent}%</div>
+                        <div className="text-[8px] font-bold text-zinc-600">{subjectGroup.completed}/{subjectGroup.total}</div>
+                      </div>
+                      <ChevronDown size={16} className={`shrink-0 text-zinc-600 transition-transform ${subjectOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {subjectOpen && (
+                      <div className="border-t border-white/5 bg-black/10 p-2 sm:p-3">
+                        {subjectGroup.topics.map((topicGroup, topicIndex) => {
+                          const topicKey = `${topicGroup.subject}|||${topicGroup.topic}`;
+                          const topicOpen = expandedTopics.includes(topicKey);
+                          const topicPercent = topicGroup.materials.length ? Math.round((topicGroup.completed / topicGroup.materials.length) * 100) : 0;
+                          const topicColor = colorFor(subjectIndex + topicIndex);
+
+                          return (
+                            <div key={topicKey} className="mb-2 overflow-hidden rounded-xl bg-zinc-950/80 ring-1 ring-white/5 last:mb-0">
+                              <div className="flex items-center gap-2 px-3 py-3">
+                                <button type="button" onClick={() => toggleTopic(topicKey)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                                  <ChevronDown size={14} className={`shrink-0 text-zinc-600 transition-transform ${topicOpen ? 'rotate-180' : ''}`} />
+                                  <span className="truncate text-xs font-bold text-zinc-200">{topicGroup.topic}</span>
+                                </button>
+                                <span className={`shrink-0 text-[9px] font-black ${topicPercent === 100 ? 'text-emerald-400' : topicColor.text}`}>{topicGroup.completed}/{topicGroup.materials.length}</span>
+                                <div className="hidden w-20 overflow-hidden rounded-full bg-black sm:block">
+                                  <div className={`h-1.5 rounded-full bg-gradient-to-r ${topicColor.bar}`} style={{ width: `${topicPercent}%` }} />
+                                </div>
+                                {localGoal?.id && (
+                                  <button type="button" onClick={() => removeTarget(topicGroup.subject, topicGroup.topic)} disabled={saving} title="Remove target" className="p-1 text-zinc-700 transition hover:text-rose-400">
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
+                              </div>
+
+                              {topicOpen && (
+                                <div className="border-t border-white/5 p-2">
+                                  {topicGroup.materials.map((material: any, lectureIndex: number) => {
+                                    const done = localCompleted.has(material.id);
+                                    const busy = togglingId === material.id;
+                                    const locked = !!material.is_paid;
+                                    return (
+                                      <div key={material.id} className={`group flex items-center gap-3 rounded-xl px-3 py-3 transition ${done ? 'bg-emerald-500/[0.06]' : 'hover:bg-white/[0.035]'}`}>
+                                        <button
+                                          type="button"
+                                          disabled={busy || locked}
+                                          onClick={() => toggleLecture(material)}
+                                          aria-label={done ? `Mark ${material.title} incomplete` : `Mark ${material.title} complete`}
+                                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1 transition ${done ? 'bg-emerald-500 text-zinc-950 ring-emerald-400 shadow-[0_0_14px_rgba(16,185,129,0.25)]' : 'bg-black text-zinc-600 ring-white/10 hover:text-emerald-400 hover:ring-emerald-500/40'} ${busy ? 'animate-pulse' : ''}`}
+                                        >
+                                          {done ? <Check size={14} strokeWidth={3} /> : <Circle size={13} />}
+                                        </button>
+
+                                        <div className="min-w-0 flex-1">
+                                          <div className={`truncate text-[11px] font-bold ${done ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
+                                            {material.title || `Lecture ${lectureIndex + 1}`}
+                                          </div>
+                                          <div className="mt-0.5 text-[8px] font-bold uppercase tracking-wider text-zinc-600">
+                                            Lecture {material.lecture_no || lectureIndex + 1}{material.duration ? ` • ${material.duration}` : ''}
+                                          </div>
+                                        </div>
+
+                                        <Link
+                                          href={`/resources/${material.id}`}
+                                          className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-[8px] font-black uppercase tracking-wider transition ${done ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/15' : 'bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20 hover:bg-indigo-500/20'}`}
+                                        >
+                                          <Play size={10} fill="currentColor" /> Watch
+                                        </Link>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -376,35 +557,20 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
         </div>
       </div>
 
-      <div>
-        <div className="flex items-end justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-black text-zinc-200 uppercase tracking-widest">Curriculum Progress</h3>
-            <p className="text-[10px] text-zinc-600 mt-1">Overall progress from your curriculum.</p>
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl bg-zinc-900/50 p-4 ring-1 ring-white/10">
+          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-zinc-500"><CheckCircle2 size={12} className="text-emerald-400" /> Curriculum progress</div>
+          <div className="mt-2 text-sm font-black text-zinc-200">{targetCompleted} of {targetTotal} target lectures completed</div>
+          <div className="mt-2 text-[10px] text-zinc-600">Ticking a lecture here updates the same progress used by Curriculum.</div>
+        </div>
+        <Link href="/resources" className="group rounded-2xl bg-gradient-to-br from-indigo-500/10 to-cyan-500/10 p-4 ring-1 ring-indigo-500/15 transition hover:ring-cyan-400/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-cyan-300"><Sparkles size={12} /> Keep going</div>
+            <Play size={13} className="text-zinc-600 transition group-hover:translate-x-0.5 group-hover:text-cyan-300" />
           </div>
-          <Link href="/resources" className="text-[9px] font-black uppercase tracking-widest text-emerald-500 hover:text-emerald-400">Open Curriculum</Link>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {subjectStats.map(item => {
-            const percent = item.total ? Math.round((item.completed / item.total) * 100) : 0;
-            return (
-              <Link key={item.subject} href="/resources" className="group rounded-2xl bg-zinc-900/40 ring-1 ring-zinc-800/80 hover:ring-zinc-700 p-4 transition-all">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-bold text-zinc-200 truncate group-hover:text-white">{item.subject}</span>
-                  <span className="text-xs font-black text-zinc-400">{percent}%</span>
-                </div>
-                <div className="mt-3 h-2 rounded-full bg-black/70 overflow-hidden">
-                  <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${percent}%` }} />
-                </div>
-                <div className="mt-2 flex items-center justify-between text-[8px] uppercase tracking-widest font-bold text-zinc-600">
-                  <span>Lectures</span>
-                  <span>{item.completed}/{item.total}</span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+          <div className="mt-2 text-sm font-black text-zinc-200">Open full Curriculum</div>
+          <div className="mt-1 text-[10px] text-zinc-600">Jump into any subject, topic, or lecture.</div>
+        </Link>
       </div>
     </section>
   );
