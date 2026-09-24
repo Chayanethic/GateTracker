@@ -297,7 +297,7 @@ export default function GoalGenerator() {
     routineDays.forEach(day => {
       finalRoutineJSON[day.dateStr] = day.blocks.map(b => ({
         id: b.id, start: b.start, end: b.end, type: b.type, durationMins: b.capacityMins, color: b.color,
-        tasks: b.tasks.map(t => ({ id: t.originalId, title: t.title, subject: t.subject, topic: t.topic, minsAllocated: t.durationMins, status: t.status }))
+        tasks: b.tasks.map(t => ({ id: t.originalId, originalId: t.originalId, title: t.title, subject: t.subject, topic: t.topic, minsAllocated: t.durationMins, status: t.status }))
       }));
     });
 
