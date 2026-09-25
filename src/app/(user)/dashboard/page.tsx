@@ -321,98 +321,6 @@ export default function UserDashboard() {
         </div>
 
         {/* ======================================================== */}
-        {/* HERO SECTION: CINEMATIC TODAY'S PROTOCOL */}
-        {/* ======================================================== */}
-        <div className="mb-10 w-full relative z-20 flex-1">
-          
-          {allTodayTasks.length > 0 ? (
-            <>
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shadow-inner">
-                  <Play size={14} fill="currentColor" className="text-emerald-400 ml-0.5" /> 
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-black text-zinc-100 tracking-tight">Today's Protocol</h2>
-              </div>
-
-              <div className="flex gap-5 overflow-x-auto pb-6 custom-scrollbar snap-x snap-mandatory">
-                {allTodayTasks.map((task: any, idx: number) => {
-                  const targetId = task.originalId || task.id;
-                  const isDone = globalProgress.has(targetId);
-                  const thumbUrl = getYoutubeThumbnail(taskUrls[targetId]);
-
-                  return (
-                    <div key={idx} className={`snap-center shrink-0 w-[280px] sm:w-[320px] flex flex-col gap-3 group transition-all duration-300 ${isDone ? 'opacity-60' : 'hover:-translate-y-1'}`}>
-                      
-                      {/* Full YouTube-Style Thumbnail */}
-                      <Link href={targetId && !isDone ? `/resources/${targetId}` : '#'} className={`relative w-full aspect-video rounded-xl overflow-hidden ring-1 transition-all block ${isDone ? 'ring-emerald-500/50 cursor-default' : 'ring-zinc-800 group-hover:ring-indigo-500/50 shadow-lg group-hover:shadow-[0_15px_30px_rgba(99,102,241,0.15)]'}`}>
-                        {thumbUrl ? (
-                           <img src={thumbUrl} alt="Thumbnail" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                        ) : (
-                           <div className="w-full h-full flex items-center justify-center bg-zinc-900"><BookOpen size={24} className="text-zinc-700"/></div>
-                        )}
-                        
-                        {/* Duration Badge / Done Badge */}
-                        <div className="absolute bottom-2 right-2 z-10">
-                           {isDone ? (
-                              <div className="bg-emerald-500/90 text-zinc-950 px-2 py-0.5 rounded text-[10px] font-black backdrop-blur-md shadow-lg flex items-center gap-1">
-                                <CheckCircle2 size={10}/> Done
-                              </div>
-                           ) : (
-                              <div className="bg-black/80 text-zinc-200 px-1.5 py-0.5 rounded text-[10px] font-bold backdrop-blur-md">
-                                {Math.round(task.durationMins || task.minsAllocated || 0)}m
-                              </div>
-                           )}
-                        </div>
-
-                        {/* Play Overlay */}
-                        {!isDone && (
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px]">
-                             <Play size={40} className="text-white drop-shadow-2xl" fill="currentColor"/>
-                          </div>
-                        )}
-                      </Link>
-
-                      {/* Clean Text Below Thumbnail */}
-                      <div className="flex items-start gap-3 px-1">
-                        <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center ring-1 ${isDone ? 'bg-emerald-500/10 ring-emerald-500/30' : `bg-zinc-900 ring-zinc-800`}`}>
-                           <span className={`text-[10px] font-black ${isDone ? 'text-emerald-500' : `text-zinc-400`}`}>{idx + 1}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className={`text-sm font-bold truncate leading-tight ${isDone ? 'text-zinc-600 line-through' : 'text-zinc-100 group-hover:text-indigo-400 transition-colors'}`}>{task.title}</h3>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span className="text-[10px] font-medium text-zinc-500 truncate">{task.subject}</span>
-                            <span className="text-zinc-800 text-[10px]">•</span>
-                            <span className={`text-[9px] font-bold uppercase tracking-widest text-${task.blockColor}-400`}>{task.blockStart}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          ) : (
-            // CLEAN ONBOARDING BANNER
-            <div className="bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
-              <div className="w-16 h-16 bg-zinc-950 rounded-2xl flex items-center justify-center mb-5 ring-1 ring-zinc-800 rotate-3">
-                <CalendarPlus size={28} className="text-zinc-600" />
-              </div>
-              <h3 className="text-xl font-black text-zinc-300 mb-2 tracking-tight group-hover:text-zinc-100 transition-colors">No Protocol Set for Today</h3>
-              <p className="text-xs text-zinc-500 font-medium mb-8 max-w-sm leading-relaxed">Your timeline is empty. Deploy the AI Matrix Engine to auto-balance your workload, or construct a timeline manually.</p>
-              
-              <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
-                <Link href="/auto-planner" className="flex-1 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-zinc-950 px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ring-1 ring-indigo-500/30 transition-all flex items-center justify-center gap-2 hover:scale-105 active:scale-95 shadow-sm">
-                  <Zap size={14}/> Deploy Auto-AI
-                </Link>
-                <Link href="/create-goal" className="flex-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ring-1 ring-zinc-800 transition-all flex items-center justify-center gap-2 shadow-inner">
-                  <Target size={14}/> Manual Build
-                </Link>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ======================================================== */}
         {/* WEEKLY TARGET + CURRICULUM PROGRESS */}
         {/* ======================================================== */}
         <WeeklyTargetPanel
@@ -427,76 +335,78 @@ export default function UserDashboard() {
           completedIds={globalProgress}
         />
 
+
         {/* ======================================================== */}
-        {/* LOWER SECTION: SPLIT MATRIX PLANNERS */}
+        {/* COMPACT PROTOCOL + TOOLS */}
         {/* ======================================================== */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-10 w-full xl:w-5/6 mx-auto mt-auto">
-          
-          {/* Card 0: Daily Study Tracker */}
-          <Link href="/daily-tracker" className="group bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-6 sm:p-8 transition-all duration-500 hover:ring-emerald-500/40 hover:-translate-y-1 relative overflow-hidden flex flex-col">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-[40px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-
-            <div className="flex justify-between items-start mb-4 relative z-10">
-               <div className="w-12 h-12 bg-emerald-500/10 ring-1 ring-emerald-500/20 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500 ease-out">
-                 <Activity size={20} className="text-emerald-400" />
-               </div>
-               <div className="bg-zinc-950/80 ring-1 ring-zinc-800 px-2.5 py-1 rounded text-[8px] font-bold uppercase tracking-widest text-zinc-500">Daily Log</div>
+        <section className="mt-6 mb-6 w-full space-y-3 relative z-10">
+          <div className="rounded-2xl bg-zinc-950/80 ring-1 ring-white/10 overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.18)]">
+            <div className="flex flex-col gap-3 border-b border-white/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                  <Play size={13} fill="currentColor" className="text-emerald-400 ml-0.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-black text-white">Today&apos;s Protocol</h2>
+                    <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-zinc-500">{allTodayTasks.length} tasks</span>
+                  </div>
+                  <p className="truncate text-[9px] text-zinc-600">Your scheduled lectures — open, watch, and finish.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {allTodayTasks.length > 0 && <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[8px] font-black text-emerald-300 ring-1 ring-emerald-500/20">{allTodayTasks.filter((t:any) => globalProgress.has(t.originalId || t.id)).length}/{allTodayTasks.length} done</span>}
+                <Link href="/daily-tracker" className="rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-zinc-400 ring-1 ring-white/10 hover:text-white">Daily tracker</Link>
+              </div>
             </div>
 
-            <h3 className="text-lg font-black text-zinc-100 mb-2 relative z-10 tracking-tight group-hover:text-emerald-100 transition-colors">Daily Tracker</h3>
-            <p className="text-[11px] text-zinc-500 font-medium leading-relaxed mb-6 flex-1 relative z-10">
-              See exactly what you completed each day, total lecture hours, your consistency, and every exam score in one place.
-            </p>
+            {allTodayTasks.length > 0 ? (
+              <div className="flex gap-2 overflow-x-auto p-3 custom-scrollbar">
+                {allTodayTasks.map((task: any, idx: number) => {
+                  const targetId = task.originalId || task.id;
+                  const isDone = globalProgress.has(targetId);
+                  const thumbUrl = getYoutubeThumbnail(taskUrls[targetId]);
+                  return (
+                    <Link key={`${targetId}-${idx}`} href={`/resources/${targetId}`} className={`group flex min-w-[220px] max-w-[260px] items-center gap-3 rounded-xl bg-white/[0.025] p-2 ring-1 transition hover:bg-white/[0.045] ${isDone ? 'ring-emerald-500/20 opacity-65' : 'ring-white/5 hover:ring-indigo-500/30'}`}>
+                      <div className="relative h-14 w-24 shrink-0 overflow-hidden rounded-lg bg-zinc-900 ring-1 ring-white/5">
+                        {thumbUrl ? <img src={thumbUrl} alt="" className="h-full w-full object-cover transition group-hover:scale-105" /> : <div className="flex h-full w-full items-center justify-center"><BookOpen size={17} className="text-zinc-700" /></div>}
+                        {isDone ? <span className="absolute bottom-1 right-1 rounded bg-emerald-500 px-1 py-0.5 text-[7px] font-black text-zinc-950">DONE</span> : <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.5 text-[7px] font-bold text-zinc-300">{Math.round(task.durationMins || task.minsAllocated || 0)}m</span>}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className={`truncate text-[10px] font-black ${isDone ? 'text-zinc-500 line-through' : 'text-zinc-200 group-hover:text-indigo-300'}`}>{task.title}</div>
+                        <div className="mt-1 truncate text-[8px] font-bold uppercase tracking-wider text-zinc-600">{task.subject} • {task.blockStart}</div>
+                      </div>
+                      <Play size={12} fill="currentColor" className={isDone ? 'text-emerald-500/40' : 'text-indigo-400'} />
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500"><CalendarPlus size={15} className="text-zinc-600" /> No protocol scheduled today.</div>
+                <div className="flex gap-2">
+                  <Link href="/auto-planner" className="rounded-lg bg-indigo-500/10 px-3 py-2 text-[8px] font-black uppercase tracking-wider text-indigo-300 ring-1 ring-indigo-500/20 hover:bg-indigo-500/20"><Zap size={11} className="mr-1 inline" /> Auto-AI</Link>
+                  <Link href="/create-goal" className="rounded-lg bg-white/[0.03] px-3 py-2 text-[8px] font-black uppercase tracking-wider text-zinc-400 ring-1 ring-white/10 hover:text-white"><Target size={11} className="mr-1 inline" /> Manual</Link>
+                </div>
+              </div>
+            )}
+          </div>
 
-            <div className="text-[9px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1.5 relative z-10">
-              Open Daily Report <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-            </div>
-          </Link>
-
-          {/* Card 1: AI Auto Planner */}
-          <Link href="/auto-planner" className="group bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-6 sm:p-8 transition-all duration-500 hover:ring-indigo-500/40 hover:-translate-y-1 relative overflow-hidden flex flex-col">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-            
-            <div className="flex justify-between items-start mb-4 relative z-10">
-               <div className="w-12 h-12 bg-indigo-500/10 ring-1 ring-indigo-500/20 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500 ease-out">
-                 <Network size={20} className="text-indigo-400" />
-               </div>
-               <div className="bg-zinc-950/80 ring-1 ring-zinc-800 px-2.5 py-1 rounded text-[8px] font-bold uppercase tracking-widest text-zinc-500">Automated</div>
-            </div>
-            
-            <h3 className="text-lg font-black text-zinc-100 mb-2 relative z-10 tracking-tight group-hover:text-indigo-100 transition-colors">Auto-AI Engine</h3>
-            <p className="text-[11px] text-zinc-500 font-medium leading-relaxed mb-6 flex-1 relative z-10">
-              The engine mathematically distributes your syllabus evenly across remaining days. Best for hands-off scheduling.
-            </p>
-            
-            <div className="text-[9px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-1.5 relative z-10">
-              Initialize Engine <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-            </div>
-          </Link>
-
-          {/* Card 2: Manual Architect */}
-          <Link href="/create-goal" className="group bg-zinc-900/40 ring-1 ring-zinc-800/80 rounded-[2rem] p-6 sm:p-8 transition-all duration-500 hover:ring-zinc-600 hover:-translate-y-1 relative overflow-hidden flex flex-col">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-zinc-700/5 rounded-full blur-[40px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-            
-            <div className="flex justify-between items-start mb-4 relative z-10">
-               <div className="w-12 h-12 bg-zinc-800/50 ring-1 ring-zinc-700 rounded-xl flex items-center justify-center shadow-inner group-hover:-rotate-12 transition-transform duration-500 ease-out">
-                 <CalendarPlus size={20} className="text-zinc-400" />
-               </div>
-               <div className="bg-zinc-950/80 ring-1 ring-zinc-800 px-2.5 py-1 rounded text-[8px] font-bold uppercase tracking-widest text-zinc-500">Manual</div>
-            </div>
-            
-            <h3 className="text-lg font-black text-zinc-100 mb-2 relative z-10 tracking-tight group-hover:text-zinc-100 transition-colors">Manual Architect</h3>
-            <p className="text-[11px] text-zinc-500 font-medium leading-relaxed mb-6 flex-1 relative z-10">
-              Drag and drop specific topics into custom time blocks. Best for highly specific, day-by-day micromanagement.
-            </p>
-            
-            <div className="text-[9px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 relative z-10">
-              Construct Build <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-            </div>
-          </Link>
-
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <Link href="/daily-tracker" className="group flex items-center gap-3 rounded-xl bg-zinc-950/70 px-3.5 py-3 ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:ring-emerald-500/30">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20"><Activity size={14} className="text-emerald-400" /></div>
+              <div className="min-w-0 flex-1"><div className="text-[10px] font-black text-zinc-200">Daily Tracker</div><div className="truncate text-[8px] text-zinc-600">Hours, consistency & exam logs</div></div><ArrowRight size={12} className="text-zinc-700 transition group-hover:translate-x-0.5 group-hover:text-emerald-400" />
+            </Link>
+            <Link href="/auto-planner" className="group flex items-center gap-3 rounded-xl bg-zinc-950/70 px-3.5 py-3 ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:ring-indigo-500/30">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 ring-1 ring-indigo-500/20"><Network size={14} className="text-indigo-400" /></div>
+              <div className="min-w-0 flex-1"><div className="text-[10px] font-black text-zinc-200">Auto-AI Engine</div><div className="truncate text-[8px] text-zinc-600">Auto-balance your syllabus</div></div><ArrowRight size={12} className="text-zinc-700 transition group-hover:translate-x-0.5 group-hover:text-indigo-400" />
+            </Link>
+            <Link href="/create-goal" className="group flex items-center gap-3 rounded-xl bg-zinc-950/70 px-3.5 py-3 ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:ring-zinc-600">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 ring-1 ring-zinc-700"><CalendarPlus size={14} className="text-zinc-400" /></div>
+              <div className="min-w-0 flex-1"><div className="text-[10px] font-black text-zinc-200">Manual Target</div><div className="truncate text-[8px] text-zinc-600">Build your own schedule</div></div><ArrowRight size={12} className="text-zinc-700 transition group-hover:translate-x-0.5 group-hover:text-zinc-300" />
+            </Link>
+          </div>
+        </section>
 
       {/* ======================================================== */}
       {/* PREMIUM OPTIMIZED MODAL (SYLLABUS) */}
