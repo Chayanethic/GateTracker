@@ -14,6 +14,9 @@ import {
   Play,
   Target,
   Trophy,
+  ChevronDown,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -65,6 +68,7 @@ export default function DashboardStudyInsights({ curriculum, completedIds }: Pro
   const [selectedDate, setSelectedDate] = useState('');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [loading, setLoading] = useState(true);
+  const [expandedProgressSubjects, setExpandedProgressSubjects] = useState<string[]>([]);
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const todayKey = keyOf(today);
@@ -131,16 +135,30 @@ export default function DashboardStudyInsights({ curriculum, completedIds }: Pro
   }, [today, todayKey]);
 
   const subjectProgress = useMemo(() => {
-    const groups = new Map<string, { total: number; completed: number }>();
+    const groups = new Map<string, { total: number; completed: number; topics: Map<string, { total: number; completed: number }> }>();
     curriculum.forEach((m: any) => {
       const subject = m.subject_name || 'Other';
-      const current = groups.get(subject) || { total: 0, completed: 0 };
+      const topic = m.topic_name || 'Other';
+      const current = groups.get(subject) || { total: 0, completed: 0, topics: new Map() };
       current.total += 1;
-      if (completedIds.has(m.id)) current.completed += 1;
+      const done = completedIds.has(m.id);
+      if (done) current.completed += 1;
+      const topicStats = current.topics.get(topic) || { total: 0, completed: 0 };
+      topicStats.total += 1;
+      if (done) topicStats.completed += 1;
+      current.topics.set(topic, topicStats);
       groups.set(subject, current);
     });
     return [...groups.entries()]
-      .map(([subject, stats]) => ({ subject, ...stats, percent: stats.total ? Math.round((stats.completed / stats.total) * 100) : 0 }))
+      .map(([subject, stats]) => ({
+        subject,
+        total: stats.total,
+        completed: stats.completed,
+        percent: stats.total ? Math.round((stats.completed / stats.total) * 100) : 0,
+        topics: [...stats.topics.entries()]
+          .map(([topic, topicStats]) => ({ topic, ...topicStats, percent: topicStats.total ? Math.round((topicStats.completed / topicStats.total) * 100) : 0 }))
+          .sort((a, b) => a.topic.localeCompare(b.topic)),
+      }))
       .sort((a, b) => a.subject.localeCompare(b.subject));
   }, [curriculum, completedIds]);
 
@@ -200,35 +218,70 @@ export default function DashboardStudyInsights({ curriculum, completedIds }: Pro
   return (
     <section className="mt-8 space-y-6">
       {/* ALL SUBJECT PROGRESS */}
-      <div className="overflow-hidden rounded-[1.75rem] bg-zinc-950/90 ring-1 ring-white/10 shadow-[0_20px_70px_rgba(0,0,0,0.22)]">
-        <div className="border-b border-white/5 p-5 sm:p-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400"><BarChart3 size={13} /> Curriculum progress</div>
-              <h2 className="mt-1 text-xl font-black tracking-tight text-white">Every subject, one view</h2>
-              <p className="mt-1 text-[11px] text-zinc-500">Live progress from your Curriculum lectures.</p>
-            </div>
-            <div className="rounded-xl bg-white/[0.03] px-3 py-2 text-right ring-1 ring-white/10">
-              <div className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Completed</div>
-              <div className="text-sm font-black text-white">{completedIds.size} / {curriculum.length}</div>
-            </div>
+      <div className="overflow-hidden rounded-[1.5rem] bg-zinc-950/85 ring-1 ring-white/10 shadow-[0_14px_45px_rgba(0,0,0,0.18)]">
+        <div className="flex flex-col gap-3 border-b border-white/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-cyan-400"><BarChart3 size={12} /> Curriculum progress</div>
+            <h2 className="mt-1 text-lg font-black tracking-tight text-white">All subjects</h2>
+            <p className="mt-0.5 text-[9px] text-zinc-600">Open any subject to see completed and remaining topics.</p>
+          </div>
+          <div className="rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-right ring-1 ring-white/10">
+            <div className="text-[7px] font-black uppercase tracking-widest text-zinc-600">Lectures</div>
+            <div className="text-xs font-black text-white">{completedIds.size}/{curriculum.length}</div>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+
+        <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
           {subjectProgress.map((item, index) => {
             const color = subjectColors[index % subjectColors.length];
+            const open = expandedProgressSubjects.includes(item.subject);
+            const remaining = item.total - item.completed;
             return (
-              <div key={item.subject} className={`rounded-2xl ${color.bg} p-4 ring-1 ${color.ring} transition hover:-translate-y-0.5`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-black text-zinc-100">{item.subject}</div>
-                    <div className="mt-1 text-[9px] font-bold text-zinc-500">{item.completed} of {item.total} lectures complete</div>
+              <div key={item.subject} className={`overflow-hidden rounded-xl ${color.bg} ring-1 ${color.ring} transition ${open ? 'sm:col-span-2 xl:col-span-1' : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedProgressSubjects(prev => prev.includes(item.subject) ? prev.filter(s => s !== item.subject) : [...prev, item.subject])}
+                  className="w-full p-3 text-left transition hover:bg-white/[0.025]"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className="truncate text-[11px] font-black text-zinc-100">{item.subject}</div>
+                        {item.percent === 100 && <CheckCircle2 size={12} className="shrink-0 text-emerald-400" />}
+                      </div>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/40">
+                        <div className={`h-full rounded-full bg-gradient-to-r ${color.bar} transition-all duration-700`} style={{ width: `${item.percent}%` }} />
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className={`text-xs font-black ${item.percent === 100 ? 'text-emerald-300' : color.text}`}>{item.percent}%</div>
+                      <div className="text-[7px] font-bold text-zinc-600">{item.completed}/{item.total}</div>
+                    </div>
+                    <ChevronDown size={13} className={`shrink-0 text-zinc-600 transition-transform ${open ? 'rotate-180' : ''}`} />
                   </div>
-                  <div className={`text-sm font-black ${item.percent === 100 ? 'text-emerald-300' : color.text}`}>{item.percent}%</div>
-                </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/40">
-                  <div className={`h-full rounded-full bg-gradient-to-r ${color.bar} transition-all duration-700`} style={{ width: `${item.percent}%` }} />
-                </div>
+                  <div className="mt-2 flex items-center justify-between text-[7px] font-black uppercase tracking-wider">
+                    <span className="text-emerald-400/70">{item.topics.filter(t => t.percent === 100).length} topics complete</span>
+                    <span className="text-zinc-600">{remaining} lectures remain</span>
+                  </div>
+                </button>
+
+                {open && (
+                  <div className="border-t border-white/5 bg-black/10 px-3 pb-3">
+                    <div className="mb-2 flex items-center justify-between pt-2 text-[7px] font-black uppercase tracking-widest text-zinc-600">
+                      <span>Topic progress</span><span>{item.topics.length} topics</span>
+                    </div>
+                    <div className="grid gap-1.5">
+                      {item.topics.map(topic => (
+                        <Link key={topic.topic} href={`/resources?subject=${encodeURIComponent(item.subject)}&topic=${encodeURIComponent(topic.topic)}`} className="flex items-center gap-2 rounded-lg bg-zinc-950/70 px-2.5 py-2 ring-1 ring-white/5 transition hover:ring-white/10">
+                          {topic.percent === 100 ? <CheckCircle2 size={11} className="shrink-0 text-emerald-400" /> : topic.completed > 0 ? <div className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-cyan-400/70" /> : <Circle size={11} className="shrink-0 text-zinc-700" />}
+                          <span className={`min-w-0 flex-1 truncate text-[9px] font-bold ${topic.percent === 100 ? 'text-emerald-300/80' : 'text-zinc-300'}`}>{topic.topic}</span>
+                          <span className={`shrink-0 text-[8px] font-black ${topic.percent === 100 ? 'text-emerald-400' : color.text}`}>{topic.completed}/{topic.total}</span>
+                          <span className="shrink-0 text-[7px] font-bold text-zinc-600">{topic.percent}%</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
