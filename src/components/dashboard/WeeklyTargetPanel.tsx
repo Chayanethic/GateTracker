@@ -348,29 +348,29 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
   };
 
   return (
-    <section className="mb-10">
-      <div className="relative overflow-hidden rounded-[1.75rem] bg-zinc-950/90 ring-1 ring-white/10 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+    <section className="mb-6">
+      <div className="relative overflow-hidden rounded-[1.5rem] bg-zinc-950/90 ring-1 ring-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.18)]">
         <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
         <div className="pointer-events-none absolute -left-24 bottom-0 h-56 w-56 rounded-full bg-cyan-500/10 blur-3xl" />
 
-        <div className="relative border-b border-white/5 p-5 sm:p-6">
+        <div className="relative border-b border-white/5 p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">
+              <div className="mb-1.5 flex items-center gap-2 text-[8px] font-black uppercase tracking-[0.2em] text-cyan-400">
                 <Target size={13} /> Weekly Target
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-black tracking-tight text-white">Your targets</h2>
+                <h2 className="text-base font-black tracking-tight text-white">Your targets</h2>
                 <span className="rounded-full bg-white/5 px-2.5 py-1 text-[9px] font-bold text-zinc-400 ring-1 ring-white/10">
                   {formatDate(week.start)} – {formatDate(week.end)}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] text-zinc-500">Pick a topic. Finish the lectures. Watch the bar move.</p>
+              <p className="mt-0.5 text-[9px] text-zinc-600">Pick a topic. Finish the lectures. Watch the bar move.</p>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className={`rounded-2xl px-4 py-2.5 text-right ring-1 ${allDone ? 'bg-emerald-500/10 ring-emerald-400/30' : 'bg-white/[0.03] ring-white/10'}`}>
-                <div className="flex items-center justify-end gap-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-500">
+              <div className={`rounded-xl px-3 py-2 text-right ring-1 ${allDone ? 'bg-emerald-500/10 ring-emerald-400/30' : 'bg-white/[0.03] ring-white/10'}`}>
+                <div className="flex items-center justify-end gap-1.5 text-[8px] font-black uppercase tracking-widest text-zinc-500">
                   {allDone && <Sparkles size={11} className="text-emerald-400" />} This week
                 </div>
                 <div className={`text-lg font-black ${allDone ? 'text-emerald-300' : 'text-white'}`}>{targetCompleted}<span className="text-zinc-600">/{targetTotal}</span></div>
@@ -378,7 +378,7 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
               <button
                 type="button"
                 onClick={() => setShowAdd(v => !v)}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5 hover:brightness-110"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-3 py-2.5 text-[8px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5 hover:brightness-110"
               >
                 {showAdd ? <X size={14} /> : <Plus size={14} />}
                 {showAdd ? 'Close' : 'Add target'}
@@ -386,8 +386,8 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
             </div>
           </div>
 
-          <div className="mt-5 flex items-center gap-3">
-            <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/70 ring-1 ring-white/5">
+          <div className="mt-3 flex items-center gap-2">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/70 ring-1 ring-white/5">
               <div
                 className={`h-full rounded-full bg-gradient-to-r transition-all duration-700 ${allDone ? 'from-emerald-400 to-cyan-400' : 'from-cyan-400 via-blue-500 to-violet-500'}`}
                 style={{ width: `${targetPercent}%` }}
@@ -397,23 +397,23 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
           </div>
 
           {allDone && (
-            <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-emerald-300">
+            <div className="mt-2 flex items-center gap-2 text-[9px] font-bold text-emerald-300">
               <Flame size={13} /> Weekly target cleared. Add another topic or keep the momentum going.
             </div>
           )}
         </div>
 
         {showAdd && (
-          <div className="relative border-b border-white/5 bg-white/[0.025] p-5 sm:p-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-black text-white">Add a subject + topic</h3>
-              <p className="mt-1 text-[10px] text-zinc-500">The complete topic is added to this week automatically.</p>
+          <div className="relative border-b border-white/5 bg-white/[0.025] p-4">
+            <div className="mb-3">
+              <h3 className="text-xs font-black text-white">Add a subject + topic</h3>
+              <p className="mt-0.5 text-[9px] text-zinc-600">The complete topic is added to this week automatically.</p>
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]">
               <select
                 value={selectedSubject}
                 onChange={e => { setSelectedSubject(e.target.value); setSelectedTopic(''); }}
-                className="w-full rounded-xl bg-zinc-950 px-3 py-3 text-xs font-semibold text-zinc-200 outline-none ring-1 ring-white/10 focus:ring-cyan-400/50"
+                className="w-full rounded-lg bg-zinc-950 px-3 py-2.5 text-xs font-semibold text-zinc-200 outline-none ring-1 ring-white/10 focus:ring-cyan-400/50"
               >
                 <option value="">Choose subject</option>
                 {subjects.map(subject => <option key={subject} value={subject}>{subject}</option>)}
@@ -422,7 +422,7 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
                 value={selectedTopic}
                 onChange={e => setSelectedTopic(e.target.value)}
                 disabled={!selectedSubject}
-                className="w-full rounded-xl bg-zinc-950 px-3 py-3 text-xs font-semibold text-zinc-200 outline-none ring-1 ring-white/10 focus:ring-violet-400/50 disabled:opacity-40"
+                className="w-full rounded-lg bg-zinc-950 px-3 py-2.5 text-xs font-semibold text-zinc-200 outline-none ring-1 ring-white/10 focus:ring-violet-400/50 disabled:opacity-40"
               >
                 <option value="">Choose topic</option>
                 {topics.map(topic => <option key={topic} value={topic}>{topic}</option>)}
@@ -431,7 +431,7 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
                 type="button"
                 onClick={addTarget}
                 disabled={saving || !selectedTopic}
-                className="rounded-xl bg-white px-5 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-white px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-zinc-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {saving ? 'Saving...' : 'Add'}
               </button>
@@ -440,7 +440,7 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
           </div>
         )}
 
-        <div className="relative p-3 sm:p-5">
+        <div className="relative p-3">
           {subjectGroups.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-10 text-center">
               <Target size={25} className="mx-auto text-zinc-700" />
@@ -448,28 +448,28 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
               <p className="mt-1 text-[10px] text-zinc-600">Add your first subject and topic above.</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {subjectGroups.map((subjectGroup, subjectIndex) => {
                 const subjectOpen = expandedSubjects.includes(subjectGroup.subject);
                 const subjectPercent = subjectGroup.total ? Math.round((subjectGroup.completed / subjectGroup.total) * 100) : 0;
                 const color = colorFor(subjectIndex);
 
                 return (
-                  <div key={subjectGroup.subject} className="overflow-hidden rounded-2xl bg-zinc-900/70 ring-1 ring-white/10 transition hover:ring-white/15">
+                  <div key={subjectGroup.subject} className="overflow-hidden rounded-xl bg-zinc-900/70 ring-1 ring-white/10 transition hover:ring-white/15">
                     <button
                       type="button"
                       onClick={() => toggleSubject(subjectGroup.subject)}
-                      className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-white/[0.025]"
+                      className="flex w-full items-center gap-3 px-2.5 py-2.5 text-left transition hover:bg-white/[0.025]"
                     >
-                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${color.soft} ring-1`}>
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${color.soft} ring-1`}>
                         {subjectPercent === 100 ? <CheckCircle2 size={17} className="text-emerald-400" /> : <Target size={16} className={color.text} />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-black text-white">{subjectGroup.subject}</span>
+                          <span className="truncate text-xs font-black text-white">{subjectGroup.subject}</span>
                           <span className="rounded-full bg-black/30 px-2 py-0.5 text-[8px] font-black text-zinc-500">{subjectGroup.topics.length} topic{subjectGroup.topics.length === 1 ? '' : 's'}</span>
                         </div>
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/60">
+                        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-black/60">
                           <div className={`h-full rounded-full bg-gradient-to-r ${color.bar} transition-all duration-500`} style={{ width: `${subjectPercent}%` }} />
                         </div>
                       </div>
@@ -489,13 +489,13 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
                           const topicColor = colorFor(subjectIndex + topicIndex);
 
                           return (
-                            <div key={topicKey} className="mb-2 overflow-hidden rounded-xl bg-zinc-950/80 ring-1 ring-white/5 last:mb-0">
-                              <div className="flex items-center gap-2 px-3 py-3">
+                            <div key={topicKey} className="mb-2 overflow-hidden rounded-lg bg-zinc-950/80 ring-1 ring-white/5 last:mb-0">
+                              <div className="flex items-center gap-2 px-2.5 py-2.5">
                                 <button type="button" onClick={() => toggleTopic(topicKey)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                                   <ChevronDown size={14} className={`shrink-0 text-zinc-600 transition-transform ${topicOpen ? 'rotate-180' : ''}`} />
-                                  <span className="truncate text-xs font-bold text-zinc-200">{topicGroup.topic}</span>
+                                  <span className="truncate text-[10px] font-bold text-zinc-200">{topicGroup.topic}</span>
                                 </button>
-                                <span className={`shrink-0 text-[9px] font-black ${topicPercent === 100 ? 'text-emerald-400' : topicColor.text}`}>{topicGroup.completed}/{topicGroup.materials.length}</span>
+                                <span className={`shrink-0 text-[8px] font-black ${topicPercent === 100 ? 'text-emerald-400' : topicColor.text}`}>{topicGroup.completed}/{topicGroup.materials.length}</span>
                                 <div className="hidden w-20 overflow-hidden rounded-full bg-black sm:block">
                                   <div className={`h-1.5 rounded-full bg-gradient-to-r ${topicColor.bar}`} style={{ width: `${topicPercent}%` }} />
                                 </div>
@@ -513,7 +513,7 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
                                     const busy = togglingId === material.id;
                                     const locked = !!material.is_paid;
                                     return (
-                                      <div key={material.id} className={`group flex items-center gap-3 rounded-xl px-3 py-3 transition ${done ? 'bg-emerald-500/[0.06]' : 'hover:bg-white/[0.035]'}`}>
+                                      <div key={material.id} className={`group flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition ${done ? 'bg-emerald-500/[0.06]' : 'hover:bg-white/[0.035]'}`}>
                                         <button
                                           type="button"
                                           disabled={busy || locked}
@@ -557,15 +557,15 @@ export default function WeeklyTargetPanel({ goal, curriculum, completedIds, toda
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl bg-zinc-900/50 p-4 ring-1 ring-white/10">
-          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-zinc-500"><CheckCircle2 size={12} className="text-emerald-400" /> Curriculum progress</div>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="rounded-xl bg-zinc-900/50 p-3 ring-1 ring-white/10">
+          <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-zinc-500"><CheckCircle2 size={12} className="text-emerald-400" /> Curriculum progress</div>
           <div className="mt-2 text-sm font-black text-zinc-200">{targetCompleted} of {targetTotal} target lectures completed</div>
           <div className="mt-2 text-[10px] text-zinc-600">Ticking a lecture here updates the same progress used by Curriculum.</div>
         </div>
-        <Link href="/resources" className="group rounded-2xl bg-gradient-to-br from-indigo-500/10 to-cyan-500/10 p-4 ring-1 ring-indigo-500/15 transition hover:ring-cyan-400/30">
+        <Link href="/resources" className="group rounded-xl bg-gradient-to-br from-indigo-500/10 to-cyan-500/10 p-4 ring-1 ring-indigo-500/15 transition hover:ring-cyan-400/30">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-cyan-300"><Sparkles size={12} /> Keep going</div>
+            <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-cyan-300"><Sparkles size={12} /> Keep going</div>
             <Play size={13} className="text-zinc-600 transition group-hover:translate-x-0.5 group-hover:text-cyan-300" />
           </div>
           <div className="mt-2 text-sm font-black text-zinc-200">Open full Curriculum</div>
