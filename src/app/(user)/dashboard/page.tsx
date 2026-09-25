@@ -11,6 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import { getUserProfile } from '../../../lib/dataService';
 import toast from 'react-hot-toast';
 import WeeklyTargetPanel from '../../../components/dashboard/WeeklyTargetPanel';
+import DashboardStudyInsights from '../../../components/dashboard/DashboardStudyInsights';
 
 // --- FULL GATE ECE SYLLABUS ---
 const GATE_SYLLABUS = [
@@ -419,6 +420,11 @@ export default function UserDashboard() {
           curriculum={curriculumMaterials}
           completedIds={globalProgress}
           today={getISTDateString(getISTNow())}
+        />
+
+        <DashboardStudyInsights
+          curriculum={curriculumMaterials}
+          completedIds={globalProgress}
         />
 
         {/* ======================================================== */}
