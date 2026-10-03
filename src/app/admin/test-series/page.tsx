@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, Clock3, FileUp, Loader2, ShieldCheck, X, Sparkles, Save, RotateCcw } from 'lucide-react';
+import { Check, Clock3, FileUp, Loader2, ShieldCheck, X, Sparkles, Save, RotateCcw, Search, Filter, Layers3 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type MarkType = 'MCQ' | 'MSQ' | 'NAT';
@@ -232,6 +232,9 @@ export default function AdminTestSeries() {
   const [madeEasyStream, setMadeEasyStream] = useState('');
   const [usePdfSyllabus, setUsePdfSyllabus] = useState(true);
   const [madeEasyMetaManual, setMadeEasyMetaManual] = useState(false);
+  const [testSearch, setTestSearch] = useState('');
+  const [testProviderFilter, setTestProviderFilter] = useState<'all' | 'standard' | 'madeeasy'>('all');
+  const [testCategoryFilter, setTestCategoryFilter] = useState<'all' | 'topicwise' | 'subjectwise' | 'full_syllabus'>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const adminHeaders = { 'Content-Type': 'application/json', 'x-admin-email': process.env.NEXT_PUBLIC_ADMIN_EMAIL || '', 'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '' };
@@ -413,6 +416,22 @@ export default function AdminTestSeries() {
   };
 
   const totalDraftMarks = draftQuestions?.reduce((s, q) => s + Number(q.marks || 0), 0) || 0;
+  const filteredTests = tests.filter((t: any) => {
+    const haystack = [t.title, t.exam_name, t.subject, t.topic, t.stream, t.test_number].filter(Boolean).join(' ').toLowerCase();
+    const matchesSearch = !testSearch.trim() || haystack.includes(testSearch.trim().toLowerCase());
+    const matchesProvider = testProviderFilter === 'all' || (testProviderFilter === 'madeeasy' ? t.provider === 'madeeasy' : t.provider !== 'madeeasy');
+    const matchesCategory = testCategoryFilter === 'all' || t.test_category === testCategoryFilter;
+    return matchesSearch && matchesProvider && matchesCategory;
+  });
+  const testGroups = filteredTests.reduce((groups: Record<string, any[]>, t: any) => {
+    const provider = t.provider === 'madeeasy' ? 'MADE EASY' : 'STANDARD TEST SERIES';
+    const category = t.provider === 'madeeasy'
+      ? (t.test_category === 'subjectwise' ? 'Single Subject' : t.test_category === 'full_syllabus' ? 'Full Syllabus' : 'Topicwise')
+      : 'Standard';
+    const key = `${provider}|||${category}`;
+    (groups[key] ||= []).push(t);
+    return groups;
+  }, {});
   const draftMcq = draftQuestions?.filter(q => q.type === 'MCQ').length || 0;
   const draftMsq = draftQuestions?.filter(q => q.type === 'MSQ').length || 0;
   const draftNat = draftQuestions?.filter(q => q.type === 'NAT').length || 0;
@@ -497,6 +516,59 @@ export default function AdminTestSeries() {
       {requests.length === 0 ? <p className="p-5 text-gray-500">No access requests.</p> : <div className="divide-y divide-gray-800">{requests.map(r=><div key={r.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-mono text-sm text-white">{r.user_id}</div><div className="text-xs text-gray-500 flex items-center gap-1 mt-1"><Clock3 size={12}/> {new Date(r.requested_at).toLocaleString()}</div></div><div className="flex items-center gap-2">{r.status === 'pending' ? <><button onClick={()=>updateRequest(r.id,'approved')} className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-bold flex items-center gap-1"><Check size={16}/> Approve</button><button onClick={()=>updateRequest(r.id,'rejected')} className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold flex items-center gap-1"><X size={16}/> Reject</button></> : <span className="text-xs font-black uppercase text-gray-400">{r.status}</span>}</div></div>)}</div>}
     </section>
 
-    <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden"><div className="p-5 border-b border-gray-800 font-bold text-white">Published Tests</div><div className="divide-y divide-gray-800">{tests.map(t=><div key={t.id} className="p-5 flex flex-wrap items-center justify-between gap-4"><div><div className="font-bold text-white">{t.title}</div><div className="text-xs text-gray-500 mt-1">{t.exam_name} • {t.question_count} questions • {t.duration_minutes} min • {t.max_marks} marks</div><div className="text-[11px] text-zinc-500 mt-2 flex flex-wrap gap-2"><span className="px-2 py-1 rounded-full bg-white/5 border border-white/10">{t.provider === 'madeeasy' ? 'MADE EASY' : 'PREPFUSION'}</span>{t.provider === 'madeeasy' && t.test_category && <span className="px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/10">{t.test_category === 'subjectwise' ? 'SINGLE SUBJECT' : t.test_category.replace('_',' ').toUpperCase()}</span>}{t.test_number ? <span>Test No. {t.test_number}</span> : null}{t.subject ? <span>• {t.subject}</span> : null}{t.topic ? <span>• {t.topic}</span> : null}</div></div><div className="flex items-center gap-3"><span className="text-xs text-emerald-400 font-bold">{t.is_published ? 'PUBLISHED' : 'DRAFT'}</span>{t.syllabus && <button type="button" onClick={()=>deleteSyllabus(t.id,t.title)} className="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold hover:bg-amber-500/20">Delete Syllabus</button>}{renamingId === t.id ? (<><input autoFocus value={renameValue} onChange={e=>setRenameValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') renameTest(t.id); if(e.key==='Escape'){setRenamingId(null);setRenameValue('')}}} className="w-56 bg-black border border-gray-700 rounded-lg px-3 py-2 text-white"/><button type="button" onClick={()=>renameTest(t.id)} className="px-3 py-2 rounded-lg bg-emerald-500 text-black font-bold">Save</button><button type="button" onClick={()=>{setRenamingId(null);setRenameValue('')}} className="px-3 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></>) : (<button type="button" onClick={()=>{setRenamingId(t.id);setRenameValue(t.title || '')}} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-300 border border-blue-500/20 font-bold hover:bg-blue-500/20">Rename</button>)}{t.provider === 'madeeasy' && (renamingSubjectId === t.id ? (<><input autoFocus value={subjectRenameValue} onChange={e=>setSubjectRenameValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') renameSubject(t.id); if(e.key==='Escape'){setRenamingSubjectId(null);setSubjectRenameValue('')}}} placeholder="Subject name" className="w-56 bg-black border border-gray-700 rounded-lg px-3 py-2 text-white"/><button type="button" onClick={()=>renameSubject(t.id)} className="px-3 py-2 rounded-lg bg-emerald-500 text-black font-bold">Save Subject</button><button type="button" onClick={()=>{setRenamingSubjectId(null);setSubjectRenameValue('')}} className="px-3 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></>) : (<button type="button" onClick={()=>{setRenamingSubjectId(t.id);setSubjectRenameValue(t.subject || '')}} className="px-3 py-2 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/20 font-bold hover:bg-violet-500/20">Edit Subject</button>))}<button type="button" onClick={()=>deleteTest(t.id,t.title)} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold hover:bg-red-500/20">Delete</button></div></div>)}{!tests.length && <p className="p-5 text-gray-500">No tests published yet.</p>}</div></section>
+    <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="p-5 border-b border-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-white text-lg font-black"><Layers3 size={19} className="text-emerald-400"/> Published Test Library</div>
+            <p className="text-xs text-zinc-500 mt-1">Organized by test format and category. Standard imports stay separate from MADE EASY schedules.</p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-zinc-400"><span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300">{tests.length} total</span><span className="px-2.5 py-1 rounded-full bg-white/5">{filteredTests.length} shown</span></div>
+        </div>
+        <div className="grid md:grid-cols-[1fr_auto_auto] gap-3 mt-5">
+          <div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={testSearch} onChange={e=>setTestSearch(e.target.value)} placeholder="Search title, subject, topic, stream, test number..." className="w-full bg-black border border-gray-700 rounded-xl pl-9 pr-4 py-3 text-white text-sm outline-none focus:border-emerald-500/50"/></div>
+          <select value={testProviderFilter} onChange={e=>setTestProviderFilter(e.target.value as any)} className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white text-sm"><option value="all">All Formats</option><option value="standard">Standard</option><option value="madeeasy">MADE EASY</option></select>
+          <select value={testCategoryFilter} onChange={e=>setTestCategoryFilter(e.target.value as any)} className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white text-sm"><option value="all">All Categories</option><option value="standard">Standard</option><option value="topicwise">Topicwise</option><option value="subjectwise">Single Subject</option><option value="full_syllabus">Full Syllabus</option></select>
+        </div>
+      </div>
+      <div className="p-5 space-y-6">
+        {Object.entries(testGroups).map(([groupKey, groupTests]) => {
+          const [provider, category] = groupKey.split('|||');
+          return <div key={groupKey} className="rounded-2xl border border-white/10 overflow-hidden">
+            <div className="px-4 py-3 bg-black/30 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${provider === 'MADE EASY' ? 'bg-violet-400' : 'bg-emerald-400'}`}/><span className="font-black text-white">{provider}</span><span className="text-zinc-600">/</span><span className="text-sm font-bold text-zinc-300">{category}</span></div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{groupTests.length} test{groupTests.length === 1 ? '' : 's'}</span>
+            </div>
+            <div className="divide-y divide-white/10">
+              {groupTests.map((t: any) => <div key={t.id} className="p-4 hover:bg-white/[0.02]">
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="font-black text-white truncate">{t.title}</div>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${t.is_published ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>{t.is_published ? 'PUBLISHED' : 'DRAFT'}</span>
+                      {t.test_number ? <span className="px-2 py-0.5 rounded-full bg-white/5 text-zinc-400 text-[9px] font-black">TEST {t.test_number}</span> : null}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-1">{t.exam_name} • {t.question_count} questions • {t.duration_minutes} min • {t.max_marks} marks</div>
+                    <div className="text-[11px] text-zinc-500 mt-2 flex flex-wrap gap-2">
+                      {t.stream && <span className="px-2 py-1 rounded-lg bg-cyan-500/5 border border-cyan-500/10 text-cyan-300">{t.stream}</span>}
+                      {t.subject && <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10">{t.subject}</span>}
+                      {t.topic && <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10">{t.topic}</span>}
+                      {t.exam_year && <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10">{t.exam_year}</span>}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {t.syllabus && <button type="button" onClick={()=>deleteSyllabus(t.id,t.title)} className="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold">Delete Syllabus</button>}
+                    {renamingId === t.id ? <><input autoFocus value={renameValue} onChange={e=>setRenameValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') renameTest(t.id); if(e.key==='Escape'){setRenamingId(null);setRenameValue('')}}} className="w-48 bg-black border border-gray-700 rounded-lg px-3 py-2 text-white"/><button type="button" onClick={()=>renameTest(t.id)} className="px-3 py-2 rounded-lg bg-emerald-500 text-black font-bold">Save</button><button type="button" onClick={()=>{setRenamingId(null);setRenameValue('')}} className="px-3 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></> : <button type="button" onClick={()=>{setRenamingId(t.id);setRenameValue(t.title || '')}} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-300 border border-blue-500/20 font-bold">Rename</button>}
+                    {t.provider === 'madeeasy' && (renamingSubjectId === t.id ? <><input autoFocus value={subjectRenameValue} onChange={e=>setSubjectRenameValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') renameSubject(t.id); if(e.key==='Escape'){setRenamingSubjectId(null);setSubjectRenameValue('')}}} placeholder="Subject name" className="w-48 bg-black border border-gray-700 rounded-lg px-3 py-2 text-white"/><button type="button" onClick={()=>renameSubject(t.id)} className="px-3 py-2 rounded-lg bg-emerald-500 text-black font-bold">Save Subject</button><button type="button" onClick={()=>{setRenamingSubjectId(null);setSubjectRenameValue('')}} className="px-3 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></> : <button type="button" onClick={()=>{setRenamingSubjectId(t.id);setSubjectRenameValue(t.subject || '')}} className="px-3 py-2 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/20 font-bold">Edit Subject</button>)}
+                    <button type="button" onClick={()=>deleteTest(t.id,t.title)} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold">Delete</button>
+                  </div>
+                </div>
+              </div>)}
+            </div>
+          </div>;
+        })}
+        {!filteredTests.length && <div className="py-12 text-center"><Filter className="mx-auto text-zinc-600" size={26}/><p className="text-zinc-400 font-bold mt-3">No matching tests</p><p className="text-xs text-zinc-600 mt-1">Change the search or filters.</p></div>}
+      </div>
+    </section>
   </div>;
 }
