@@ -34,6 +34,7 @@ async function readJsonBody(req: Request) {
 }
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -112,7 +113,7 @@ export async function POST(req: Request) {
       test_series_id: 'TEMP',
       id_in_test: String(q.id),
       number: Number(q.number),
-      answer: (q.answer || []).map(String),
+      answer: Array.isArray(q.answer) ? q.answer.map(String) : [],
       solution_html: clean(String(q.solutionHtml || '')),
       video_url: q.videoUrl ? String(q.videoUrl).trim() : null,
       question_type: String(q.type || 'MCQ').toUpperCase(),
@@ -168,7 +169,7 @@ export async function POST(req: Request) {
         .insert(keyRows.slice(i, i + 10));
       if (keyError) {
         await db().from('test_series').delete().eq('id', data.id);
-        throw keyError;
+        throw new Error(`Answer-key save failed at questions ${i + 1}-${Math.min(i + 10, keyRows.length)}: ${keyError.message}`);
       }
     }
 
