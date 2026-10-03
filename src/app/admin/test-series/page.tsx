@@ -303,12 +303,57 @@ export default function AdminTestSeries() {
         toast.error(isMadeEasy ? 'Please provide a subject so the MADE EASY test can be named.' : 'Title and exam name are required.');
         return;
       }
-      const payload = { title: effectiveTitle, examName: effectiveExamName, durationMinutes: Number(duration), maxMarks: total, questions: draftQuestions, provider: isMadeEasy ? 'madeeasy' : 'prepfusion', testCategory: isMadeEasy ? madeEasyCategory : 'standard', testNumber: isMadeEasy && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: isMadeEasy ? madeEasySubject : '', topic: isMadeEasy ? madeEasyTopic : '', syllabus: isMadeEasy ? madeEasySyllabus : '', examYear: isMadeEasy && madeEasyYear ? Number(madeEasyYear) : null, stream: isMadeEasy ? madeEasyStream : '' };
-      const jsonBytes = new TextEncoder().encode(JSON.stringify(payload));
-      const compressed = await new Response(new Blob([jsonBytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
-      const res = await fetch('/api/test-series/upload', { method: 'POST', headers: { ...adminHeaders, 'Content-Encoding': 'gzip', 'Content-Type': 'application/json' }, body: compressed });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const meta = { title: effectiveTitle, examName: effectiveExamName, durationMinutes: Number(duration), maxMarks: total, provider: isMadeEasy ? 'madeeasy' : 'prepfusion', testCategory: isMadeEasy ? madeEasyCategory : 'standard', testNumber: isMadeEasy && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: isMadeEasy ? madeEasySubject : '', topic: isMadeEasy ? madeEasyTopic : '', syllabus: isMadeEasy ? madeEasySyllabus : '', examYear: isMadeEasy && madeEasyYear ? Number(madeEasyYear) : null, stream: isMadeEasy ? madeEasyStream : '' };
+
+      // Do not send the entire exported HTML/question set in one request.
+      // The exported file can contain several MB of base64 images, while
+      // serverless platforms commonly reject request bodies above ~4-5 MB.
+      // Create the test first, then upload compact question batches.
+      const postJson = async (body: any) => {
+        const res = await fetch('/api/test-series/upload', {
+          method: 'POST',
+          headers: { ...adminHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+        return data;
+      };
+
+      const started = await postJson({ mode: 'start', ...meta, questionCount: draftQuestions.length });
+      const testId = String(started.id || '');
+      if (!testId) throw new Error('Server did not return a test ID.');
+
+      try {
+        const MAX_BATCH_BYTES = 900000;
+        let batch: any[] = [];
+        let batchBytes = 2;
+        let uploaded = 0;
+
+        const sendBatch = async () => {
+          if (!batch.length) return;
+          await postJson({ mode: 'batch', testId, questions: batch });
+          uploaded += batch.length;
+          batch = [];
+          batchBytes = 2;
+        };
+
+        for (const q of draftQuestions) {
+          const one = JSON.stringify(q);
+          const oneBytes = new TextEncoder().encode(one).byteLength;
+          if (batch.length && batchBytes + oneBytes + 1 > MAX_BATCH_BYTES) await sendBatch();
+          batch.push(q);
+          batchBytes += oneBytes + 1;
+          if (oneBytes > MAX_BATCH_BYTES) await sendBatch();
+        }
+        await sendBatch();
+        if (uploaded !== draftQuestions.length) throw new Error('Not all questions were uploaded.');
+        await postJson({ mode: 'complete', testId });
+      } catch (batchError) {
+        await postJson({ mode: 'abort', testId }).catch(() => {});
+        throw batchError;
+      }
+
       toast.success(`Test published with ${draftQuestions.length} questions.`);
       setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setMadeEasyHtml(''); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard'); setMadeEasyCategory('full_syllabus'); setMadeEasyTestNumber(''); setMadeEasySubject(''); setMadeEasyTopic(''); setMadeEasySyllabus(''); setMadeEasyYear(''); setMadeEasyStream(''); setUsePdfSyllabus(true); setMadeEasyMetaManual(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
