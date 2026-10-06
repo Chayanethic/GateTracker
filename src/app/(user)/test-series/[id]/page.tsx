@@ -23,7 +23,7 @@ type Q = {
   negativeMarks?: number;
 };
 
-type PaletteState = 'answered' | 'review' | 'current' | 'unanswered';
+type PaletteState = 'answered' | 'review' | 'answeredReview' | 'current' | 'unanswered';
 
 const formatClock = (seconds: number) => {
   const s = Math.max(0, Math.floor(Number(seconds || 0)));
@@ -56,6 +56,7 @@ export default function TestRunner() {
   const [lightMode, setLightMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showQuestionPaper, setShowQuestionPaper] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [requestedQuestion, setRequestedQuestion] = useState<number | null>(null);
   const activeQuestionRef = useRef<string | null>(null);
   const questionStartedAtRef = useRef<number | null>(null);
@@ -146,7 +147,11 @@ export default function TestRunner() {
 
   const submitTest = useCallback(async (auto = false) => {
     if (submittingRef.current || submitted) return;
-    if (!auto && !confirm('Submit test now? You will not be able to change answers.')) return;
+    if (!auto && !showSubmitModal) {
+      setShowSubmitModal(true);
+      return;
+    }
+    setShowSubmitModal(false);
 
     flushQuestionTime();
     submittingRef.current = true;
@@ -195,7 +200,7 @@ export default function TestRunner() {
       submittingRef.current = false;
       setSubmitted(false);
     }
-  }, [id, startAt, submitted, flushQuestionTime, router, answers, marked, bookmarked, exitFullscreen]);
+  }, [id, startAt, submitted, flushQuestionTime, router, answers, marked, bookmarked, exitFullscreen, showSubmitModal]);
 
   useEffect(() => {
     if (!started || submitted) return;
@@ -283,6 +288,7 @@ export default function TestRunner() {
 
   const paletteState = (x: Q, i: number): PaletteState => {
     if (i === current) return 'current';
+    if (marked[x.id] && (answers[x.id] || []).length > 0) return 'answeredReview';
     if (marked[x.id]) return 'review';
     if ((answers[x.id] || []).length > 0) return 'answered';
     return 'unanswered';
@@ -356,10 +362,10 @@ export default function TestRunner() {
 
   return (
     <div className={lightMode ? 'min-h-screen bg-slate-100 text-slate-900' : 'min-h-screen bg-[#202020] text-white'}>
-      <header className={lightMode ? 'sticky top-0 z-50 bg-white border-b border-slate-300' : 'sticky top-0 z-50 bg-[#202020] border-b border-white/10'}>
-        <div className="h-12 flex items-center justify-between px-3 md:px-5 gap-3">
+      <header className={lightMode ? 'sticky top-0 z-50 bg-white border-b border-slate-300 shadow-sm' : 'sticky top-0 z-50 bg-[#1b1b1b] border-b border-white/10 shadow-lg'}>
+        <div className="h-14 flex items-center justify-between px-3 md:px-5 gap-3">
           <div className="min-w-0 flex items-center gap-3">
-            <div className="font-black text-sm truncate">{test.exam_name} — {test.title}</div>
+            <div className="min-w-0"><div className="font-black text-sm truncate">{test.exam_name || 'GATE'} — {test.title}</div><div className="hidden md:block text-[10px] uppercase tracking-widest opacity-50 mt-0.5">Computer Based Examination</div></div>
           </div>
 
           <div className="hidden md:flex items-center gap-1 text-xs font-bold">
@@ -392,7 +398,7 @@ export default function TestRunner() {
             >
               {isFullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
             </button>
-            <div className={`min-w-[112px] rounded-lg px-3 py-2 text-center font-mono font-black tracking-wider ${remaining <= 300 ? 'bg-red-500 text-white' : lightMode ? 'bg-slate-200 text-slate-900' : 'bg-[#333] text-white'}`}>
+            <div className={`min-w-[124px] rounded-lg px-3 py-2 text-center font-mono font-black tracking-wider border ${remaining <= 300 ? 'bg-red-600 border-red-500 text-white animate-pulse' : lightMode ? 'bg-slate-100 border-slate-300 text-slate-900' : 'bg-[#292929] border-white/10 text-white'}`}>
               {formatClock(remaining)}
             </div>
             <button
@@ -405,9 +411,9 @@ export default function TestRunner() {
         </div>
       </header>
 
-      <div className="border-b border-black/10">
-        <div className={lightMode ? 'h-12 bg-slate-200 flex items-center px-4 font-black text-sm' : 'h-12 bg-[#2b2b2b] flex items-center px-4 font-black text-sm'}>
-          <span className={lightMode ? 'bg-blue-600 text-white h-12 flex items-center px-6 -ml-4' : 'bg-blue-600 text-white h-12 flex items-center px-6 -ml-4'}>
+      <div className="border-b border-black/10 shadow-sm">
+        <div className={lightMode ? 'h-12 bg-slate-100 flex items-center px-4 font-black text-sm' : 'h-12 bg-[#292929] flex items-center px-4 font-black text-sm'}>
+          <span className="bg-[#1d4ed8] text-white h-12 flex items-center px-6 -ml-4 shadow-sm">
             {test.exam_name || 'General'}
           </span>
           <div className="ml-auto text-xs font-bold">
@@ -539,12 +545,14 @@ export default function TestRunner() {
                   const state = paletteState(x, i);
                   const cls =
                     state === 'current'
-                      ? 'bg-blue-600 border-blue-700 text-white ring-2 ring-blue-200'
-                      : state === 'review'
+                      ? 'bg-blue-600 border-blue-700 text-white ring-2 ring-blue-200 ring-offset-1'
+                      : state === 'answeredReview'
                         ? 'bg-violet-600 border-violet-700 text-white'
-                        : state === 'answered'
-                          ? 'bg-emerald-500 border-emerald-600 text-white'
-                          : 'bg-white border-slate-300 text-slate-700';
+                        : state === 'review'
+                          ? 'bg-violet-100 border-violet-500 text-violet-800'
+                          : state === 'answered'
+                            ? 'bg-emerald-500 border-emerald-600 text-white'
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50';
 
                   return (
                     <button
@@ -560,7 +568,8 @@ export default function TestRunner() {
 
               <div className="mt-5 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
                 <Legend cls="bg-emerald-500" text={`Answered (${answeredCount})`} />
-                <Legend cls="bg-violet-600" text={`Review (${reviewCount})`} />
+                <Legend cls="bg-violet-600" text={`Marked for Review (${reviewCount})`} />
+                <Legend cls="bg-violet-100 border border-violet-500" text="Answered + Review" />
                 <Legend cls="bg-white border border-slate-300" text={`Not Answered (${unansweredCount})`} />
                 <Legend cls="bg-blue-600" text="Current" />
               </div>
@@ -586,6 +595,33 @@ export default function TestRunner() {
           </div>
         </aside>
       </div>
+
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
+            <div className="border-b border-slate-200 bg-slate-50 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600"><Send size={18} /></div>
+                <div><h2 className="text-lg font-black">Submit Examination</h2><p className="text-xs text-slate-500">Review your attempt before final submission.</p></div>
+              </div>
+            </div>
+            <div className="p-6">
+              {unansweredCount > 0 && <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><b>Attention:</b> You still have {unansweredCount} unanswered question{unansweredCount === 1 ? '' : 's'}.</div>}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <ModalStat label="Answered" value={answeredCount} cls="text-emerald-600" />
+                <ModalStat label="Unanswered" value={unansweredCount} cls="text-amber-600" />
+                <ModalStat label="Review" value={reviewCount} cls="text-violet-600" />
+                <ModalStat label="Remaining" value={formatClock(remaining)} cls="text-blue-600 font-mono" />
+              </div>
+              <p className="mt-5 text-sm leading-6 text-slate-600">Once you submit, you will not be able to modify your responses. Your answers and question-wise time will be saved for analysis.</p>
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button onClick={() => setShowSubmitModal(false)} className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-black hover:bg-slate-50">Return to Examination</button>
+                <button onClick={() => void submitTest(false)} className="rounded-xl bg-red-600 px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-red-700">Submit Examination</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showQuestionPaper && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm p-3 md:p-6">
@@ -683,49 +719,49 @@ function MiniStat({ label, value }: { label: string; value: number }) {
 
 function Result({ test, result }: { test: any; result: any }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const attempted = Number(result.correct || 0) + Number(result.incorrect || 0);
+  const maxMarks = Number(result.maxMarks || 0);
+  const score = Number(result.score || 0);
+  const percentage = maxMarks > 0 ? Math.max(0, Math.min(100, score / maxMarks * 100)) : 0;
 
   return (
-    <div className="min-h-screen bg-[#171717] text-white flex items-center justify-center p-5">
-      <div className="w-full max-w-3xl">
-        <div className="rounded-3xl border border-white/10 bg-[#242424] shadow-2xl overflow-hidden">
-          <div className="px-6 md:px-8 py-6 border-b border-white/10">
-            <div className="text-xs uppercase tracking-widest text-emerald-400 font-black">Test Submitted</div>
-            <h1 className="text-2xl md:text-3xl font-black mt-2">{test.title}</h1>
-            <p className="text-sm text-zinc-500 mt-1">Your attempt has been submitted successfully.</p>
-          </div>
-
-          <div className="p-6 md:p-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <SummaryStat label="Score" value={`${Number(result.score || 0).toFixed(2)}/${result.maxMarks}`} cls="text-emerald-400" />
-              <SummaryStat label="Correct" value={String(result.correct || 0)} cls="text-emerald-400" />
-              <SummaryStat label="Incorrect" value={String(result.incorrect || 0)} cls="text-red-400" />
-              <SummaryStat label="Not Answered" value={String(result.notAnswered || 0)} cls="text-amber-400" />
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 text-sm text-zinc-300">
-              Detailed question-wise solutions, marks, negative marking and time spent are available in Analysis.
-            </div>
-
-            <div className="mt-7 flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={() => router.replace(`/test-series/${test.id}/analysis?attempt=${result.attemptId}`)}
-                className="flex-1 rounded-xl bg-white text-black py-3.5 font-black hover:bg-emerald-300 transition"
-              >
-                Analyse Attempt
-              </button>
-              <button
-                onClick={() => router.replace('/test-series/')}
-                className="rounded-xl border border-white/10 px-6 py-3.5 font-bold hover:bg-white/5"
-              >
-                Back to Test Series
-              </button>
-            </div>
-          </div>
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      <header className="border-b border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+          <div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Examination Result</div><h1 className="mt-1 text-lg font-black">{test.title}</h1></div>
+          <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">SUBMITTED ✓</div>
         </div>
-      </div>
+      </header>
+      <main className="mx-auto max-w-6xl p-4 md:p-8">
+        <div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]">
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+              <div><div className="text-xs font-black uppercase tracking-widest text-slate-500">Your Score</div><div className="mt-2 text-5xl font-black tracking-tight text-slate-900">{score.toFixed(2)} <span className="text-xl font-bold text-slate-400">/ {maxMarks.toFixed(2)}</span></div><div className="mt-2 text-sm text-slate-500">{percentage.toFixed(1)}% of maximum marks</div></div>
+              <div className="h-24 w-24 rounded-full border-[8px] border-blue-100 flex items-center justify-center text-center"><span className="text-xl font-black text-blue-700">{percentage.toFixed(0)}%</span></div>
+            </div>
+            <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <SummaryStat label="Correct" value={String(result.correct || 0)} cls="text-emerald-600" />
+              <SummaryStat label="Incorrect" value={String(result.incorrect || 0)} cls="text-red-600" />
+              <SummaryStat label="Not Answered" value={String(result.notAnswered || 0)} cls="text-amber-600" />
+              <SummaryStat label="Attempted" value={String(attempted)} cls="text-blue-600" />
+            </div>
+          </section>
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="text-xs font-black uppercase tracking-widest text-slate-500">Next Step</div>
+            <h2 className="mt-2 text-xl font-black">Review your performance</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Open detailed analysis for question-wise marks, negative marking, time spent and solutions.</p>
+            <button onClick={() => router.replace(`/test-series/${test.id}/analysis?attempt=${result.attemptId}`)} className="mt-6 w-full rounded-xl bg-blue-600 py-3.5 text-sm font-black text-white hover:bg-blue-700">Analyse Attempt</button>
+            <button onClick={() => router.replace('/test-series/')} className="mt-3 w-full rounded-xl border border-slate-300 py-3.5 text-sm font-bold hover:bg-slate-50">Back to Test Series</button>
+          </section>
+        </div>
+        <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-5 text-sm text-blue-900"><b>Submission recorded.</b> Your attempt has been saved successfully. You can now inspect every question and identify where marks and time were lost.</div>
+      </main>
     </div>
   );
+}
+
+function ModalStat({ label, value, cls }: { label: string; value: number | string; cls: string }) {
+  return <div className="rounded-xl border border-slate-200 bg-white p-3 text-center"><div className={`text-lg font-black ${cls}`}>{value}</div><div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</div></div>;
 }
 
 function SummaryStat({ label, value, cls }: { label: string; value: string; cls: string }) {
