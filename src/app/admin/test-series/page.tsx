@@ -222,7 +222,11 @@ export default function AdminTestSeries() {
   const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[] | null>(null);
   const [marksMode, setMarksMode] = useState<'random' | 'edit' | null>(null);
   const [marksDetected, setMarksDetected] = useState(false);
-  const [uploadFormat, setUploadFormat] = useState<'standard' | 'madeeasy'>('standard');
+  const [uploadFormat, setUploadFormat] = useState<'standard' | 'madeeasy' | 'railway'>('standard');
+  const [railwayFile, setRailwayFile] = useState<File | null>(null);
+  const [railwayTitle, setRailwayTitle] = useState('RRB NTPC Official Paper');
+  const [railwayExamName, setRailwayExamName] = useState('RRB NTPC');
+  const [railwayDuration, setRailwayDuration] = useState('90');
   const [madeEasyCategory, setMadeEasyCategory] = useState<MadeEasyCategory>('full_syllabus');
   const [madeEasyTestNumber, setMadeEasyTestNumber] = useState('');
   const [madeEasySubject, setMadeEasySubject] = useState('');
@@ -246,7 +250,7 @@ export default function AdminTestSeries() {
   };
   useEffect(() => { load(); }, []);
 
-  const prepareMarks = (questions: DraftQuestion[], allPresent: boolean, format: 'standard' | 'madeeasy' = 'standard') => {
+  const prepareMarks = (questions: DraftQuestion[], allPresent: boolean, format: 'standard' | 'madeeasy' | 'railway' = 'standard') => {
     setDraftQuestions(questions);
     setMarksDetected(allPresent);
     setUploadFormat(format);
@@ -297,13 +301,14 @@ export default function AdminTestSeries() {
     setUploading(true);
     try {
       const isMadeEasy = uploadFormat === 'madeeasy';
-      const effectiveTitle = title.trim() || (isMadeEasy ? madeEasySubject.trim() : '');
-      const effectiveExamName = examName.trim() || (isMadeEasy ? 'MADE EASY' : '');
+      const isRailway = uploadFormat === 'railway';
+      const effectiveTitle = title.trim() || (isMadeEasy ? madeEasySubject.trim() : isRailway ? railwayTitle.trim() : '');
+      const effectiveExamName = examName.trim() || (isMadeEasy ? 'MADE EASY' : isRailway ? railwayExamName.trim() : '');
       if (!effectiveTitle || !effectiveExamName) {
         toast.error(isMadeEasy ? 'Please provide a subject so the MADE EASY test can be named.' : 'Title and exam name are required.');
         return;
       }
-      const meta = { title: effectiveTitle, examName: effectiveExamName, durationMinutes: Number(duration), maxMarks: total, provider: isMadeEasy ? 'madeeasy' : 'prepfusion', testCategory: isMadeEasy ? madeEasyCategory : 'standard', testNumber: isMadeEasy && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: isMadeEasy ? madeEasySubject : '', topic: isMadeEasy ? madeEasyTopic : '', syllabus: isMadeEasy ? madeEasySyllabus : '', examYear: isMadeEasy && madeEasyYear ? Number(madeEasyYear) : null, stream: isMadeEasy ? madeEasyStream : '' };
+      const meta = { title: effectiveTitle, examName: effectiveExamName, durationMinutes: Number(isRailway ? railwayDuration : duration), maxMarks: total, provider: isMadeEasy ? 'madeeasy' : isRailway ? 'railway' : 'prepfusion', testCategory: isMadeEasy ? madeEasyCategory : 'standard', testNumber: isMadeEasy && madeEasyTestNumber ? Number(madeEasyTestNumber) : null, subject: isMadeEasy ? madeEasySubject : '', topic: isMadeEasy ? madeEasyTopic : '', syllabus: isMadeEasy ? madeEasySyllabus : '', examYear: isMadeEasy && madeEasyYear ? Number(madeEasyYear) : null, stream: isMadeEasy ? madeEasyStream : '' };
 
       // Do not send the entire exported HTML/question set in one request.
       // The exported file can contain several MB of base64 images, while
@@ -355,7 +360,7 @@ export default function AdminTestSeries() {
       }
 
       toast.success(`Test published with ${draftQuestions.length} questions.`);
-      setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setMadeEasyHtml(''); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard'); setMadeEasyCategory('full_syllabus'); setMadeEasyTestNumber(''); setMadeEasySubject(''); setMadeEasyTopic(''); setMadeEasySyllabus(''); setMadeEasyYear(''); setMadeEasyStream(''); setUsePdfSyllabus(true); setMadeEasyMetaManual(false);
+      setTitle(''); setExamName(''); setFile(null); setMadeEasyFile(null); setMadeEasyHtml(''); setDraftQuestions(null); setMarksMode(null); setMarksDetected(false); setUploadFormat('standard'); setRailwayFile(null); setMadeEasyCategory('full_syllabus'); setMadeEasyTestNumber(''); setMadeEasySubject(''); setMadeEasyTopic(''); setMadeEasySyllabus(''); setMadeEasyYear(''); setMadeEasyStream(''); setUsePdfSyllabus(true); setMadeEasyMetaManual(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       load();
     } catch (err: any) { toast.error(err.message); }
@@ -372,6 +377,32 @@ export default function AdminTestSeries() {
       if (!parsed.questions.length) throw new Error('No supported test-series questions were found. Upload the normal exported HTML or the MADE EASY index.html format.');
       prepareMarks(parsed.questions, parsed.allMarksPresent, parsed.format);
     } catch (err: any) { toast.error(err.message); }
+    finally { setUploading(false); }
+  };
+
+  const uploadRailwayJson = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!railwayFile) return toast.error('Choose a Railway exam JSON file first.');
+    setUploading(true);
+    try {
+      const raw = JSON.parse(await railwayFile.text());
+      const rows = Array.isArray(raw) ? raw : Array.isArray(raw.questions) ? raw.questions : [raw];
+      if (!rows.length) throw new Error('The JSON file contains no questions.');
+      const questions: DraftQuestion[] = rows.map((q: any, index: number) => {
+        if (!q || typeof q.question !== 'string' || !q.question.trim()) throw new Error(`Question ${index + 1} is missing its question text.`);
+        const opts = Array.isArray(q.options) ? q.options : [];
+        const options = opts.map((o: any, i: number) => ({ key: String(o.label || String.fromCharCode(65 + i)).trim().toUpperCase(), html: String(o.text ?? o.html ?? '') }));
+        const correct = String(q.correctAnswer ?? q.answer ?? '').trim().toUpperCase();
+        if (!correct) throw new Error(`Question ${q.number || index + 1} is missing correctAnswer.`);
+        if (options.length && !options.some(o => o.key === correct)) throw new Error(`Correct answer '${correct}' does not match an option in question ${q.number || index + 1}.`);
+        return { id: `railway-q-${q.number || index + 1}-${index}`, number: Number(q.number) || index + 1, type: 'MCQ', questionHtml: String(q.question), options, answer: correct.split(/[,\s]+/).filter(Boolean), solutionHtml: String(q.correctAnswerText || ''), marks: 1, negativeMarks: 0.33, marksDetected: true };
+      });
+      setTitle(railwayTitle); setExamName(railwayExamName); setDuration(railwayDuration);
+      setMarks(String(questions.length));
+      setUploadFormat('railway');
+      prepareMarks(questions, true, 'railway');
+      toast.success(`Loaded ${questions.length} Railway questions. Review and publish below.`);
+    } catch (err: any) { toast.error(err instanceof SyntaxError ? 'Invalid JSON. Check the file syntax.' : err.message || 'Could not read JSON file.'); }
     finally { setUploading(false); }
   };
 
@@ -469,8 +500,8 @@ export default function AdminTestSeries() {
     return matchesSearch && matchesProvider && matchesCategory;
   });
   const testGroups = filteredTests.reduce((groups: Record<string, any[]>, t: any) => {
-    const provider = t.provider === 'madeeasy' ? 'MADE EASY' : 'STANDARD TEST SERIES';
-    const category = t.provider === 'madeeasy'
+    const provider = t.provider === 'madeeasy' ? 'MADE EASY' : t.provider === 'railway' ? 'RAILWAY EXAMS' : 'STANDARD TEST SERIES';
+    const category = t.provider === 'railway' ? 'Railway Practice' : t.provider === 'madeeasy'
       ? (t.test_category === 'subjectwise' ? 'Single Subject' : t.test_category === 'full_syllabus' ? 'Full Syllabus' : 'Topicwise')
       : 'Standard';
     const key = `${provider}|||${category}`;
@@ -483,6 +514,18 @@ export default function AdminTestSeries() {
 
   return <div className="max-w-6xl mx-auto space-y-10">
     <div><h1 className="text-3xl font-black text-white">Test Series Control</h1><p className="text-gray-500 mt-2">Upload the exported HTML, define per-question marks, and control candidate access.</p></div>
+    <form onSubmit={uploadRailwayJson} className="bg-gradient-to-br from-amber-950/30 to-gray-900 border border-amber-500/20 rounded-2xl p-6 space-y-5">
+      <div className="flex items-center gap-3"><FileUp size={21} className="text-amber-300"/><div><h2 className="text-lg font-black text-white">Railway Exam JSON Upload</h2><p className="text-xs text-zinc-400 mt-1">Import an array of questions or a single question object using question, options, correctAnswer and correctAnswerText.</p></div></div>
+      <div className="grid md:grid-cols-2 gap-3">
+        <input value={railwayTitle} onChange={e=>setRailwayTitle(e.target.value)} required placeholder="Test title" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white" />
+        <input value={railwayExamName} onChange={e=>setRailwayExamName(e.target.value)} required placeholder="Exam name" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white" />
+        <input value={railwayDuration} onChange={e=>setRailwayDuration(e.target.value)} required type="number" min="1" placeholder="Duration (minutes)" className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-white" />
+        <input type="file" accept=".json,application/json" required onChange={e=>setRailwayFile(e.target.files?.[0] || null)} className="bg-black border border-gray-700 rounded-xl px-4 py-3 text-sm text-zinc-300 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-500 file:px-3 file:py-2 file:font-bold file:text-black" />
+      </div>
+      <button disabled={uploading} className="w-full flex items-center justify-center gap-2 bg-amber-400 text-black font-black rounded-xl py-3 disabled:opacity-50">{uploading ? <Loader2 className="animate-spin"/> : <FileUp size={18}/>} {uploading ? 'Reading JSON...' : 'Import Railway JSON & Review Questions'}</button>
+      <p className="text-xs text-zinc-500">Each imported question is initially assigned 1 mark and 0.33 negative marks. You can review marks in the question-marking panel before publishing.</p>
+    </form>
+
     <form onSubmit={uploadMadeEasy} className="bg-gradient-to-br from-violet-950/40 to-gray-900 border border-violet-500/20 rounded-2xl p-6 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><div className="flex items-center gap-3 text-violet-300 font-black text-lg"><FileUp size={20}/> MADE EASY Test Series</div><p className="text-xs text-zinc-500 mt-1">Upload the original MADE EASY <b>index.html</b>. The importer converts its qcard structure internally to the same GateTracker question format.</p></div>
@@ -551,7 +594,7 @@ export default function AdminTestSeries() {
     </section>}
 
     {draftQuestions && marksMode === 'edit' && <section className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-      <div className="p-5 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><div className="text-lg font-black text-white">Question Marking</div><span className="px-2 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-black uppercase">{uploadFormat === 'madeeasy' ? 'MADE EASY' : 'STANDARD'}</span></div><div className="text-xs text-zinc-500 mt-1">{draftQuestions.length} questions • {draftMcq} MCQ • {draftMsq} MSQ • {draftNat} NAT</div></div><div className={`text-sm font-black ${totalDraftMarks === Number(marks) ? 'text-emerald-400' : 'text-amber-400'}`}>Total: {totalDraftMarks} / {marks}</div></div>
+      <div className="p-5 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><div className="text-lg font-black text-white">Question Marking</div><span className="px-2 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-black uppercase">{uploadFormat === 'madeeasy' ? 'MADE EASY' : uploadFormat === 'railway' ? 'RAILWAY' : 'STANDARD'}</span></div><div className="text-xs text-zinc-500 mt-1">{draftQuestions.length} questions • {draftMcq} MCQ • {draftMsq} MSQ • {draftNat} NAT</div></div><div className={`text-sm font-black ${totalDraftMarks === Number(marks) ? 'text-emerald-400' : 'text-amber-400'}`}>Total: {totalDraftMarks} / {marks}</div></div>
       <div className="p-4 flex flex-wrap gap-3 border-b border-gray-800"><button type="button" onClick={resetRandom} className="px-4 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-bold flex items-center gap-2"><RotateCcw size={15}/> Randomize Again</button><button type="button" onClick={publishPrepared} disabled={uploading || totalDraftMarks !== Number(marks)} className="px-5 py-2 rounded-lg bg-emerald-500 text-black font-black flex items-center gap-2 disabled:opacity-40"><Save size={15}/> {uploading ? 'Publishing...' : 'Save Marks & Publish'}</button><button type="button" onClick={()=>{setDraftQuestions(null);setMarksMode(null)}} className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 font-bold">Cancel</button></div>
       <div className="max-h-[620px] overflow-auto divide-y divide-gray-800">{draftQuestions.map(q=><div key={q.id} className="p-4 flex flex-wrap items-center gap-4"><div className="w-16 font-black text-white">Q{q.number}</div><span className={`px-2 py-1 rounded-full text-[10px] font-black ${q.type==='MCQ'?'bg-cyan-500/10 text-cyan-300':q.type==='MSQ'?'bg-violet-500/10 text-violet-300':'bg-amber-500/10 text-amber-300'}`}>{q.type}</span><select value={q.marks ?? ''} onChange={e=>editMark(q.id,e.target.value)} className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-white font-bold"><option value="">Select marks</option><option value="1">1 Mark</option><option value="2">2 Marks</option></select><span className="text-sm text-zinc-400">Positive: <b className="text-emerald-400">+{Number(q.marks || 0).toFixed(2)}</b></span><span className="text-sm text-zinc-400">Negative: <b className={q.type==='MCQ'?'text-red-400':'text-zinc-500'}>{q.type==='MCQ'?`-${negativeFor(q.type,Number(q.marks||1)).toFixed(2)}`:'0.00'}</b></span></div>)}</div>
       <div className="p-4 text-xs text-zinc-500 border-t border-gray-800">Changing a question from 1 → 2 automatically changes MCQ negative marking from −0.33 → −0.66. MSQ and NAT always remain −0.00.</div>
