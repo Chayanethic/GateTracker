@@ -37,7 +37,7 @@ export default function TestSeriesPage() {
   const [tests, setTests] = useState<TestCard[]>([]);
   const [requesting, setRequesting] = useState(false);
   const [markedCount, setMarkedCount] = useState(0);
-  const [selectedProvider, setSelectedProvider] = useState<'madeeasy' | 'prepfusion' | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<'madeeasy' | 'prepfusion' | 'railway' | null>(null);
 
   const load = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -197,8 +197,9 @@ export default function TestSeriesPage() {
       </Link>
 
       {(() => {
-        const prepfusion = tests.filter(t => t.provider !== 'madeeasy');
+        const prepfusion = tests.filter(t => t.provider !== 'madeeasy' && t.provider !== 'railway');
         const madeEasy = tests.filter(t => t.provider === 'madeeasy');
+        const railway = tests.filter(t => t.provider === 'railway');
 
         const renderTest = (t: TestCard) => {
           const attempted = t.attempt_count > 0;
@@ -286,7 +287,7 @@ export default function TestSeriesPage() {
           </section>
         );
 
-        const providerChoice = (provider: 'madeeasy' | 'prepfusion', title: string, description: string, count: number, icon: React.ReactNode, accent: string) => (
+        const providerChoice = (provider: 'madeeasy' | 'prepfusion' | 'railway', title: string, description: string, count: number, icon: React.ReactNode, accent: string) => (
           <button
             type="button"
             onClick={() => setSelectedProvider(provider)}
@@ -321,12 +322,14 @@ export default function TestSeriesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                 {providerChoice('madeeasy', 'MADE EASY', 'Topicwise, Single Subject and Full Syllabus tests.', madeEasy.length, <GraduationCap size={22} className="text-violet-300" />, 'border-violet-500/25 hover:border-violet-400/60')}
                 {providerChoice('prepfusion', 'PREPFUSION', 'Standard GATE-style test series and practice tests.', prepfusion.length, <Layers3 size={22} className="text-emerald-300" />, 'border-emerald-500/25 hover:border-emerald-400/60')}
+                {providerChoice('railway', 'RAILWAY EXAMS', 'RRB NTPC and other Railway exam practice papers.', railway.length, <BookOpen size={22} className="text-amber-300" />, 'border-amber-500/25 hover:border-amber-400/60')}
               </div>
             </section>
           );
         }
 
         const isMadeEasy = selectedProvider === 'madeeasy';
+        const isRailway = selectedProvider === 'railway';
         return (
           <section className="space-y-5">
             <button type="button" onClick={() => setSelectedProvider(null)} className="inline-flex items-center gap-1.5 text-xs font-black text-zinc-400 hover:text-white transition">
@@ -348,12 +351,12 @@ export default function TestSeriesPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-300 flex items-center justify-center"><Layers3 size={19}/></div>
-                  <div><h2 className="text-xl font-black text-white">PREPFUSION Test Series</h2><p className="text-[10px] text-zinc-500 mt-0.5">Standard GATE-style test series.</p></div>
-                  <span className="ml-auto rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black text-zinc-400">{prepfusion.length} tests</span>
+                <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${isRailway ? 'border-amber-500/20 bg-amber-500/[0.06]' : 'border-emerald-500/20 bg-emerald-500/[0.06]'}`}>
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isRailway ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{isRailway ? <BookOpen size={19}/> : <Layers3 size={19}/>}</div>
+                  <div><h2 className="text-xl font-black text-white">{isRailway ? 'Railway Exam Practice' : 'PREPFUSION Test Series'}</h2><p className="text-[10px] text-zinc-500 mt-0.5">{isRailway ? 'RRB NTPC and other Railway exam papers.' : 'Standard GATE-style test series.'}</p></div>
+                  <span className="ml-auto rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black text-zinc-400">{(isRailway ? railway : prepfusion).length} tests</span>
                 </div>
-                {prepfusion.length > 0 ? <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">{prepfusion.map(renderTest)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-xs text-zinc-500">No PREPFUSION tests published yet.</div>}
+                {(isRailway ? railway : prepfusion).length > 0 ? <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">{(isRailway ? railway : prepfusion).map(renderTest)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-xs text-zinc-500">No {isRailway ? 'Railway' : 'PREPFUSION'} tests published yet.</div>}
               </div>
             )}
           </section>
