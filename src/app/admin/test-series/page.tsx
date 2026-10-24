@@ -394,7 +394,7 @@ export default function AdminTestSeries() {
         const options = opts.map((o: any, i: number) => ({ key: String(o.label || String.fromCharCode(65 + i)).trim().toUpperCase(), html: String(o.text ?? o.html ?? '') }));
         const correct = String(q.correctAnswer ?? q.answer ?? '').trim().toUpperCase();
         if (!correct) throw new Error(`Question ${q.number || index + 1} is missing correctAnswer.`);
-        if (options.length && !options.some(o => o.key === correct)) throw new Error(`Correct answer '${correct}' does not match an option in question ${q.number || index + 1}.`);
+        if (options.length && !options.some((o: { key: string; html: string }) => o.key === correct)) throw new Error(`Correct answer '${correct}' does not match an option in question ${q.number || index + 1}.`);
         return { id: `railway-q-${q.number || index + 1}-${index}`, number: Number(q.number) || index + 1, type: 'MCQ', questionHtml: String(q.question), options, answer: correct.split(/[,\s]+/).filter(Boolean), solutionHtml: String(q.correctAnswerText || ''), marks: 1, negativeMarks: 0.33, marksDetected: true };
       });
       setTitle(railwayTitle); setExamName(railwayExamName); setDuration(railwayDuration);
