@@ -74,11 +74,11 @@ function normalizePscQuestions(
             };
           });
 
-    const rawAns = Array.isArray(q?.correctAnswer)
+    const rawAns: string[] = Array.isArray(q?.correctAnswer)
       ? q.correctAnswer.map((x: any) => String(x).trim()).filter(Boolean)
       : String(q?.correctAnswer ?? q?.answer ?? '')
           .split(',')
-          .map((s) => s.trim())
+          .map((s: string) => s.trim())
           .filter(Boolean);
 
     if (!rawAns.length) {
@@ -86,7 +86,7 @@ function normalizePscQuestions(
     }
 
     const answerList =
-      type === 'NAT' ? [rawAns.join(',')] : rawAns.map((a) => a.toUpperCase());
+      type === 'NAT' ? [rawAns.join(',')] : rawAns.map((a: string) => a.toUpperCase());
 
     const marks = Number(q?.marks);
     if (!Number.isFinite(marks) || marks <= 0) {
