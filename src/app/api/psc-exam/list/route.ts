@@ -4,8 +4,8 @@ import { parsePscExamMeta } from '@/lib/pscExam';
 
 const db = () =>
   createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   );
 
 async function getUser(req: Request) {
@@ -13,8 +13,8 @@ async function getUser(req: Request) {
   if (!token) return null;
 
   const client = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
     { global: { headers: { Authorization: `Bearer ${token}` } } }
   );
 
@@ -31,11 +31,12 @@ export async function GET(req: Request) {
 
     const admin = db();
 
+    // Do NOT select the heavy `questions` column when listing all tests!
     let rows: any[] = [];
     const rich = await admin
       .from('test_series')
       .select(
-        'id,title,exam_name,duration_minutes,max_marks,question_count,questions,created_at,is_published,provider,test_category,subject,topic,stream'
+        'id,title,exam_name,duration_minutes,max_marks,question_count,created_at,is_published,provider,test_category,subject,topic,stream'
       )
       .eq('is_published', true)
       .order('created_at', { ascending: false });
@@ -46,7 +47,7 @@ export async function GET(req: Request) {
       const legacy = await admin
         .from('test_series')
         .select(
-          'id,title,exam_name,duration_minutes,max_marks,question_count,questions,created_at,is_published'
+          'id,title,exam_name,duration_minutes,max_marks,question_count,created_at,is_published'
         )
         .eq('is_published', true)
         .order('created_at', { ascending: false });
@@ -85,10 +86,10 @@ export async function GET(req: Request) {
       const meta = parsePscExamMeta(t);
       const list = byTest[t.id] || [];
       const latest = list[0] || null;
-      const qs = Array.isArray(t.questions) ? t.questions : [];
-      const topics = Array.from(
-        new Set(qs.map((q: any) => String(q?.topic || '').trim()).filter(Boolean))
-      );
+      const topics = String(t.topic || '')
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean);
 
       return {
         id: t.id,
@@ -98,7 +99,7 @@ export async function GET(req: Request) {
         exam_name: meta.displayExamName,
         duration_minutes: Number(t.duration_minutes || 45),
         max_marks: Number(t.max_marks || 0),
-        question_count: Number(t.question_count || qs.length),
+        question_count: Number(t.question_count || 0),
         topics,
         created_at: t.created_at,
         attempt_count: list.length,
