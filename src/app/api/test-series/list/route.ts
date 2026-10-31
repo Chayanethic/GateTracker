@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { parsePscExamMeta } from '@/lib/pscExam';
 
 const db = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,10 +48,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Test-series access is not approved.' }, { status: 403 });
     }
 
-    // Test-series visibility follows the branch selected by the user.
-    // ECE users see EC/ECE tests; CSE users see CS/CSE and DA tests.
-    // Keep this filtering server-side so a user never receives another
-    // branch's test-series data from this endpoint.
     const { data: profile, error: profileError } = await admin
       .from('user_profiles')
       .select('branch')
@@ -76,9 +73,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unsupported branch selected.' }, { status: 400 });
     }
 
-    // Only published tests are returned. The extra MADE EASY metadata columns
-    // are optional until the migration is run. Fall back to the legacy shape so
-    // existing published tests never disappear from the user page.
     let tests: any[] = [];
     const rich = await admin
       .from('test_series')
@@ -103,12 +97,9 @@ export async function GET(req: Request) {
       }));
     }
 
-    // MADE EASY tests use the new stream metadata for branch filtering.
-    // Standard/PREPFUSION tests keep the existing visibility behavior: they
-    // remain visible even when the newer MADE EASY stream metadata is absent.
-    // This is important for older Standard tests that were published before
-    // the MADE EASY structure was introduced.
+    // Exclude PSC exams (which have their own dedicated /psc-exam section)
     tests = tests.filter((t: any) => {
+      if (parsePscExamMeta(t).isPsc) return false;
       if (String(t.provider || 'prepfusion').toLowerCase() !== 'madeeasy') {
         return true;
       }
@@ -166,7 +157,6 @@ export async function GET(req: Request) {
           : null,
       };
     }).sort((a: any, b: any) => {
-      // Attempted exams first, then newest published exams.
       if (a.attempt_count !== b.attempt_count) return b.attempt_count - a.attempt_count;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
