@@ -17,21 +17,23 @@ export const maxDuration = 60;
 
 const db = () =>
   createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   );
 
 function adminOk(req: Request) {
-  return (
-    req.headers.get('x-admin-email') === process.env.NEXT_PUBLIC_ADMIN_EMAIL &&
-    req.headers.get('x-admin-password') === process.env.NEXT_PUBLIC_ADMIN_PASSWORD
-  );
+  const headerEmail = req.headers.get('x-admin-email') || '';
+  const headerPass = req.headers.get('x-admin-password') || '';
+  const envEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || '';
+  const envPass = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '';
+  return headerEmail === envEmail && headerPass === envPass;
 }
 
 function normalizePscQuestions(
   rawQuestions: any[],
   category: string,
-  stream: string
+  stream: string,
+  startNumberOffset = 0
 ) {
   if (!Array.isArray(rawQuestions) || !rawQuestions.length) {
     throw new Error('At least one question is required in the question paper.');
@@ -41,7 +43,7 @@ function normalizePscQuestions(
   const keyRows: any[] = [];
 
   rawQuestions.forEach((q: any, index: number) => {
-    const number = index + 1;
+    const number = startNumberOffset + index + 1;
     const id = String(q?.id || `q${number}`).trim();
     const rawType = String(q?.type || 'MCQ').trim().toUpperCase();
     const type: PscQuestionType =
@@ -52,7 +54,9 @@ function normalizePscQuestions(
     const questionImageUrl = String(q?.questionImageUrl ?? '').trim();
 
     if (!questionText && !questionImageUrl) {
-      throw new Error(`Question ${number} (${id}) must have question text or a question image URL.`);
+      throw new Error(
+        `Question ${number} (${id}) must have question text or a question image URL.`
+      );
     }
 
     const rawOptions = Array.isArray(q?.options) ? q.options : [];
@@ -85,7 +89,7 @@ function normalizePscQuestions(
       throw new Error(`Question ${number} (${id}) is missing a correctAnswer.`);
     }
 
-    const answerList =
+    const answerList: string[] =
       type === 'NAT' ? [rawAns.join(',')] : rawAns.map((a: string) => a.toUpperCase());
 
     const marks = Number(q?.marks);
@@ -95,11 +99,14 @@ function normalizePscQuestions(
 
     const negRaw = Number(q?.negativeMarks);
     const negativeMarks =
-      q?.negativeMarks !== undefined && q?.negativeMarks !== null && q?.negativeMarks !== '' && Number.isFinite(negRaw) && negRaw >= 0
+      q?.negativeMarks !== undefined &&
+      q?.negativeMarks !== null &&
+      q?.negativeMarks !== '' &&
+      Number.isFinite(negRaw) &&
+      negRaw >= 0
         ? negRaw
         : defaultNegativeForMarks(type, marks);
 
-    // Explanation & solutionImageUrl are optional
     const explanation = String(q?.explanation ?? '').trim();
     const solutionImageUrl = String(q?.solutionImageUrl ?? '').trim();
     const solutionHtml = buildSolutionHtml(explanation, solutionImageUrl);
@@ -134,14 +141,17 @@ function normalizePscQuestions(
   });
 
   const calculatedMarks = Number(
-    storedQuestions.reduce((sum, q) => sum + Number(q.marks || 0), 0).toFixed(2)
+    storedQuestions
+      .reduce((sum: number, q: any) => sum + Number(q.marks || 0), 0)
+      .toFixed(2)
   );
 
   return { storedQuestions, keyRows, calculatedMarks };
 }
 
 async function insertKeysResilient(client: any, testId: string, keyRows: any[]) {
-  const fullRows = keyRows.map((k) => ({
+  if (!keyRows.length) return;
+  const fullRows = keyRows.map((k: any) => ({
     test_series_id: testId,
     id_in_test: k.id_in_test,
     number: k.number,
@@ -156,8 +166,7 @@ async function insertKeysResilient(client: any, testId: string, keyRows: any[]) 
   const { error: richError } = await client.from('test_series_keys').insert(fullRows);
   if (!richError) return;
 
-  // Fallback to base columns from supabase_test_series.sql
-  const baseRows = keyRows.map((k) => ({
+  const baseRows = keyRows.map((k: any) => ({
     test_series_id: testId,
     id_in_test: k.id_in_test,
     number: k.number,
@@ -175,6 +184,12 @@ async function insertKeysResilient(client: any, testId: string, keyRows: any[]) 
 export async function GET(req: Request) {
   if (!adminOk(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json(
+      { error: 'Server is missing Supabase environment variables.' },
+      { status: 500 }
+    );
   }
 
   try {
@@ -276,12 +291,14 @@ export async function GET(req: Request) {
       });
     }
 
-    // List all PSC / JSON exams
+    // IMPORTANT: Do NOT select the heavy `questions` column when listing exams!
+    // Existing GATE tests in `test_series` can contain 10-50MB of base64 images inside `questions`,
+    // which causes a 500 response-size/memory error on serverless functions if selected across all rows.
     let rows: any[] = [];
     const rich = await client
       .from('test_series')
       .select(
-        'id,title,exam_name,duration_minutes,max_marks,question_count,questions,is_published,created_at,provider,test_category,subject,stream'
+        'id,title,exam_name,duration_minutes,max_marks,question_count,is_published,created_at,provider,test_category,subject,topic,stream'
       )
       .order('created_at', { ascending: false });
 
@@ -291,7 +308,7 @@ export async function GET(req: Request) {
       const legacy = await client
         .from('test_series')
         .select(
-          'id,title,exam_name,duration_minutes,max_marks,question_count,questions,is_published,created_at'
+          'id,title,exam_name,duration_minutes,max_marks,question_count,is_published,created_at'
         )
         .order('created_at', { ascending: false });
       if (legacy.error) {
@@ -311,7 +328,7 @@ export async function GET(req: Request) {
           stream: meta.stream,
           durationMinutes: Number(t.duration_minutes || 45),
           totalMarks: Number(t.max_marks || 0),
-          questionCount: Number(t.question_count || (Array.isArray(t.questions) ? t.questions.length : 0)),
+          questionCount: Number(t.question_count || 0),
           isPublished: Boolean(t.is_published),
           createdAt: t.created_at,
         };
@@ -331,9 +348,214 @@ export async function POST(req: Request) {
   if (!adminOk(req)) {
     return NextResponse.json({ error: 'Admin authorization required.' }, { status: 403 });
   }
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json(
+      { error: 'Server is missing Supabase environment variables.' },
+      { status: 500 }
+    );
+  }
 
   try {
     const body = await req.json();
+    const mode = String(body.mode || 'single');
+    const client = db();
+
+    // Batched Upload Step 1: Create draft exam shell (or reset existing exam shell for update)
+    if (mode === 'start') {
+      const existingId = body.id ? String(body.id).trim() : '';
+      const title = String(body.title || '').trim();
+      const category = String(body.category || 'Subject Wise').trim() || 'Subject Wise';
+      const stream = String(body.stream || 'CS').trim().toUpperCase() || 'CS';
+      const durationMinutes = Math.max(1, Math.round(Number(body.durationMinutes || 45)));
+      const maxMarks = Math.max(1, Number(body.totalMarks || 1));
+      const topicsSummary = String(body.topicsSummary || '').trim() || null;
+
+      if (!title) {
+        return NextResponse.json({ error: 'Exam title is required.' }, { status: 400 });
+      }
+
+      const examName = formatPscExamName(category, stream);
+
+      if (existingId) {
+        const richUpdate = await client
+          .from('test_series')
+          .update({
+            title,
+            exam_name: examName,
+            duration_minutes: durationMinutes,
+            max_marks: maxMarks,
+            question_count: 0,
+            questions: [],
+            subject: category,
+            topic: topicsSummary,
+            stream,
+          })
+          .eq('id', existingId);
+
+        if (richUpdate.error) {
+          const baseUpdate = await client
+            .from('test_series')
+            .update({
+              title,
+              exam_name: examName,
+              duration_minutes: durationMinutes,
+              max_marks: maxMarks,
+              question_count: 0,
+              questions: [],
+            })
+            .eq('id', existingId);
+          if (baseUpdate.error) throw new Error(baseUpdate.error.message);
+        }
+
+        await client.from('test_series_keys').delete().eq('test_series_id', existingId);
+        return NextResponse.json({ ok: true, id: existingId });
+      }
+
+      const richInsert = await client
+        .from('test_series')
+        .insert({
+          title,
+          exam_name: examName,
+          duration_minutes: durationMinutes,
+          max_marks: maxMarks,
+          question_count: 0,
+          questions: [],
+          is_published: false,
+          provider: 'prepfusion',
+          test_category: 'standard',
+          subject: category,
+          topic: topicsSummary,
+          stream,
+        })
+        .select('id')
+        .single();
+
+      if (!richInsert.error && richInsert.data?.id) {
+        return NextResponse.json({ ok: true, id: richInsert.data.id });
+      }
+
+      const baseInsert = await client
+        .from('test_series')
+        .insert({
+          title,
+          exam_name: examName,
+          duration_minutes: durationMinutes,
+          max_marks: maxMarks,
+          question_count: 0,
+          questions: [],
+          is_published: true,
+        })
+        .select('id')
+        .single();
+
+      if (baseInsert.error || !baseInsert.data?.id) {
+        throw new Error(baseInsert.error?.message || 'Failed to initialize exam paper.');
+      }
+
+      return NextResponse.json({ ok: true, id: baseInsert.data.id });
+    }
+
+    // Batched Upload Step 2: Append a batch of questions & answer keys
+    if (mode === 'batch') {
+      const testId = String(body.testId || '').trim();
+      const category = String(body.category || 'Subject Wise').trim() || 'Subject Wise';
+      const stream = String(body.stream || 'CS').trim().toUpperCase() || 'CS';
+      const startOffset = Math.max(0, Number(body.startOffset || 0));
+
+      if (!testId) {
+        return NextResponse.json({ error: 'Missing test ID for batch.' }, { status: 400 });
+      }
+
+      const { storedQuestions, keyRows } = normalizePscQuestions(
+        body.questions,
+        category,
+        stream,
+        startOffset
+      );
+
+      await insertKeysResilient(client, testId, keyRows);
+
+      const { data: current, error: readErr } = await client
+        .from('test_series')
+        .select('questions')
+        .eq('id', testId)
+        .single();
+
+      if (readErr) throw new Error(readErr.message);
+
+      const existingQuestions = Array.isArray(current?.questions) ? current.questions : [];
+      const combined = [...existingQuestions, ...storedQuestions];
+
+      const { error: updateErr } = await client
+        .from('test_series')
+        .update({
+          questions: combined,
+          question_count: combined.length,
+        })
+        .eq('id', testId);
+
+      if (updateErr) throw new Error(updateErr.message);
+
+      return NextResponse.json({
+        ok: true,
+        added: storedQuestions.length,
+        totalUploaded: combined.length,
+      });
+    }
+
+    // Batched Upload Step 3: Finalize and publish exam paper
+    if (mode === 'complete') {
+      const testId = String(body.testId || '').trim();
+      if (!testId) {
+        return NextResponse.json({ error: 'Missing test ID.' }, { status: 400 });
+      }
+
+      const { data: current, error: readErr } = await client
+        .from('test_series')
+        .select('questions,max_marks')
+        .eq('id', testId)
+        .single();
+
+      if (readErr) throw new Error(readErr.message);
+
+      const allQuestions = Array.isArray(current?.questions) ? current.questions : [];
+      const finalMarks = Math.max(
+        1,
+        Number(
+          allQuestions
+            .reduce((sum: number, q: any) => sum + Number(q.marks || 0), 0)
+            .toFixed(2)
+        )
+      );
+
+      const { error: pubErr } = await client
+        .from('test_series')
+        .update({
+          question_count: allQuestions.length,
+          max_marks: finalMarks,
+          is_published: true,
+        })
+        .eq('id', testId);
+
+      if (pubErr) throw new Error(pubErr.message);
+
+      return NextResponse.json({
+        ok: true,
+        id: testId,
+        questionCount: allQuestions.length,
+        totalMarks: finalMarks,
+      });
+    }
+
+    if (mode === 'abort') {
+      const testId = String(body.testId || '').trim();
+      if (testId) {
+        await client.from('test_series').delete().eq('id', testId);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Single-request fallback
     const title = String(body.title || '').trim();
     const category = String(body.category || 'Subject Wise').trim() || 'Subject Wise';
     const stream = String(body.stream || 'CS').trim().toUpperCase() || 'CS';
@@ -360,10 +582,10 @@ export async function POST(req: Request) {
         ? calculatedMarks
         : Math.max(1, Number(body.totalMarks || storedQuestions.length));
     const examName = formatPscExamName(category, stream);
+    const topicsSummary = Array.from(
+      new Set(storedQuestions.map((q: any) => q.topic).filter(Boolean))
+    ).join(', ');
 
-    const client = db();
-
-    // Try inserting with extended columns first, then fallback to base schema
     let insertedId: string | null = null;
 
     const richInsert = await client
@@ -379,6 +601,7 @@ export async function POST(req: Request) {
         provider: 'prepfusion',
         test_category: 'standard',
         subject: category,
+        topic: topicsSummary || null,
         stream,
       })
       .select('id')
@@ -408,7 +631,9 @@ export async function POST(req: Request) {
     }
 
     try {
-      await insertKeysResilient(client, insertedId!, keyRows);
+      for (let i = 0; i < keyRows.length; i += 25) {
+        await insertKeysResilient(client, insertedId!, keyRows.slice(i, i + 25));
+      }
     } catch (keyErr) {
       await client.from('test_series').delete().eq('id', insertedId!);
       throw keyErr;
@@ -494,7 +719,9 @@ export async function PUT(req: Request) {
     }
 
     await client.from('test_series_keys').delete().eq('test_series_id', id);
-    await insertKeysResilient(client, id, keyRows);
+    for (let i = 0; i < keyRows.length; i += 25) {
+      await insertKeysResilient(client, id, keyRows.slice(i, i + 25));
+    }
 
     return NextResponse.json({
       ok: true,
@@ -526,7 +753,6 @@ export async function DELETE(req: Request) {
 
     const client = db();
 
-    // Delete a single question from a published exam paper
     if (questionId) {
       const { data: test, error: readErr } = await client
         .from('test_series')
@@ -555,7 +781,11 @@ export async function DELETE(req: Request) {
 
       const newMaxMarks = Math.max(
         1,
-        Number(remaining.reduce((sum: number, q: any) => sum + Number(q.marks || 0), 0).toFixed(2))
+        Number(
+          remaining
+            .reduce((sum: number, q: any) => sum + Number(q.marks || 0), 0)
+            .toFixed(2)
+        )
       );
 
       const { error: updateErr } = await client
@@ -577,7 +807,6 @@ export async function DELETE(req: Request) {
         .eq('test_series_id', id)
         .eq('id_in_test', questionId);
 
-      // Re-number remaining keys
       for (const q of remaining) {
         await client
           .from('test_series_keys')
@@ -593,7 +822,6 @@ export async function DELETE(req: Request) {
       });
     }
 
-    // Delete full question paper
     const { error } = await client.from('test_series').delete().eq('id', id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
