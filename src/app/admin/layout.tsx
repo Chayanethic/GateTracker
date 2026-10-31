@@ -2,7 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { ShieldAlert, Database, Users, LayoutDashboard, LogOut, ArrowLeftRight, ClipboardCheck, BookOpen, Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import {
+  ShieldAlert,
+  Database,
+  Users,
+  LayoutDashboard,
+  LogOut,
+  ArrowLeftRight,
+  ClipboardCheck,
+  BookOpen,
+  FileJson,
+  Sun,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -88,25 +102,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
         
-        <nav className="flex-1 space-y-4">
-          <Link href="/admin/dashboard" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800`}>
+        <nav className="flex-1 space-y-3">
+          <Link href="/admin/dashboard" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${pathname === '/admin/dashboard' ? 'text-white bg-gray-800 font-bold' : 'text-gray-400 hover:text-white'} transition-colors p-2.5 rounded-lg hover:bg-gray-800`}>
             <LayoutDashboard size={20} /> {!sidebarCollapsed && 'Dashboard'}
           </Link>
-          <Link href="/admin/resources" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800`}>
+          <Link href="/admin/resources" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${pathname === '/admin/resources' ? 'text-white bg-gray-800 font-bold' : 'text-gray-400 hover:text-white'} transition-colors p-2.5 rounded-lg hover:bg-gray-800`}>
             <Database size={20} /> {!sidebarCollapsed && 'Manage Resources'}
           </Link>
-          <Link href="/admin/test-series" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800`}>
+          <Link href="/admin/test-series" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${pathname === '/admin/test-series' ? 'text-white bg-gray-800 font-bold' : 'text-gray-400 hover:text-white'} transition-colors p-2.5 rounded-lg hover:bg-gray-800`}>
             <ClipboardCheck size={20} /> {!sidebarCollapsed && 'Test Series'}
           </Link>
-          <Link href="/admin/question-bank" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800`}>
+          <Link href="/admin/psc-exam" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${pathname?.startsWith('/admin/psc-exam') ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-bold' : 'text-gray-400 hover:text-white'} transition-colors p-2.5 rounded-lg hover:bg-gray-800`}>
+            <FileJson size={20} className={pathname?.startsWith('/admin/psc-exam') ? 'text-emerald-400' : ''} /> {!sidebarCollapsed && 'JSON Upload Exam'}
+          </Link>
+          <Link href="/admin/question-bank" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${pathname === '/admin/question-bank' ? 'text-white bg-gray-800 font-bold' : 'text-gray-400 hover:text-white'} transition-colors p-2.5 rounded-lg hover:bg-gray-800`}>
             <BookOpen size={20} /> {!sidebarCollapsed && 'Question Bank'}
           </Link>
-          <Link href="/admin/users" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800`}>
+          <Link href="/admin/users" className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${pathname === '/admin/users' ? 'text-white bg-gray-800 font-bold' : 'text-gray-400 hover:text-white'} transition-colors p-2.5 rounded-lg hover:bg-gray-800`}>
             <Users size={20} /> {!sidebarCollapsed && 'Candidate Data'}
           </Link>
           <button
             onClick={() => router.push('/admin/stream')}
-            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800 text-left`}
+            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-gray-400 hover:text-white transition-colors p-2.5 rounded-lg hover:bg-gray-800 text-left`}
           >
             <ArrowLeftRight size={20} /> {!sidebarCollapsed && 'Switch Stream'}
           </button>
@@ -123,7 +140,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-10 overflow-y-auto">
+      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         {children}
       </main>
     </div>
