@@ -9,7 +9,6 @@ import {
   Plus,
   Image as ImageIcon,
   Save,
-  CheckCircle2,
   Loader2,
   Download,
   Sparkles,
@@ -21,14 +20,17 @@ import {
   ChevronDown,
   ChevronUp,
   HelpCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   defaultNegativeForMarks,
   parseIncomingExamJson,
   PscExamPaper,
+  PscOption,
   PscQuestion,
   PscQuestionType,
+  safeParseExamJsonText,
   SAMPLE_PSC_EXAM_JSON,
 } from '@/lib/pscExam';
 
@@ -44,6 +46,14 @@ type PublishedExamSummary = {
   createdAt: string;
 };
 
+type UploadProgressState = {
+  active: boolean;
+  percent: number;
+  done: number;
+  total: number;
+  label: string;
+};
+
 export default function AdminPscExamPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,12 +63,19 @@ export default function AdminPscExamPage() {
   const [loadingPaperId, setLoadingPaperId] = useState<string | null>(null);
   const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
 
-  // JSON upload / paste state
+  // Percentage progress bar state for reading & uploading large JSON files
+  const [progress, setProgress] = useState<UploadProgressState>({
+    active: false,
+    percent: 0,
+    done: 0,
+    total: 0,
+    label: '',
+  });
+
   const [jsonText, setJsonText] = useState('');
   const [showRawJsonModal, setShowRawJsonModal] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  // Active draft/loaded exam paper state
   const [paper, setPaper] = useState<PscExamPaper | null>(null);
   const [expandedEditIds, setExpandedEditIds] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,8 +93,8 @@ export default function AdminPscExamPage() {
         headers: adminHeaders(),
         cache: 'no-store',
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Unable to load exams.');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Unable to load exams (${res.status}).`);
       setPublishedExams(data.exams || []);
     } catch (e: any) {
       toast.error(e.message || 'Failed to load published exams.');
@@ -91,25 +108,58 @@ export default function AdminPscExamPage() {
   }, []);
 
   const recalcTotalMarks = (questions: PscQuestion[]) =>
-    Number(questions.reduce((sum, q) => sum + Number(q.marks || 0), 0).toFixed(2));
+    Number(
+      questions
+        .reduce((sum: number, q: PscQuestion) => sum + Number(q.marks || 0), 0)
+        .toFixed(2)
+    );
 
   const handleFileSelect = async (file: File) => {
     try {
+      setProgress({
+        active: true,
+        percent: 20,
+        done: 0,
+        total: 100,
+        label: `Reading "${file.name}"...`,
+      });
       const text = await file.text();
-      const raw = JSON.parse(text);
-      const parsed = parseIncomingExamJson(raw);
+      setProgress({
+        active: true,
+        percent: 65,
+        done: 65,
+        total: 100,
+        label: 'Validating & preparing questions...',
+      });
+
+      const { paper: parsed, recoveredFromTruncation } = safeParseExamJsonText(text);
       setEditingPaperId(null);
       setPaper(parsed);
       setExpandedEditIds({});
-      toast.success(
-        `Loaded "${parsed.title}" (${parsed.questions.length} questions, ${parsed.totalMarks} marks). Preview & customize below!`
-      );
+      setProgress({
+        active: true,
+        percent: 100,
+        done: parsed.questions.length,
+        total: parsed.questions.length,
+        label: `Ready: ${parsed.questions.length} questions loaded (100%)`,
+      });
+      window.setTimeout(() => {
+        setProgress((prev) => ({ ...prev, active: false }));
+      }, 1200);
+
+      if (recoveredFromTruncation) {
+        toast.success(
+          `Recovered ${parsed.questions.length} complete questions from truncated JSON! Review & publish below.`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success(
+          `Loaded "${parsed.title}" (${parsed.questions.length} questions, ${parsed.totalMarks} marks).`
+        );
+      }
     } catch (e: any) {
-      toast.error(
-        e instanceof SyntaxError
-          ? 'Invalid JSON syntax. Please check the file format.'
-          : e.message || 'Could not parse JSON file.'
-      );
+      setProgress({ active: false, percent: 0, done: 0, total: 0, label: '' });
+      toast.error(e.message || 'Could not parse JSON file.');
     }
   };
 
@@ -119,19 +169,21 @@ export default function AdminPscExamPage() {
       return;
     }
     try {
-      const raw = JSON.parse(jsonText);
-      const parsed = parseIncomingExamJson(raw);
+      const { paper: parsed, recoveredFromTruncation } = safeParseExamJsonText(jsonText);
       setEditingPaperId(null);
       setPaper(parsed);
       setExpandedEditIds({});
       setShowRawJsonModal(false);
-      toast.success(`Loaded "${parsed.title}" (${parsed.questions.length} questions).`);
+      if (recoveredFromTruncation) {
+        toast.success(
+          `Recovered ${parsed.questions.length} complete questions from truncated JSON!`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success(`Loaded "${parsed.title}" (${parsed.questions.length} questions).`);
+      }
     } catch (e: any) {
-      toast.error(
-        e instanceof SyntaxError
-          ? 'Invalid JSON syntax. Please check your JSON.'
-          : e.message || 'Could not parse JSON.'
-      );
+      toast.error(e.message || 'Could not parse JSON.');
     }
   };
 
@@ -175,7 +227,9 @@ export default function AdminPscExamPage() {
   const updateQuestion = (qId: string, updater: (q: PscQuestion) => PscQuestion) => {
     setPaper((prev) => {
       if (!prev) return null;
-      const nextQuestions = prev.questions.map((q) => (q.id === qId ? updater(q) : q));
+      const nextQuestions = prev.questions.map((q: PscQuestion) =>
+        q.id === qId ? updater(q) : q
+      );
       return {
         ...prev,
         questions: nextQuestions,
@@ -204,7 +258,7 @@ export default function AdminPscExamPage() {
   const bulkSetMarks = (targetMarks: number) => {
     setPaper((prev) => {
       if (!prev) return null;
-      const nextQuestions = prev.questions.map((q) => ({
+      const nextQuestions = prev.questions.map((q: PscQuestion) => ({
         ...q,
         marks: targetMarks,
         negativeMarks: defaultNegativeForMarks(q.type, targetMarks),
@@ -218,6 +272,21 @@ export default function AdminPscExamPage() {
     toast.success(`All questions set to ${targetMarks} mark${targetMarks === 1 ? '' : 's'}.`);
   };
 
+  const bulkSetNegativeMarks = (targetNeg: number) => {
+    setPaper((prev) => {
+      if (!prev) return null;
+      const nextQuestions = prev.questions.map((q: PscQuestion) => ({
+        ...q,
+        negativeMarks: q.type === 'MCQ' ? targetNeg : 0,
+      }));
+      return {
+        ...prev,
+        questions: nextQuestions,
+      };
+    });
+    toast.success(`All MCQ negative marks set to −${targetNeg.toFixed(2)}.`);
+  };
+
   const deleteQuestionFromDraft = async (qId: string, qNumber: number) => {
     if (!paper) return;
     if (paper.questions.length <= 1) {
@@ -227,8 +296,7 @@ export default function AdminPscExamPage() {
       return;
     }
 
-    // If editing an already-published paper, offer instant server sync or draft update
-    const nextQuestions = paper.questions.filter((q) => q.id !== qId);
+    const nextQuestions = paper.questions.filter((q: PscQuestion) => q.id !== qId);
     setPaper({
       ...paper,
       questions: nextQuestions,
@@ -276,7 +344,7 @@ export default function AdminPscExamPage() {
               ],
         correctAnswer: type === 'NAT' ? '1' : 'A',
         marks: 1,
-        negativeMarks: type === 'MCQ' ? 0.33 : 0,
+        negativeMarks: type === 'MCQ' ? 0.25 : 0,
         explanation: '',
         solutionImageUrl: '',
       };
@@ -312,7 +380,6 @@ export default function AdminPscExamPage() {
         toast.success('Image uploaded and URL set!');
         return;
       }
-      // Fallback to data URI if storage bucket is not configured
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
@@ -344,31 +411,116 @@ export default function AdminPscExamPage() {
       return;
     }
 
+    const totalQ = paper.questions.length;
+    const totalMarks = recalcTotalMarks(paper.questions);
+    const topicsSummary = Array.from(
+      new Set(paper.questions.map((q: PscQuestion) => String(q.topic || '').trim()).filter(Boolean))
+    ).join(', ');
+
     setSaving(true);
+    setProgress({
+      active: true,
+      percent: 5,
+      done: 0,
+      total: totalQ,
+      label: editingPaperId
+        ? 'Initializing update on server (5%)...'
+        : 'Creating exam paper on server (5%)...',
+    });
+
+    let activeTestId = editingPaperId || '';
+    const isNewPaper = !editingPaperId;
+
+    const postStep = async (body: any) => {
+      const res = await fetch('/api/psc-exam/admin', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
+      return data;
+    };
+
     try {
-      const method = editingPaperId ? 'PUT' : 'POST';
-      const payload = {
+      // Step 1: Start / initialize paper shell
+      const started = await postStep({
+        mode: 'start',
         id: editingPaperId || undefined,
         title: paper.title.trim(),
         category: paper.category.trim() || 'Subject Wise',
         stream: paper.stream.trim().toUpperCase() || 'CS',
         durationMinutes: Number(paper.durationMinutes) || 45,
-        totalMarks: recalcTotalMarks(paper.questions),
-        questions: paper.questions,
-      };
-
-      const res = await fetch('/api/psc-exam/admin', {
-        method,
-        headers: adminHeaders(),
-        body: JSON.stringify(payload),
+        totalMarks,
+        topicsSummary,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save exam paper.');
+
+      activeTestId = String(started.id || '');
+      if (!activeTestId) throw new Error('Server did not return an exam ID.');
+
+      // Step 2: Upload questions in batches of 15 with live percentage progress bar
+      const BATCH_SIZE = 15;
+      for (let offset = 0; offset < totalQ; offset += BATCH_SIZE) {
+        const chunk = paper.questions.slice(offset, offset + BATCH_SIZE);
+        const doneAfterChunk = Math.min(totalQ, offset + chunk.length);
+        const pctBefore = Math.min(92, Math.max(8, Math.round((offset / totalQ) * 85) + 8));
+
+        setProgress({
+          active: true,
+          percent: pctBefore,
+          done: offset,
+          total: totalQ,
+          label: `Uploading questions ${offset + 1}–${doneAfterChunk} of ${totalQ} (${pctBefore}%)...`,
+        });
+
+        await postStep({
+          mode: 'batch',
+          testId: activeTestId,
+          category: paper.category.trim() || 'Subject Wise',
+          stream: paper.stream.trim().toUpperCase() || 'CS',
+          startOffset: offset,
+          questions: chunk,
+        });
+
+        const pctAfter = Math.min(
+          95,
+          Math.max(12, Math.round((doneAfterChunk / totalQ) * 85) + 10)
+        );
+        setProgress({
+          active: true,
+          percent: pctAfter,
+          done: doneAfterChunk,
+          total: totalQ,
+          label: `Uploaded ${doneAfterChunk} / ${totalQ} questions (${pctAfter}%)...`,
+        });
+      }
+
+      // Step 3: Complete & publish
+      setProgress({
+        active: true,
+        percent: 98,
+        done: totalQ,
+        total: totalQ,
+        label: 'Finalizing and publishing exam paper (98%)...',
+      });
+
+      const completed = await postStep({
+        mode: 'complete',
+        testId: activeTestId,
+      });
+
+      setProgress({
+        active: true,
+        percent: 100,
+        done: totalQ,
+        total: totalQ,
+        label: `Completed! Published ${completed.questionCount} questions (100%)`,
+      });
 
       toast.success(
         editingPaperId
-          ? `Updated "${paper.title}" (${data.questionCount} questions, ${data.totalMarks} marks).`
-          : `Published "${paper.title}" (${data.questionCount} questions, ${data.totalMarks} marks) to PSC Exam Test!`
+          ? `Updated "${paper.title}" (${completed.questionCount} questions, ${completed.totalMarks} marks).`
+          : `Published "${paper.title}" (${completed.questionCount} questions, ${completed.totalMarks} marks) to PSC Exam Test!`
       );
 
       setPaper(null);
@@ -376,7 +528,15 @@ export default function AdminPscExamPage() {
       setExpandedEditIds({});
       if (fileInputRef.current) fileInputRef.current.value = '';
       await loadPublishedExams();
+
+      window.setTimeout(() => {
+        setProgress({ active: false, percent: 0, done: 0, total: 0, label: '' });
+      }, 1500);
     } catch (e: any) {
+      if (isNewPaper && activeTestId) {
+        await postStep({ mode: 'abort', testId: activeTestId }).catch(() => {});
+      }
+      setProgress({ active: false, percent: 0, done: 0, total: 0, label: '' });
       toast.error(e.message || 'Upload failed.');
     } finally {
       setSaving(false);
@@ -385,6 +545,13 @@ export default function AdminPscExamPage() {
 
   const openPublishedPaperForEdit = async (id: string) => {
     setLoadingPaperId(id);
+    setProgress({
+      active: true,
+      percent: 40,
+      done: 0,
+      total: 100,
+      label: 'Loading published question paper from server (40%)...',
+    });
     try {
       const res = await fetch(`/api/psc-exam/admin?id=${encodeURIComponent(id)}`, {
         headers: adminHeaders(),
@@ -404,9 +571,20 @@ export default function AdminPscExamPage() {
         questions: data.exam.questions,
       });
       setExpandedEditIds({});
+      setProgress({
+        active: true,
+        percent: 100,
+        done: data.exam.questions.length,
+        total: data.exam.questions.length,
+        label: `Loaded ${data.exam.questions.length} questions (100%)`,
+      });
+      window.setTimeout(() => {
+        setProgress({ active: false, percent: 0, done: 0, total: 0, label: '' });
+      }, 1000);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       toast.success(`Opened "${data.exam.title}" for preview & editing.`);
     } catch (e: any) {
+      setProgress({ active: false, percent: 0, done: 0, total: 0, label: '' });
       toast.error(e.message || 'Unable to load exam.');
     } finally {
       setLoadingPaperId(null);
@@ -442,11 +620,11 @@ export default function AdminPscExamPage() {
   };
 
   const calculatedTotalMarks = paper ? recalcTotalMarks(paper.questions) : 0;
-  const mcqCount = paper?.questions.filter((q) => q.type === 'MCQ').length || 0;
-  const natCount = paper?.questions.filter((q) => q.type === 'NAT').length || 0;
-  const msqCount = paper?.questions.filter((q) => q.type === 'MSQ').length || 0;
+  const mcqCount = paper?.questions.filter((q: PscQuestion) => q.type === 'MCQ').length || 0;
+  const natCount = paper?.questions.filter((q: PscQuestion) => q.type === 'NAT').length || 0;
+  const msqCount = paper?.questions.filter((q: PscQuestion) => q.type === 'MSQ').length || 0;
 
-  const filteredPublished = publishedExams.filter((ex) => {
+  const filteredPublished = publishedExams.filter((ex: PublishedExamSummary) => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
     return [ex.title, ex.category, ex.stream].filter(Boolean).join(' ').toLowerCase().includes(q);
@@ -454,7 +632,6 @@ export default function AdminPscExamPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-16">
-      {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black uppercase tracking-widest mb-3">
@@ -513,7 +690,38 @@ export default function AdminPscExamPage() {
         </div>
       </div>
 
-      {/* Drag & Drop Upload Box when no paper is open */}
+      {/* Live Percentage Progress Bar Banner */}
+      {progress.active && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-gray-900/95 p-5 shadow-2xl">
+          <div className="flex items-center justify-between gap-4 mb-2.5">
+            <div className="flex items-center gap-2.5 text-sm font-black text-white">
+              {progress.percent < 100 ? (
+                <Loader2 size={18} className="animate-spin text-emerald-400 shrink-0" />
+              ) : (
+                <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+              )}
+              <span>{progress.label}</span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {progress.total > 0 && (
+                <span className="text-xs font-bold text-gray-400">
+                  {progress.done} / {progress.total}
+                </span>
+              )}
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-black font-mono">
+                {progress.percent}%
+              </span>
+            </div>
+          </div>
+          <div className="w-full h-3 rounded-full bg-black border border-gray-800 overflow-hidden p-0.5">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 transition-all duration-300"
+              style={{ width: `${Math.max(4, Math.min(100, progress.percent))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {!paper && (
         <div
           onDragOver={(e) => {
@@ -541,22 +749,19 @@ export default function AdminPscExamPage() {
             Drop your Exam JSON file here, or click to browse
           </h2>
           <p className="text-xs text-gray-400 mt-2 max-w-xl mx-auto">
-            Supports <code className="text-emerald-300">title</code>,{' '}
+            Supports 100+ question full-length PSC / GATE papers (<code className="text-emerald-300">title</code>,{' '}
             <code className="text-emerald-300">category</code>,{' '}
             <code className="text-emerald-300">stream</code>,{' '}
             <code className="text-emerald-300">durationMinutes</code>,{' '}
             <code className="text-emerald-300">totalMarks</code>, and{' '}
-            <code className="text-emerald-300">questions</code> (MCQ / NAT / MSQ with optional{' '}
-            <code className="text-emerald-300">explanation</code> &amp;{' '}
-            <code className="text-emerald-300">questionImageUrl</code>).
+            <code className="text-emerald-300">questions</code>) with chunked upload and live
+            percentage progress bar.
           </p>
         </div>
       )}
 
-      {/* Active Paper Preview & Question Editor */}
       {paper && (
         <section className="rounded-3xl border border-emerald-500/30 bg-gray-900/90 shadow-2xl overflow-hidden">
-          {/* Paper Top Bar */}
           <div className="p-6 bg-gradient-to-r from-emerald-950/50 via-gray-900 to-gray-900 border-b border-gray-800 flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2.5">
@@ -621,7 +826,7 @@ export default function AdminPscExamPage() {
               >
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 {saving
-                  ? 'Saving...'
+                  ? `Uploading (${progress.percent}%)...`
                   : editingPaperId
                     ? 'Save Changes to Exam'
                     : 'Upload & Publish Exam'}
@@ -629,7 +834,6 @@ export default function AdminPscExamPage() {
             </div>
           </div>
 
-          {/* Paper Metadata Controls */}
           <div className="p-6 border-b border-gray-800 bg-black/30 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="md:col-span-2">
@@ -639,7 +843,7 @@ export default function AdminPscExamPage() {
                 <input
                   value={paper.title}
                   onChange={(e) => setPaper({ ...paper, title: e.target.value })}
-                  placeholder="e.g. GATE CS Mock Test 1 - Algorithms & Data Structures"
+                  placeholder="e.g. CLERKSHIP EXAMINATION (PART-1), 2023"
                   className="w-full bg-gray-950 border border-gray-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none"
                 />
               </div>
@@ -650,7 +854,7 @@ export default function AdminPscExamPage() {
                 <input
                   value={paper.category}
                   onChange={(e) => setPaper({ ...paper, category: e.target.value })}
-                  placeholder="Subject Wise"
+                  placeholder="Full Length / Subject Wise"
                   className="w-full bg-gray-950 border border-gray-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none"
                 />
               </div>
@@ -661,7 +865,7 @@ export default function AdminPscExamPage() {
                 <input
                   value={paper.stream}
                   onChange={(e) => setPaper({ ...paper, stream: e.target.value.toUpperCase() })}
-                  placeholder="CS / EC / EE / ALL"
+                  placeholder="WBPSC CLERKSHIP / CS / EC"
                   className="w-full bg-gray-950 border border-gray-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none"
                 />
               </div>
@@ -681,28 +885,41 @@ export default function AdminPscExamPage() {
               </div>
             </div>
 
-            {/* Quick Bulk Marks & Summary Bar */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <div className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
                   <span className="text-gray-400 font-bold">Total Marks (Auto-Synced): </span>
                   <b className="text-emerald-400 text-sm font-black">{calculatedTotalMarks}</b>
                 </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-400 font-bold">Quick Bulk Marks:</span>
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-gray-400 font-bold">Bulk Marks:</span>
                   <button
                     type="button"
                     onClick={() => bulkSetMarks(1)}
-                    className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold border border-gray-700 transition"
+                    className="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold border border-gray-700 transition"
                   >
-                    Set All 1 Mark
+                    All 1M
                   </button>
                   <button
                     type="button"
                     onClick={() => bulkSetMarks(2)}
-                    className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold border border-gray-700 transition"
+                    className="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold border border-gray-700 transition"
                   >
-                    Set All 2 Marks
+                    All 2M
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bulkSetNegativeMarks(0.25)}
+                    className="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-red-300 font-bold border border-gray-700 transition"
+                  >
+                    All Neg −0.25
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bulkSetNegativeMarks(0.33)}
+                    className="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-red-300 font-bold border border-gray-700 transition"
+                  >
+                    All Neg −0.33
                   </button>
                 </div>
               </div>
@@ -726,9 +943,8 @@ export default function AdminPscExamPage() {
             </div>
           </div>
 
-          {/* Questions Preview & Edit List */}
           <div className="p-6 space-y-5 max-h-[820px] overflow-y-auto">
-            {paper.questions.map((q, index) => {
+            {paper.questions.map((q: PscQuestion, index: number) => {
               const isExpanded = Boolean(expandedEditIds[q.id]);
               const hasExp = Boolean(
                 (q.explanation && q.explanation.trim()) ||
@@ -740,7 +956,6 @@ export default function AdminPscExamPage() {
                   key={q.id}
                   className="rounded-2xl border border-gray-800 bg-gray-950/80 overflow-hidden transition hover:border-gray-700"
                 >
-                  {/* Question Card Top Control Header */}
                   <div className="px-5 py-3.5 bg-gray-900/90 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2.5">
                       <span className="px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-black text-xs">
@@ -774,9 +989,7 @@ export default function AdminPscExamPage() {
                       </span>
                     </div>
 
-                    {/* Simple Marks Changer + Edit Toggle + Delete Question */}
                     <div className="flex flex-wrap items-center gap-2">
-                      {/* Quick 1M / 2M Buttons */}
                       <div className="flex items-center rounded-xl bg-black border border-gray-800 p-1 gap-1">
                         <button
                           type="button"
@@ -811,7 +1024,6 @@ export default function AdminPscExamPage() {
                         />
                       </div>
 
-                      {/* Negative Marks Input */}
                       <div className="flex items-center gap-1.5 bg-black border border-gray-800 rounded-xl px-2.5 py-1">
                         <span className="text-[10px] font-bold text-gray-500 uppercase">Neg:</span>
                         <input
@@ -847,14 +1059,11 @@ export default function AdminPscExamPage() {
                     </div>
                   </div>
 
-                  {/* Question Body Preview */}
                   <div className="p-5 space-y-4">
-                    {/* Question Text */}
                     <div className="text-sm md:text-base text-gray-100 leading-relaxed whitespace-pre-wrap font-medium">
                       {q.questionText}
                     </div>
 
-                    {/* Direct Question Image URL Input & Preview (Always accessible!) */}
                     <div className="rounded-xl border border-gray-800/90 bg-black/40 p-3.5 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <ImageIcon size={16} className="text-cyan-400 shrink-0" />
@@ -919,7 +1128,6 @@ export default function AdminPscExamPage() {
                       )}
                     </div>
 
-                    {/* Options Preview for MCQ / MSQ or Answer for NAT */}
                     {q.type === 'NAT' ? (
                       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3">
                         <span className="text-xs font-black uppercase tracking-wider text-amber-300">
@@ -939,11 +1147,11 @@ export default function AdminPscExamPage() {
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                        {q.options.map((opt) => {
+                        {q.options.map((opt: PscOption) => {
                           const correctSet = new Set(
                             q.correctAnswer
                               .split(',')
-                              .map((s) => s.trim().toUpperCase())
+                              .map((s: string) => s.trim().toUpperCase())
                               .filter(Boolean)
                           );
                           const isCorrect = correctSet.has(opt.id.toUpperCase());
@@ -1007,7 +1215,6 @@ export default function AdminPscExamPage() {
                       </div>
                     )}
 
-                    {/* Explanation Preview (if provided) */}
                     {hasExp && !isExpanded && (
                       <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 text-xs text-gray-300 space-y-2">
                         <div className="font-black text-emerald-400 uppercase tracking-wider text-[10px]">
@@ -1024,7 +1231,6 @@ export default function AdminPscExamPage() {
                       </div>
                     )}
 
-                    {/* Expandable Full Question / Option / Optional Explanation Editor */}
                     {isExpanded && (
                       <div className="mt-4 pt-4 border-t border-gray-800 space-y-4 bg-black/30 p-4 rounded-xl">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1072,7 +1278,7 @@ export default function AdminPscExamPage() {
                                   topic: e.target.value,
                                 }))
                               }
-                              placeholder="e.g. Algorithms"
+                              placeholder="e.g. English / Arithmetic"
                               className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
                             />
                           </div>
@@ -1116,7 +1322,7 @@ export default function AdminPscExamPage() {
                             <label className="block text-[10px] font-black uppercase text-gray-400">
                               Options (Text &amp; Optional Option Image URL)
                             </label>
-                            {q.options.map((opt, oIdx) => (
+                            {q.options.map((opt: PscOption, oIdx: number) => (
                               <div key={opt.id} className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 <div className="flex items-center gap-2">
                                   <span className="w-6 text-xs font-black text-gray-400">
@@ -1127,7 +1333,7 @@ export default function AdminPscExamPage() {
                                     onChange={(e) =>
                                       updateQuestion(q.id, (item) => ({
                                         ...item,
-                                        options: item.options.map((o, idx) =>
+                                        options: item.options.map((o: PscOption, idx: number) =>
                                           idx === oIdx ? { ...o, text: e.target.value } : o
                                         ),
                                       }))
@@ -1141,7 +1347,7 @@ export default function AdminPscExamPage() {
                                   onChange={(e) =>
                                     updateQuestion(q.id, (item) => ({
                                       ...item,
-                                      options: item.options.map((o, idx) =>
+                                      options: item.options.map((o: PscOption, idx: number) =>
                                         idx === oIdx ? { ...o, imageUrl: e.target.value } : o
                                       ),
                                     }))
@@ -1199,7 +1405,6 @@ export default function AdminPscExamPage() {
         </section>
       )}
 
-      {/* Published Question Papers Library */}
       <section className="rounded-3xl border border-gray-800 bg-gray-900 overflow-hidden">
         <div className="p-6 border-b border-gray-800 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -1247,7 +1452,7 @@ export default function AdminPscExamPage() {
           </div>
         ) : (
           <div className="divide-y divide-gray-800">
-            {filteredPublished.map((ex) => (
+            {filteredPublished.map((ex: PublishedExamSummary) => (
               <div
                 key={ex.id}
                 className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-white/[0.015] transition"
@@ -1307,7 +1512,6 @@ export default function AdminPscExamPage() {
         )}
       </section>
 
-      {/* Paste Raw JSON Modal */}
       {showRawJsonModal && (
         <div className="fixed inset-0 z-[120] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-3xl rounded-3xl border border-gray-800 bg-gray-950 shadow-2xl overflow-hidden">
