@@ -1,0 +1,40 @@
+{
+  "title": "GATE CS Mock Test 1 - Algorithms & Data Structures",
+  "category": "Subject Wise",
+  "stream": "CS",
+  "durationMinutes": 45,
+  "totalMarks": 10,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "MCQ",
+      "topic": "Algorithms",
+      "questionText": "What is the worst-case time complexity of QuickSort?",
+      "questionImageUrl": "",
+      "options": [
+        { "id": "A", "text": "O(n log n)", "imageUrl": "" },
+        { "id": "B", "text": "O(n^2)", "imageUrl": "" },
+        { "id": "C", "text": "O(n)", "imageUrl": "" },
+        { "id": "D", "text": "O(log n)", "imageUrl": "" }
+      ],
+      "correctAnswer": "B",
+      "marks": 2,
+      "negativeMarks": 0.66,
+      "explanation": "Worst-case occurs when the pivot is always the smallest or largest element, leading to O(n^2).",
+      "solutionImageUrl": ""
+    },
+    {
+      "id": "q2",
+      "type": "NAT",
+      "topic": "Data Structures",
+      "questionText": "What is the minimum number of queues required to implement a stack?",
+      "questionImageUrl": "",
+      "options": [],
+      "correctAnswer": "2",
+      "marks": 1,
+      "negativeMarks": 0,
+      "explanation": "Two queues are needed to simulate LIFO behavior.",
+      "solutionImageUrl": ""
+    }
+  ]
+}
