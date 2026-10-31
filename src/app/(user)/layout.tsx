@@ -16,6 +16,7 @@ import {
   ArrowLeftRight,
   Trophy,
   FileQuestion,
+  Award,
   Sun,
   Moon,
   PanelLeftClose,
@@ -41,8 +42,12 @@ export default function UserLayout({
 
   // The examination route is rendered as a dedicated full-screen app.
   // Do not show the normal dashboard/sidebar/mobile navigation while an exam is open.
-  const isExamRoute = /^\/test-series\/[^/]+$/.test(pathname || '');
-  const isAnalysisRoute = /^\/test-series\/[^/]+\/analysis$/.test(pathname || '');
+  const isExamRoute =
+    (/^\/test-series\/[^/]+$/.test(pathname || '') && pathname !== '/test-series/marked') ||
+    /^\/psc-exam\/[^/]+$/.test(pathname || '');
+  const isAnalysisRoute =
+    /^\/test-series\/[^/]+\/analysis$/.test(pathname || '') ||
+    /^\/psc-exam\/[^/]+\/analysis$/.test(pathname || '');
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('gateTrackerTheme');
@@ -208,6 +213,11 @@ export default function UserLayout({
       name: 'Test Series',
       href: '/test-series',
       icon: FileQuestion,
+    },
+    {
+      name: 'PSC Exam Test',
+      href: '/psc-exam',
+      icon: Award,
     },
     {
       name: 'Question Bank',
@@ -560,7 +570,7 @@ export default function UserLayout({
 
         {/* Mobile Bottom Navigation */}
         <div className="lg:hidden fixed bottom-5 left-4 right-4 z-50 pointer-events-none">
-          <nav className="pointer-events-auto max-w-sm mx-auto bg-zinc-950/90 backdrop-blur-2xl ring-1 ring-white/10 p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex items-center justify-between gap-1">
+          <nav className="pointer-events-auto max-w-md mx-auto bg-zinc-950/90 backdrop-blur-2xl ring-1 ring-white/10 p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex items-center justify-between gap-1 overflow-x-auto">
             {navLinks.map((link) => {
               const isActive =
                 pathname === link.href ||
@@ -573,7 +583,7 @@ export default function UserLayout({
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`flex flex-col items-center justify-center gap-1 w-full py-2.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
+                  className={`flex flex-col items-center justify-center gap-1 min-w-[56px] w-full py-2.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
                     isActive
                       ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 shadow-inner'
                       : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
@@ -584,7 +594,7 @@ export default function UserLayout({
                   )}
 
                   <Icon
-                    size={20}
+                    size={18}
                     className={
                       isActive
                         ? 'text-emerald-400'
@@ -593,7 +603,7 @@ export default function UserLayout({
                   />
 
                   <span
-                    className={`text-[9px] font-bold tracking-widest uppercase ${
+                    className={`text-[8px] font-bold tracking-wider uppercase truncate max-w-[54px] ${
                       isActive
                         ? 'text-emerald-400'
                         : 'text-zinc-500'
