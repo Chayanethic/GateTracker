@@ -88,7 +88,6 @@ export function escapeHtml(str: string): string {
 export function formatTextOrHtml(raw: string): string {
   const trimmed = String(raw || '').trim();
   if (!trimmed) return '';
-  // If string already contains HTML formatting tags, sanitize dangerous scripts/handlers only
   if (/<(p|div|span|br|ul|ol|li|pre|code|table|tr|td|th|strong|b|em|i|sub|sup|img)\b/i.test(trimmed)) {
     return trimmed
       .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -203,10 +202,13 @@ export function parsePscExamMeta(testRow: any): {
 } {
   const examName = String(testRow?.exam_name || '').trim();
   const provider = String(testRow?.provider || '').toLowerCase().trim();
-  const firstQ = Array.isArray(testRow?.questions) && testRow.questions.length > 0 ? testRow.questions[0] : null;
+  const firstQ =
+    Array.isArray(testRow?.questions) && testRow.questions.length > 0
+      ? testRow.questions[0]
+      : null;
 
   if (examName.startsWith('PSC Exam •')) {
-    const parts = examName.split('•').map((s) => s.trim());
+    const parts = examName.split('•').map((s: string) => s.trim());
     const category = parts[1] || testRow?.subject || testRow?.test_category || 'General';
     const stream = parts[2] || testRow?.stream || 'ALL';
     return {
@@ -218,8 +220,12 @@ export function parsePscExamMeta(testRow: any): {
   }
 
   if (provider === 'psc' || firstQ?.pscJson) {
-    const category = String(testRow?.subject || firstQ?.metaCategory || testRow?.test_category || 'General').trim();
-    const stream = String(testRow?.stream || firstQ?.metaStream || 'ALL').trim().toUpperCase();
+    const category = String(
+      testRow?.subject || firstQ?.metaCategory || testRow?.test_category || 'General'
+    ).trim();
+    const stream = String(testRow?.stream || firstQ?.metaStream || 'ALL')
+      .trim()
+      .toUpperCase();
     return {
       isPsc: true,
       category,
@@ -291,11 +297,14 @@ export function parseIncomingExamJson(raw: any): PscExamPaper {
 
     const parsedNeg = Number(q?.negativeMarks);
     const negativeMarks =
-      q?.negativeMarks !== undefined && q?.negativeMarks !== null && q?.negativeMarks !== '' && Number.isFinite(parsedNeg) && parsedNeg >= 0
+      q?.negativeMarks !== undefined &&
+      q?.negativeMarks !== null &&
+      q?.negativeMarks !== '' &&
+      Number.isFinite(parsedNeg) &&
+      parsedNeg >= 0
         ? parsedNeg
         : defaultNegativeForMarks(type, marks);
 
-    // Explanation and solutionImageUrl are strictly optional
     const explanation =
       q?.explanation !== undefined && q?.explanation !== null
         ? String(q.explanation).trim()
@@ -321,7 +330,7 @@ export function parseIncomingExamJson(raw: any): PscExamPaper {
   });
 
   const calculatedMarks = Number(
-    questions.reduce((sum, q) => sum + Number(q.marks || 0), 0).toFixed(2)
+    questions.reduce((sum: number, q: PscQuestion) => sum + Number(q.marks || 0), 0).toFixed(2)
   );
 
   return {
@@ -335,4 +344,47 @@ export function parseIncomingExamJson(raw: any): PscExamPaper {
     totalMarks: calculatedMarks > 0 ? calculatedMarks : Number(raw.totalMarks) || questions.length,
     questions,
   };
+}
+
+/**
+ * Parses raw JSON text and automatically recovers all complete question objects
+ * if a large AI-generated JSON file was truncated mid-question at the end.
+ */
+export function safeParseExamJsonText(text: string): {
+  paper: PscExamPaper;
+  recoveredFromTruncation: boolean;
+} {
+  const cleaned = String(text || '').trim();
+  if (!cleaned) {
+    throw new Error('JSON content is empty.');
+  }
+
+  try {
+    const raw = JSON.parse(cleaned);
+    return { paper: parseIncomingExamJson(raw), recoveredFromTruncation: false };
+  } catch (originalErr: any) {
+    // Attempt automatic recovery if the JSON was cut off mid-question at the end
+    let searchPos = cleaned.length;
+    while (searchPos > 0) {
+      const lastObjEnd = cleaned.lastIndexOf('},', searchPos - 1);
+      if (lastObjEnd === -1) break;
+      const candidate = cleaned.slice(0, lastObjEnd + 1) + '\n  ]\n}';
+      try {
+        const raw = JSON.parse(candidate);
+        const paper = parseIncomingExamJson(raw);
+        if (paper.questions.length > 0) {
+          return { paper, recoveredFromTruncation: true };
+        }
+      } catch {
+        // Keep searching earlier `},` boundaries
+      }
+      searchPos = lastObjEnd;
+    }
+
+    throw new Error(
+      originalErr instanceof SyntaxError
+        ? `Invalid or incomplete JSON syntax: ${originalErr.message}`
+        : originalErr?.message || 'Could not parse JSON.'
+    );
+  }
 }
