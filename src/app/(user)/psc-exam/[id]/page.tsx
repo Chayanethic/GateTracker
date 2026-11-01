@@ -19,6 +19,8 @@ import {
   FileText,
   Eye,
   BookOpen,
+  LayoutGrid,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -77,6 +79,7 @@ export default function PscExamRunner() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showQuestionPaper, setShowQuestionPaper] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showMobilePalette, setShowMobilePalette] = useState(false);
   const [requestedQuestion, setRequestedQuestion] = useState<number | null>(null);
   const activeQuestionRef = useRef<string | null>(null);
   const questionStartedAtRef = useRef<number | null>(null);
@@ -138,10 +141,10 @@ export default function PscExamRunner() {
 
   const enterFullscreen = useCallback(async () => {
     try {
-      if (!document.fullscreenElement) {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen();
       }
-      setIsFullscreen(Boolean(document.fullscreenElement) || true);
+      setIsFullscreen(Boolean(document.fullscreenElement));
     } catch {
       setIsFullscreen(false);
     }
@@ -179,6 +182,7 @@ export default function PscExamRunner() {
         return;
       }
       setShowSubmitModal(false);
+      setShowMobilePalette(false);
 
       flushQuestionTime();
       submittingRef.current = true;
@@ -290,7 +294,7 @@ export default function PscExamRunner() {
       if (q.type === 'MSQ') {
         return {
           ...a,
-          [q.id]: old.includes(key) ? old.filter((x) => x !== key) : [...old, key],
+          [q.id]: old.includes(key) ? old.filter((x: string) => x !== key) : [...old, key],
         };
       }
       return { ...a, [q.id]: old.includes(key) ? [] : [key] };
@@ -315,6 +319,7 @@ export default function PscExamRunner() {
   const goTo = (index: number) => {
     flushQuestionTime();
     setCurrent(Math.max(0, Math.min(questions.length - 1, index)));
+    setShowMobilePalette(false);
   };
 
   const startExam = async () => {
@@ -339,16 +344,19 @@ export default function PscExamRunner() {
     );
   }
 
+  // Fully Scrollable & Mobile Responsive Pre-Exam Instruction Screen
   if (!started) {
     return (
-      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-5 overflow-y-auto">
-        <div className="w-full max-w-3xl my-8">
-          <div className="text-center mb-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-black text-emerald-400">
-              <FileText size={15} /> PSC / GATE CBT EXAMINATION
+      <div className="h-[100dvh] w-full overflow-y-auto overflow-x-hidden overscroll-contain bg-zinc-950 text-white px-4 py-6 sm:px-6 sm:py-10">
+        <div className="w-full max-w-3xl mx-auto pb-10">
+          <div className="text-center mb-5 sm:mb-7">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3.5 py-1.5 text-[11px] font-black text-emerald-400">
+              <FileText size={14} /> PSC / GATE CBT EXAMINATION
             </div>
-            <h1 className="mt-4 text-3xl md:text-5xl font-black tracking-tight">{test.title}</h1>
-            <div className="mt-3 flex items-center justify-center gap-2">
+            <h1 className="mt-3 text-xl sm:text-3xl md:text-4xl font-black tracking-tight leading-snug">
+              {test.title}
+            </h1>
+            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
               {test.category && (
                 <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-bold text-zinc-300">
                   {test.category}
@@ -362,60 +370,61 @@ export default function PscExamRunner() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-zinc-900/80 shadow-2xl overflow-hidden">
-            <div className="grid grid-cols-2 md:grid-cols-4 border-b border-white/10">
+          <div className="rounded-3xl border border-white/10 bg-zinc-900/90 shadow-2xl overflow-hidden">
+            <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-white/10">
               <InfoStat label="Questions" value={String(test.question_count)} />
               <InfoStat label="Duration" value={`${test.duration_minutes} min`} />
               <InfoStat label="Total Marks" value={String(test.max_marks)} />
               <InfoStat label="Mode" value="CBT Timed" />
             </div>
 
-            <div className="p-6 md:p-9">
-              <h2 className="font-black text-xl">Examination Instructions</h2>
-              <div className="mt-5 grid md:grid-cols-2 gap-3 text-sm text-zinc-400">
+            <div className="p-5 sm:p-8">
+              <h2 className="font-black text-lg sm:text-xl">Before You Begin</h2>
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm text-zinc-300">
                 <Instruction
-                  icon={<Clock3 size={17} />}
-                  text="The countdown timer starts immediately when you begin."
+                  icon={<Clock3 size={16} />}
+                  text="The countdown timer starts immediately when you start the exam."
                 />
                 <Instruction
-                  icon={<Maximize2 size={17} />}
-                  text="Opens in dedicated fullscreen Test Series CBT mode."
+                  icon={<Maximize2 size={16} />}
+                  text="Works seamlessly on both mobile phones and desktop fullscreen CBT mode."
                 />
                 <Instruction
-                  icon={<Eye size={17} />}
-                  text="Time spent on each question is tracked for post-exam analysis."
+                  icon={<Eye size={16} />}
+                  text="Time spent on each question is recorded for post-exam solution analysis."
                 />
                 <Instruction
-                  icon={<Flag size={17} />}
+                  icon={<Flag size={16} />}
                   text={
                     requestedQuestion
                       ? `Starting on Question ${requestedQuestion}. Use the Question Palette to jump to any question.`
-                      : 'Use Mark for Review and the Question Palette to navigate across questions.'
+                      : 'Use Mark for Review and the Question Palette to jump to any question.'
                   }
                 />
               </div>
-              <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-200">
-                Each question displays its exact positive marks and negative marks in the header bar.
-                NAT questions have no negative marking unless specified.
+
+              <div className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-3.5 text-xs sm:text-sm text-amber-200 leading-relaxed">
+                Each question displays its exact positive and negative marks in the header bar.
+                Unattempted questions carry zero marks.
               </div>
 
               <button
                 onClick={startExam}
-                className="mt-7 w-full rounded-2xl bg-emerald-400 py-4 text-base font-black text-black hover:bg-emerald-300 transition"
+                className="mt-6 w-full rounded-2xl bg-emerald-400 py-4 text-sm sm:text-base font-black text-black hover:bg-emerald-300 active:scale-[0.99] transition shadow-lg shadow-emerald-500/20"
               >
                 Start Examination
               </button>
 
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
                   onClick={() => router.push(`/psc-exam/${id}/analysis`)}
-                  className="w-full rounded-2xl border border-white/10 py-3 font-bold text-white hover:bg-white/5"
+                  className="w-full rounded-2xl border border-white/10 py-3 text-xs sm:text-sm font-bold text-white hover:bg-white/5"
                 >
                   View Previous Results
                 </button>
                 <button
                   onClick={() => router.push('/psc-exam')}
-                  className="w-full rounded-2xl border border-white/10 py-3 font-bold text-zinc-400 hover:text-white hover:bg-white/5"
+                  className="w-full rounded-2xl border border-white/10 py-3 text-xs sm:text-sm font-bold text-zinc-400 hover:text-white hover:bg-white/5"
                 >
                   Back to PSC Exam Tests
                 </button>
@@ -429,18 +438,19 @@ export default function PscExamRunner() {
 
   if (submitted && result) return <Result test={test} result={result} />;
 
-  const answeredCount = questions.filter((x) => (answers[x.id] || []).length > 0).length;
-  const reviewCount = questions.filter((x) => marked[x.id]).length;
+  const answeredCount = questions.filter((x: Q) => (answers[x.id] || []).length > 0).length;
+  const reviewCount = questions.filter((x: Q) => marked[x.id]).length;
   const unansweredCount = questions.length - answeredCount;
 
   return (
     <div
       className={
         lightMode
-          ? 'min-h-screen bg-slate-100 text-slate-900'
-          : 'min-h-screen bg-[#202020] text-white'
+          ? 'min-h-[100dvh] flex flex-col bg-slate-100 text-slate-900'
+          : 'min-h-[100dvh] flex flex-col bg-[#202020] text-white'
       }
     >
+      {/* Top Exam Header Bar — Mobile & Desktop Responsive */}
       <header
         className={
           lightMode
@@ -448,28 +458,28 @@ export default function PscExamRunner() {
             : 'sticky top-0 z-50 bg-[#1b1b1b] border-b border-white/10 shadow-lg'
         }
       >
-        <div className="h-14 flex items-center justify-between px-3 md:px-5 gap-3">
-          <div className="min-w-0 flex items-center gap-3">
-            <div className="min-w-0">
-              <div className="font-black text-sm truncate">
-                {test.category || 'PSC Exam'} — {test.title}
-              </div>
-              <div className="hidden md:block text-[10px] uppercase tracking-widest opacity-50 mt-0.5">
-                Computer Based Examination {test.stream ? `• ${test.stream}` : ''}
-              </div>
+        <div className="min-h-14 flex items-center justify-between px-2.5 sm:px-5 py-2 gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="font-black text-xs sm:text-sm truncate">
+              {test.title}
+            </div>
+            <div className="text-[10px] uppercase tracking-wider opacity-60 truncate">
+              {test.category || 'PSC Exam'} {test.stream ? `• ${test.stream}` : ''}
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-1 text-xs font-bold">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={() => setShowQuestionPaper(true)}
-              className="px-3 py-2 underline underline-offset-4 hover:text-blue-500"
+              className={
+                lightMode
+                  ? 'hidden md:inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-bold hover:bg-slate-100'
+                  : 'hidden md:inline-flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-bold hover:bg-white/10'
+              }
             >
-              Question Paper
+              <FileText size={14} /> Paper
             </button>
-          </div>
 
-          <div className="flex items-center gap-2">
             <button
               onClick={() => setLightMode((v) => !v)}
               title={lightMode ? 'Dark mode' : 'Light mode'}
@@ -479,21 +489,24 @@ export default function PscExamRunner() {
                   : 'rounded-lg border border-white/10 p-2 hover:bg-white/10'
               }
             >
-              {lightMode ? <Moon size={17} /> : <Sun size={17} />}
+              {lightMode ? <Moon size={15} /> : <Sun size={15} />}
             </button>
+
             <button
               onClick={isFullscreen ? exitFullscreen : enterFullscreen}
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
               className={
                 lightMode
-                  ? 'rounded-lg border border-slate-300 p-2'
-                  : 'rounded-lg border border-white/10 p-2'
+                  ? 'hidden sm:inline-flex rounded-lg border border-slate-300 p-2'
+                  : 'hidden sm:inline-flex rounded-lg border border-white/10 p-2'
               }
             >
-              {isFullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+              {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
+
+            {/* Countdown Timer */}
             <div
-              className={`min-w-[124px] rounded-lg px-3 py-2 text-center font-mono font-black tracking-wider border ${
+              className={`rounded-lg px-2.5 py-1.5 text-center font-mono text-xs sm:text-sm font-black tracking-wider border ${
                 remaining <= 300
                   ? 'bg-red-600 border-red-500 text-white animate-pulse'
                   : lightMode
@@ -503,341 +516,401 @@ export default function PscExamRunner() {
             >
               {formatClock(remaining)}
             </div>
+
+            {/* Mobile Question Palette Toggle Button */}
+            <button
+              onClick={() => setShowMobilePalette(true)}
+              className="lg:hidden inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-black text-white"
+              title="Open Question Palette"
+            >
+              <LayoutGrid size={14} />
+              <span>
+                {answeredCount}/{questions.length}
+              </span>
+            </button>
+
+            {/* Submit Button — Visible on both Mobile & Desktop */}
             <button
               onClick={() => void submitTest(false)}
-              className="hidden sm:flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-black text-white hover:bg-red-500"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-black text-white hover:bg-red-500"
             >
-              <Send size={14} /> SUBMIT
+              <Send size={13} /> <span className="hidden sm:inline">SUBMIT</span>
+              <span className="sm:hidden">Submit</span>
             </button>
+          </div>
+        </div>
+
+        {/* Sub-Header: Section/Topic & Marks */}
+        <div
+          className={
+            lightMode
+              ? 'min-h-10 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-1.5 text-xs font-bold'
+              : 'min-h-10 bg-[#292929] border-t border-white/5 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-1.5 text-xs font-bold'
+          }
+        >
+          <div className="flex items-center gap-2">
+            <span className="rounded-md bg-[#1d4ed8] text-white px-2.5 py-1 text-[11px] font-black">
+              {q?.topic || test.category || 'General'}
+            </span>
+            <span className="opacity-75">
+              Q {current + 1} of {questions.length}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 text-[11px] sm:text-xs">
+            <span>
+              Correct: <b className="text-emerald-500">+{Number(q?.marks || 1).toFixed(2)}</b>
+            </span>
+            {Number(q?.negativeMarks || 0) > 0 && (
+              <span>
+                | Negative:{' '}
+                <b className="text-red-500">−{Number(q?.negativeMarks || 0).toFixed(2)}</b>
+              </span>
+            )}
           </div>
         </div>
       </header>
 
-      <div className="border-b border-black/10 shadow-sm">
-        <div
-          className={
-            lightMode
-              ? 'h-12 bg-slate-100 flex items-center px-4 font-black text-sm'
-              : 'h-12 bg-[#292929] flex items-center px-4 font-black text-sm'
-          }
-        >
-          <span className="bg-[#1d4ed8] text-white h-12 flex items-center px-6 -ml-4 shadow-sm">
-            {q?.topic || test.category || 'Section'}
-          </span>
-          <div className="ml-auto text-xs font-bold">
-            Marks for correct answer:{' '}
-            <span className="text-emerald-500">+{Number(q?.marks || 1).toFixed(2)}</span>
-            {Number(q?.negativeMarks || 0) > 0 && (
-              <>
-                {' '}
-                | Negative:{' '}
-                <span className="text-red-500">−{Number(q?.negativeMarks || 0).toFixed(2)}</span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col lg:flex-row min-h-[calc(100vh-96px)]">
-        <main className="min-w-0 flex-1 min-h-0 h-[calc(100vh-96px)] overflow-y-auto custom-scrollbar">
+      {/* Main CBT Body */}
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+        <main className="min-w-0 flex-1 overflow-y-auto pb-24 lg:pb-8 custom-scrollbar">
           <div
             className={
               lightMode
-                ? 'px-4 md:px-7 py-3 border-b border-slate-300 flex items-center justify-between text-sm font-bold'
-                : 'px-4 md:px-7 py-3 border-b border-white/10 flex items-center justify-between text-sm font-bold'
+                ? 'px-3 sm:px-6 py-2.5 border-b border-slate-300 flex items-center justify-between text-xs sm:text-sm font-bold'
+                : 'px-3 sm:px-6 py-2.5 border-b border-white/10 flex items-center justify-between text-xs sm:text-sm font-bold'
             }
           >
             <div className="flex items-center gap-2">
               <span>Question No.: {q?.number}</span>
-              {q?.topic && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-xs text-blue-400">
-                  <BookOpen size={12} /> {q.topic}
-                </span>
-              )}
+              <span className="rounded bg-current/10 px-2 py-0.5 text-[10px] font-black uppercase">
+                {q?.type}
+              </span>
             </div>
-            <span className="font-mono text-xs">
-              Your Time: {formatDuration(questionTimeRef.current[q?.id || ''] || 0)}
-            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowQuestionPaper(true)}
+                className="md:hidden underline text-xs text-blue-400"
+              >
+                Full Paper
+              </button>
+              <span className="font-mono text-xs opacity-75">
+                Time: {formatDuration(questionTimeRef.current[q?.id || ''] || 0)}
+              </span>
+            </div>
           </div>
 
-          <div className="p-4 md:p-6">
+          <div className="p-3 sm:p-6">
             <div
               className={
                 lightMode
-                  ? 'min-h-[560px] rounded-xl bg-white border border-slate-300 shadow-sm'
-                  : 'min-h-[560px] rounded-xl bg-[#242424] border border-white/10 shadow-xl'
+                  ? 'rounded-2xl bg-white border border-slate-300 shadow-sm p-4 sm:p-7'
+                  : 'rounded-2xl bg-[#242424] border border-white/10 shadow-xl p-4 sm:p-7'
               }
             >
-              <div className="p-5 md:p-8">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={
-                        lightMode
-                          ? 'rounded-md bg-slate-100 border border-slate-300 px-3 py-1 text-xs font-black'
-                          : 'rounded-md bg-white/5 border border-white/10 px-3 py-1 text-xs font-black'
-                      }
-                    >
-                      Q{q?.number}
-                    </span>
-                    <span className="text-xs font-black uppercase tracking-widest opacity-60">
-                      {q?.type}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={toggleMark}
-                      className={
-                        marked[q?.id || '']
-                          ? 'flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-black text-white'
-                          : lightMode
-                            ? 'flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-black'
-                            : 'flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-black'
-                      }
-                    >
-                      <Flag size={15} />{' '}
-                      {marked[q?.id || ''] ? 'Marked for Review' : 'Mark for Review'}
-                    </button>
-                    <button
-                      onClick={toggleBookmark}
-                      className={
-                        bookmarked[q?.id || '']
-                          ? 'flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-xs font-black text-black'
-                          : lightMode
-                            ? 'flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-black'
-                            : 'flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-black'
-                      }
-                    >
-                      <Bookmark size={15} fill={bookmarked[q?.id || ''] ? 'currentColor' : 'none'} />
-                      {bookmarked[q?.id || ''] ? 'Bookmarked' : 'Bookmark'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Question Content + Question Image URL */}
-                {q?.questionHtml ? (
-                  <div
+              {/* Mark for Review & Bookmark Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-current/10">
+                <div className="flex items-center gap-2">
+                  <span
                     className={
                       lightMode
-                        ? 'mt-7 prose max-w-none text-sm md:text-base leading-7 text-slate-800'
-                        : 'mt-7 prose prose-invert max-w-none text-sm md:text-base leading-7'
+                        ? 'rounded-lg bg-slate-100 border border-slate-300 px-2.5 py-1 text-xs font-black'
+                        : 'rounded-lg bg-white/5 border border-white/10 px-2.5 py-1 text-xs font-black'
                     }
-                    dangerouslySetInnerHTML={{ __html: q.questionHtml }}
-                  />
-                ) : (
-                  <div className="mt-7 space-y-4">
-                    <div className="text-sm md:text-base leading-7 whitespace-pre-wrap">
-                      {q?.questionText}
-                    </div>
-                    {q?.questionImageUrl && (
-                      <div>
-                        <img
-                          src={q.questionImageUrl}
-                          alt={`Question ${q.number}`}
-                          className="max-w-full max-h-[420px] h-auto rounded-xl border border-white/10 object-contain"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
+                  >
+                    Q{q?.number}
+                  </span>
+                  {q?.topic && (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-400">
+                      <BookOpen size={13} /> {q.topic}
+                    </span>
+                  )}
+                </div>
 
-                {/* Answer Input Area */}
-                {q?.type === 'NAT' ? (
-                  <div className="mt-8 max-w-md">
-                    <label className="text-xs font-black uppercase tracking-widest opacity-60">
-                      Numerical Answer (NAT)
-                    </label>
-                    <input
-                      inputMode="decimal"
-                      value={(answers[q.id] || [])[0] || ''}
-                      onChange={(e) =>
-                        setAnswers((a) => ({
-                          ...a,
-                          [q.id]: e.target.value ? [e.target.value] : [],
-                        }))
-                      }
-                      placeholder="Enter numerical answer (e.g. 2)"
-                      className={
-                        lightMode
-                          ? 'mt-2 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 font-mono font-bold outline-none focus:border-blue-500'
-                          : 'mt-2 w-full rounded-xl border border-white/10 bg-black px-4 py-3 font-mono font-bold text-white outline-none focus:border-blue-500'
-                      }
-                    />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleMark}
+                    className={
+                      marked[q?.id || '']
+                        ? 'flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-black text-white'
+                        : lightMode
+                          ? 'flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-black'
+                          : 'flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-black'
+                    }
+                  >
+                    <Flag size={14} />{' '}
+                    {marked[q?.id || ''] ? 'Marked' : 'Review'}
+                  </button>
+                  <button
+                    onClick={toggleBookmark}
+                    className={
+                      bookmarked[q?.id || '']
+                        ? 'flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-black text-black'
+                        : lightMode
+                          ? 'flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-black'
+                          : 'flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-black'
+                    }
+                  >
+                    <Bookmark size={14} fill={bookmarked[q?.id || ''] ? 'currentColor' : 'none'} />
+                    <span className="hidden sm:inline">
+                      {bookmarked[q?.id || ''] ? 'Bookmarked' : 'Bookmark'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Question Text & Image */}
+              {q?.questionHtml ? (
+                <div
+                  className={
+                    lightMode
+                      ? 'mt-5 prose max-w-none text-sm sm:text-base leading-7 text-slate-800 break-words'
+                      : 'mt-5 prose prose-invert max-w-none text-sm sm:text-base leading-7 break-words'
+                  }
+                  dangerouslySetInnerHTML={{ __html: q.questionHtml }}
+                />
+              ) : (
+                <div className="mt-5 space-y-4">
+                  <div className="text-sm sm:text-base leading-7 whitespace-pre-wrap break-words">
+                    {q?.questionText}
                   </div>
-                ) : (
-                  <div className="mt-8 space-y-3">
-                    {q?.options?.map((o) => {
-                      const optKey = String(o.key || o.id || '');
-                      const selected = (answers[q.id] || []).includes(optKey);
-                      return (
-                        <button
-                          key={optKey}
-                          onClick={() => toggle(optKey)}
+                  {q?.questionImageUrl && (
+                    <div>
+                      <img
+                        src={q.questionImageUrl}
+                        alt={`Question ${q.number}`}
+                        className="max-w-full max-h-[380px] h-auto rounded-xl border border-white/10 object-contain"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Options or NAT Input */}
+              {q?.type === 'NAT' ? (
+                <div className="mt-6 max-w-md">
+                  <label className="text-xs font-black uppercase tracking-widest opacity-60">
+                    Numerical Answer (NAT)
+                  </label>
+                  <input
+                    inputMode="decimal"
+                    value={(answers[q.id] || [])[0] || ''}
+                    onChange={(e) =>
+                      setAnswers((a) => ({
+                        ...a,
+                        [q.id]: e.target.value ? [e.target.value] : [],
+                      }))
+                    }
+                    placeholder="Enter numerical answer (e.g. 2)"
+                    className={
+                      lightMode
+                        ? 'mt-2 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 font-mono font-bold outline-none focus:border-blue-500'
+                        : 'mt-2 w-full rounded-xl border border-white/10 bg-black px-4 py-3 font-mono font-bold text-white outline-none focus:border-blue-500'
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="mt-6 space-y-2.5">
+                  {q?.options?.map((o: OptionItem) => {
+                    const optKey = String(o.key || o.id || '');
+                    const selected = (answers[q.id] || []).includes(optKey);
+                    return (
+                      <button
+                        key={optKey}
+                        onClick={() => toggle(optKey)}
+                        className={
+                          selected
+                            ? 'w-full text-left flex items-start gap-3 sm:gap-4 p-3.5 sm:p-4 rounded-xl border-2 border-blue-500 bg-blue-500/10'
+                            : lightMode
+                              ? 'w-full text-left flex items-start gap-3 sm:gap-4 p-3.5 sm:p-4 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100'
+                              : 'w-full text-left flex items-start gap-3 sm:gap-4 p-3.5 sm:p-4 rounded-xl border border-white/10 bg-white/[.02] hover:bg-white/[.05]'
+                        }
+                      >
+                        <span
                           className={
                             selected
-                              ? 'w-full text-left flex gap-4 p-4 rounded-xl border-2 border-blue-500 bg-blue-500/10'
+                              ? 'w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-black'
                               : lightMode
-                                ? 'w-full text-left flex gap-4 p-4 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100'
-                                : 'w-full text-left flex gap-4 p-4 rounded-xl border border-white/10 bg-white/[.02] hover:bg-white/[.05]'
+                                ? 'w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full border border-slate-400 flex items-center justify-center text-xs font-black'
+                                : 'w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full border border-zinc-600 flex items-center justify-center text-xs font-black'
                           }
                         >
-                          <span
-                            className={
-                              selected
-                                ? 'w-8 h-8 shrink-0 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-black'
-                                : lightMode
-                                  ? 'w-8 h-8 shrink-0 rounded-full border border-slate-400 flex items-center justify-center text-xs font-black'
-                                  : 'w-8 h-8 shrink-0 rounded-full border border-zinc-600 flex items-center justify-center text-xs font-black'
-                            }
-                          >
-                            {optKey}
-                          </span>
-                          <span
-                            className="text-sm leading-6 flex-1"
-                            dangerouslySetInnerHTML={{
-                              __html: o.html || o.text || '',
-                            }}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                          {optKey}
+                        </span>
+                        <span
+                          className="text-sm leading-6 flex-1 break-words"
+                          dangerouslySetInnerHTML={{
+                            __html: o.html || o.text || '',
+                          }}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-                <div className="mt-9 flex flex-wrap items-center justify-between gap-3">
+              {/* Desktop Action Buttons */}
+              <div className="hidden lg:flex mt-8 flex-wrap items-center justify-between gap-3 pt-4 border-t border-current/10">
+                <button
+                  disabled={current === 0}
+                  onClick={() => goTo(current - 1)}
+                  className="flex items-center gap-2 rounded-xl border border-current/20 px-4 py-3 text-sm font-bold disabled:opacity-30"
+                >
+                  <ChevronLeft size={17} /> Previous
+                </button>
+
+                <div className="flex gap-2.5">
                   <button
-                    disabled={current === 0}
-                    onClick={() => goTo(current - 1)}
-                    className="flex items-center gap-2 rounded-lg border border-current/20 px-4 py-3 text-sm font-bold disabled:opacity-30"
+                    onClick={clearResponse}
+                    className="flex items-center gap-2 rounded-xl border border-current/20 px-4 py-3 text-sm font-bold opacity-80 hover:opacity-100"
                   >
-                    <ChevronLeft size={17} /> Previous
+                    <RotateCcw size={15} /> Clear Response
                   </button>
-
-                  <div className="flex gap-2">
+                  {current < questions.length - 1 ? (
                     <button
-                      onClick={clearResponse}
-                      className="flex items-center gap-2 rounded-lg border border-current/20 px-4 py-3 text-sm font-bold opacity-80 hover:opacity-100"
-                    >
-                      <RotateCcw size={15} /> Clear Response
-                    </button>
-                    <button
-                      disabled={current === questions.length - 1}
                       onClick={() => goTo(current + 1)}
-                      className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-black text-white disabled:opacity-30"
+                      className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-500"
                     >
                       Save &amp; Next <ChevronRight size={17} />
                     </button>
-                  </div>
+                  ) : (
+                    <button
+                      onClick={() => void submitTest(false)}
+                      className="flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-black text-black hover:bg-emerald-400"
+                    >
+                      <Send size={16} /> Finish &amp; Submit
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </main>
 
-        {/* Question Palette Sidebar */}
+        {/* Desktop Right Sidebar Question Palette */}
         <aside
           className={
             lightMode
-              ? 'w-full lg:w-[330px] lg:h-[calc(100vh-96px)] lg:overflow-y-auto bg-white border-l border-slate-300'
-              : 'w-full lg:w-[330px] lg:h-[calc(100vh-96px)] lg:overflow-y-auto bg-[#f1f7fb] text-slate-900 border-l border-black/10'
+              ? 'hidden lg:block w-[330px] shrink-0 overflow-y-auto bg-white border-l border-slate-300'
+              : 'hidden lg:block w-[330px] shrink-0 overflow-y-auto bg-[#f1f7fb] text-slate-900 border-l border-black/10'
           }
         >
-          <div className="p-4 md:p-5">
-            <div className="rounded-xl bg-white p-4 shadow-sm border border-slate-200">
-              <div className="flex items-center justify-between">
-                <div className="font-black text-sm">Candidate</div>
-                <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">
-                  LIVE CBT
-                </span>
-              </div>
-              <div className="mt-2 text-xs text-slate-500">{test.title}</div>
-            </div>
-
-            <div className="mt-4 rounded-xl bg-white p-4 shadow-sm border border-slate-200">
-              <div className="flex items-center justify-between mb-4">
-                <span className="font-black text-sm">Question Palette</span>
-                <Flag size={17} className="text-violet-600" />
-              </div>
-
-              <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-5 gap-2">
-                {questions.map((x, i) => {
-                  const state = paletteState(x, i);
-                  const cls =
-                    state === 'current'
-                      ? 'bg-blue-600 border-blue-700 text-white ring-2 ring-blue-200 ring-offset-1'
-                      : state === 'answeredReview'
-                        ? 'bg-violet-600 border-violet-700 text-white'
-                        : state === 'review'
-                          ? 'bg-violet-100 border-violet-500 text-violet-800'
-                          : state === 'answered'
-                            ? 'bg-emerald-500 border-emerald-600 text-white'
-                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50';
-
-                  return (
-                    <button
-                      key={x.id}
-                      onClick={() => goTo(i)}
-                      className={`aspect-square rounded-md border text-xs font-black ${cls}`}
-                    >
-                      {i + 1}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
-                <Legend cls="bg-emerald-500" text={`Answered (${answeredCount})`} />
-                <Legend cls="bg-violet-600" text={`Marked (${reviewCount})`} />
-                <Legend cls="bg-violet-100 border border-violet-500" text="Answered + Review" />
-                <Legend
-                  cls="bg-white border border-slate-300"
-                  text={`Not Answered (${unansweredCount})`}
-                />
-                <Legend cls="bg-blue-600" text="Current" />
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <MiniStat label="Answered" value={answeredCount} />
-              <MiniStat label="Review" value={reviewCount} />
-              <MiniStat label="Left" value={unansweredCount} />
-            </div>
-
-            <button
-              onClick={() => void submitTest(false)}
-              className="mt-4 w-full rounded-xl bg-red-600 py-3.5 text-sm font-black text-white hover:bg-red-500"
-            >
-              Submit Examination
-            </button>
-          </div>
+          <PaletteContent
+            testTitle={test.title}
+            questions={questions}
+            paletteState={paletteState}
+            goTo={goTo}
+            answeredCount={answeredCount}
+            reviewCount={reviewCount}
+            unansweredCount={unansweredCount}
+            onSubmit={() => void submitTest(false)}
+          />
         </aside>
       </div>
 
+      {/* Sticky Mobile Bottom Action Bar for Fast Question Navigation */}
+      <div
+        className={
+          lightMode
+            ? 'lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-300 px-3 py-2.5 flex items-center justify-between gap-2 shadow-2xl'
+            : 'lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#181818]/95 backdrop-blur-md border-t border-white/10 px-3 py-2.5 flex items-center justify-between gap-2 shadow-2xl'
+        }
+      >
+        <button
+          disabled={current === 0}
+          onClick={() => goTo(current - 1)}
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-current/20 px-3 py-2.5 text-xs font-black disabled:opacity-30"
+        >
+          <ChevronLeft size={16} /> Prev
+        </button>
+
+        <button
+          onClick={clearResponse}
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-current/20 px-3 py-2.5 text-xs font-bold opacity-80"
+        >
+          <RotateCcw size={14} /> Clear
+        </button>
+
+        <button
+          onClick={() => setShowMobilePalette(true)}
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/40 bg-blue-500/10 px-3 py-2.5 text-xs font-black text-blue-400"
+        >
+          <LayoutGrid size={14} /> Palette
+        </button>
+
+        {current < questions.length - 1 ? (
+          <button
+            onClick={() => goTo(current + 1)}
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white"
+          >
+            Save &amp; Next <ChevronRight size={16} />
+          </button>
+        ) : (
+          <button
+            onClick={() => void submitTest(false)}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-black text-black"
+          >
+            <Send size={14} /> Submit
+          </button>
+        )}
+      </div>
+
+      {/* Mobile Slide-Over Question Palette Drawer */}
+      {showMobilePalette && (
+        <div className="lg:hidden fixed inset-0 z-[115] flex justify-end">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowMobilePalette(false)}
+          />
+          <div className="relative z-10 w-[320px] max-w-[88vw] h-full bg-[#f1f7fb] text-slate-900 overflow-y-auto shadow-2xl flex flex-col">
+            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 py-3.5 flex items-center justify-between">
+              <span className="font-black text-sm text-slate-900">Question Palette</span>
+              <button
+                onClick={() => setShowMobilePalette(false)}
+                className="p-1.5 rounded-lg bg-slate-100 text-slate-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <PaletteContent
+              testTitle={test.title}
+              questions={questions}
+              paletteState={paletteState}
+              goTo={goTo}
+              answeredCount={answeredCount}
+              reviewCount={reviewCount}
+              unansweredCount={unansweredCount}
+              onSubmit={() => void submitTest(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Submit Confirmation Modal */}
       {showSubmitModal && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
-            <div className="border-b border-slate-200 bg-slate-50 px-6 py-5">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-xl my-auto overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
+            <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
                   <Send size={18} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black">Submit Examination</h2>
+                  <h2 className="text-base sm:text-lg font-black">Submit Examination</h2>
                   <p className="text-xs text-slate-500">
                     Review your attempt summary before final submission.
                   </p>
                 </div>
               </div>
             </div>
-            <div className="p-6">
+            <div className="p-5 sm:p-6">
               {unansweredCount > 0 && (
-                <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs sm:text-sm text-amber-900">
                   <b>Attention:</b> You still have {unansweredCount} unanswered question
                   {unansweredCount === 1 ? '' : 's'}.
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                 <ModalStat label="Answered" value={answeredCount} cls="text-emerald-600" />
                 <ModalStat label="Unanswered" value={unansweredCount} cls="text-amber-600" />
                 <ModalStat label="Review" value={reviewCount} cls="text-violet-600" />
@@ -847,19 +920,19 @@ export default function PscExamRunner() {
                   cls="text-blue-600 font-mono"
                 />
               </div>
-              <p className="mt-5 text-sm leading-6 text-slate-600">
+              <p className="mt-4 text-xs sm:text-sm leading-6 text-slate-600">
                 Once submitted, your answers and per-question timing will be evaluated and saved.
               </p>
-              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <div className="mt-5 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
                 <button
                   onClick={() => setShowSubmitModal(false)}
-                  className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-black hover:bg-slate-50"
+                  className="rounded-xl border border-slate-300 px-5 py-3 text-xs sm:text-sm font-black hover:bg-slate-50"
                 >
                   Return to Examination
                 </button>
                 <button
                   onClick={() => void submitTest(false)}
-                  className="rounded-xl bg-red-600 px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-red-700"
+                  className="rounded-xl bg-red-600 px-6 py-3 text-xs sm:text-sm font-black text-white shadow-sm hover:bg-red-700"
                 >
                   Submit Examination
                 </button>
@@ -871,26 +944,26 @@ export default function PscExamRunner() {
 
       {/* Full Question Paper Modal */}
       {showQuestionPaper && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm p-3 md:p-6">
+        <div className="fixed inset-0 z-[125] bg-black/80 backdrop-blur-sm p-2 sm:p-6">
           <div
             className={
               lightMode
-                ? 'h-full w-full overflow-hidden rounded-2xl bg-white text-slate-900 border border-slate-300 shadow-2xl'
-                : 'h-full w-full overflow-hidden rounded-2xl bg-[#181818] text-white border border-white/10 shadow-2xl'
+                ? 'h-full w-full overflow-hidden rounded-2xl bg-white text-slate-900 border border-slate-300 shadow-2xl flex flex-col'
+                : 'h-full w-full overflow-hidden rounded-2xl bg-[#181818] text-white border border-white/10 shadow-2xl flex flex-col'
             }
           >
             <div
               className={
                 lightMode
-                  ? 'sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-300 bg-white px-5 py-4'
-                  : 'sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#181818] px-5 py-4'
+                  ? ' flex items-center justify-between gap-4 border-b border-slate-300 bg-white px-4 py-3.5'
+                  : 'flex items-center justify-between gap-4 border-b border-white/10 bg-[#181818] px-4 py-3.5'
               }
             >
-              <div>
-                <div className="text-xs font-black uppercase tracking-widest text-blue-500">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-widest text-blue-500">
                   Question Paper
                 </div>
-                <h2 className="mt-1 text-lg md:text-xl font-black">{test.title}</h2>
+                <h2 className="mt-0.5 text-sm sm:text-lg font-black truncate">{test.title}</h2>
               </div>
               <button
                 onClick={() => setShowQuestionPaper(false)}
@@ -904,42 +977,53 @@ export default function PscExamRunner() {
               </button>
             </div>
 
-            <div className="h-[calc(100%-76px)] overflow-y-auto p-4 md:p-7 custom-scrollbar">
-              <div className="mx-auto max-w-5xl space-y-5">
-                {questions.map((question) => (
+            <div className="flex-1 overflow-y-auto p-3 sm:p-6 custom-scrollbar">
+              <div className="mx-auto max-w-5xl space-y-4">
+                {questions.map((question: Q, idx: number) => (
                   <article
                     key={question.id}
                     className={
                       lightMode
-                        ? 'rounded-2xl border border-slate-300 bg-slate-50 p-5 md:p-7'
-                        : 'rounded-2xl border border-white/10 bg-[#222] p-5 md:p-7'
+                        ? 'rounded-2xl border border-slate-300 bg-slate-50 p-4 sm:p-6'
+                        : 'rounded-2xl border border-white/10 bg-[#222] p-4 sm:p-6'
                     }
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-current/10 pb-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-current/10 pb-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-black">Question {question.number}</span>
+                        <span className="font-black text-sm">Question {question.number}</span>
                         {question.topic && (
-                          <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-bold">
+                          <span className="text-[11px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-bold">
                             {question.topic}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-xs font-bold opacity-70">
+                      <div className="flex items-center gap-3 text-xs font-bold opacity-75">
                         <span>{question.type}</span>
-                        <span>+{Number(question.marks || 1).toFixed(2)}</span>
+                        <span className="text-emerald-500">
+                          +{Number(question.marks || 1).toFixed(2)}
+                        </span>
                         {Number(question.negativeMarks || 0) > 0 && (
                           <span className="text-red-500">
                             −{Number(question.negativeMarks || 0).toFixed(2)}
                           </span>
                         )}
+                        <button
+                          onClick={() => {
+                            setShowQuestionPaper(false);
+                            goTo(idx);
+                          }}
+                          className="rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-black text-white"
+                        >
+                          Jump
+                        </button>
                       </div>
                     </div>
 
                     <div
                       className={
                         lightMode
-                          ? 'prose max-w-none mt-5 text-sm md:text-base leading-7 text-slate-800'
-                          : 'prose prose-invert max-w-none mt-5 text-sm md:text-base leading-7'
+                          ? 'prose max-w-none mt-4 text-sm leading-7 text-slate-800'
+                          : 'prose prose-invert max-w-none mt-4 text-sm leading-7'
                       }
                       dangerouslySetInnerHTML={{
                         __html: question.questionHtml || question.questionText || '',
@@ -947,23 +1031,23 @@ export default function PscExamRunner() {
                     />
 
                     {question.type === 'NAT' ? (
-                      <div className="mt-5 rounded-xl border border-current/10 p-4 text-sm opacity-70">
+                      <div className="mt-4 rounded-xl border border-current/10 p-3 text-xs opacity-70">
                         Numerical Answer Question
                       </div>
                     ) : (
-                      <div className="mt-5 space-y-3">
-                        {question.options?.map((option) => (
+                      <div className="mt-4 space-y-2">
+                        {question.options?.map((option: OptionItem) => (
                           <div
                             key={option.key}
                             className={
                               lightMode
-                                ? 'flex gap-3 rounded-xl border border-slate-300 bg-white p-4'
-                                : 'flex gap-3 rounded-xl border border-white/10 bg-black/10 p-4'
+                                ? 'flex gap-3 rounded-xl border border-slate-300 bg-white p-3'
+                                : 'flex gap-3 rounded-xl border border-white/10 bg-black/10 p-3'
                             }
                           >
-                            <span className="shrink-0 font-black">{option.key}.</span>
+                            <span className="shrink-0 font-black text-xs">{option.key}.</span>
                             <span
-                              className="text-sm leading-6"
+                              className="text-xs sm:text-sm leading-6"
                               dangerouslySetInnerHTML={{
                                 __html: option.html || option.text || '',
                               }}
@@ -983,19 +1067,112 @@ export default function PscExamRunner() {
   );
 }
 
+function PaletteContent({
+  testTitle,
+  questions,
+  paletteState,
+  goTo,
+  answeredCount,
+  reviewCount,
+  unansweredCount,
+  onSubmit,
+}: {
+  testTitle: string;
+  questions: Q[];
+  paletteState: (x: Q, i: number) => PaletteState;
+  goTo: (index: number) => void;
+  answeredCount: number;
+  reviewCount: number;
+  unansweredCount: number;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="p-4">
+      <div className="rounded-xl bg-white p-3.5 shadow-sm border border-slate-200">
+        <div className="flex items-center justify-between">
+          <div className="font-black text-xs text-slate-800">Candidate</div>
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+            LIVE CBT
+          </span>
+        </div>
+        <div className="mt-1.5 text-xs text-slate-500 line-clamp-2">{testTitle}</div>
+      </div>
+
+      <div className="mt-3 rounded-xl bg-white p-3.5 shadow-sm border border-slate-200">
+        <div className="flex items-center justify-between mb-3">
+          <span className="font-black text-xs text-slate-800">
+            Questions ({questions.length})
+          </span>
+          <Flag size={15} className="text-violet-600" />
+        </div>
+
+        <div className="grid grid-cols-5 gap-2 max-h-[340px] overflow-y-auto pr-1">
+          {questions.map((x: Q, i: number) => {
+            const state = paletteState(x, i);
+            const cls =
+              state === 'current'
+                ? 'bg-blue-600 border-blue-700 text-white ring-2 ring-blue-200 ring-offset-1'
+                : state === 'answeredReview'
+                  ? 'bg-violet-600 border-violet-700 text-white'
+                  : state === 'review'
+                    ? 'bg-violet-100 border-violet-500 text-violet-800'
+                    : state === 'answered'
+                      ? 'bg-emerald-500 border-emerald-600 text-white'
+                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50';
+
+            return (
+              <button
+                key={x.id}
+                onClick={() => goTo(i)}
+                className={`h-9 rounded-lg border text-xs font-black ${cls}`}
+              >
+                {i + 1}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+          <Legend cls="bg-emerald-500" text={`Answered (${answeredCount})`} />
+          <Legend cls="bg-violet-600" text={`Marked (${reviewCount})`} />
+          <Legend cls="bg-violet-100 border border-violet-500" text="Answered + Review" />
+          <Legend
+            cls="bg-white border border-slate-300"
+            text={`Not Answered (${unansweredCount})`}
+          />
+          <Legend cls="bg-blue-600" text="Current" />
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <MiniStat label="Answered" value={answeredCount} />
+        <MiniStat label="Review" value={reviewCount} />
+        <MiniStat label="Left" value={unansweredCount} />
+      </div>
+
+      <button
+        onClick={onSubmit}
+        className="mt-4 w-full rounded-xl bg-red-600 py-3.5 text-xs sm:text-sm font-black text-white hover:bg-red-500"
+      >
+        Submit Examination
+      </button>
+    </div>
+  );
+}
+
 function InfoStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="p-5 border-r border-white/10 last:border-r-0">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="mt-1 font-black text-lg">{value}</div>
+    <div className="p-3.5 sm:p-5 border-r border-b sm:border-b-0 border-white/10 last:border-r-0">
+      <div className="text-[11px] text-zinc-500">{label}</div>
+      <div className="mt-1 font-black text-base sm:text-lg">{value}</div>
     </div>
   );
 }
 
 function Instruction({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[.03] p-4">
-      <span className="mt-0.5 text-emerald-400">{icon}</span>
+    <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[.03] p-3.5">
+      <span className="mt-0.5 text-emerald-400 shrink-0">{icon}</span>
       <span>{text}</span>
     </div>
   );
@@ -1003,17 +1180,17 @@ function Instruction({ icon, text }: { icon: React.ReactNode; text: string }) {
 
 function Legend({ cls, text }: { cls: string; text: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className={`h-3 w-3 rounded-sm ${cls}`} />
-      {text}
+    <div className="flex items-center gap-1.5">
+      <span className={`h-3 w-3 shrink-0 rounded-sm ${cls}`} />
+      <span className="truncate">{text}</span>
     </div>
   );
 }
 
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-white p-3 text-center border border-slate-200">
-      <div className="text-lg font-black">{value}</div>
+    <div className="rounded-lg bg-white p-2.5 text-center border border-slate-200">
+      <div className="text-base font-black text-slate-900">{value}</div>
       <div className="text-[10px] text-slate-500">{label}</div>
     </div>
   );
@@ -1027,45 +1204,45 @@ function Result({ test, result }: { test: any; result: any }) {
   const percentage = maxMarks > 0 ? Math.max(0, Math.min(100, (score / maxMarks) * 100)) : 0;
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <header className="border-b border-slate-200 bg-white px-5 py-4 shadow-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <div>
+    <div className="h-[100dvh] w-full overflow-y-auto bg-slate-100 text-slate-900">
+      <header className="border-b border-slate-200 bg-white px-4 sm:px-6 py-4 shadow-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          <div className="min-w-0">
             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
               PSC Examination Result
             </div>
-            <h1 className="mt-1 text-lg font-black">{test.title}</h1>
+            <h1 className="mt-1 text-base sm:text-lg font-black truncate">{test.title}</h1>
           </div>
-          <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">
+          <div className="shrink-0 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">
             SUBMITTED ✓
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl p-4 md:p-8">
+      <main className="mx-auto max-w-6xl p-4 sm:p-8 pb-16">
         <div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]">
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-8 shadow-sm">
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
               <div>
                 <div className="text-xs font-black uppercase tracking-widest text-slate-500">
                   Your Score
                 </div>
-                <div className="mt-2 text-5xl font-black tracking-tight text-slate-900">
+                <div className="mt-2 text-4xl sm:text-5xl font-black tracking-tight text-slate-900">
                   {score.toFixed(2)}{' '}
-                  <span className="text-xl font-bold text-slate-400">
+                  <span className="text-lg sm:text-xl font-bold text-slate-400">
                     / {maxMarks.toFixed(2)}
                   </span>
                 </div>
-                <div className="mt-2 text-sm text-slate-500">
+                <div className="mt-2 text-xs sm:text-sm text-slate-500">
                   {percentage.toFixed(1)}% of maximum marks
                 </div>
               </div>
-              <div className="h-24 w-24 rounded-full border-[8px] border-blue-100 flex items-center justify-center text-center">
-                <span className="text-xl font-black text-blue-700">
+              <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full border-[8px] border-blue-100 flex items-center justify-center text-center">
+                <span className="text-lg sm:text-xl font-black text-blue-700">
                   {percentage.toFixed(0)}%
                 </span>
               </div>
             </div>
-            <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="mt-6 sm:mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <SummaryStat label="Correct" value={String(result.correct || 0)} cls="text-emerald-600" />
               <SummaryStat label="Incorrect" value={String(result.incorrect || 0)} cls="text-red-600" />
               <SummaryStat
@@ -1076,12 +1253,12 @@ function Result({ test, result }: { test: any; result: any }) {
               <SummaryStat label="Attempted" value={String(attempted)} cls="text-blue-600" />
             </div>
           </section>
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
             <div className="text-xs font-black uppercase tracking-widest text-slate-500">
               Next Step
             </div>
-            <h2 className="mt-2 text-xl font-black">Review your performance</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
+            <h2 className="mt-2 text-lg sm:text-xl font-black">Review your performance</h2>
+            <p className="mt-2 text-xs sm:text-sm leading-6 text-slate-500">
               Open detailed analysis for question-wise marks, negative marking, time spent, and
               explanations.
             </p>
@@ -1089,9 +1266,9 @@ function Result({ test, result }: { test: any; result: any }) {
               onClick={() =>
                 router.replace(`/psc-exam/${test.id}/analysis?attempt=${result.attemptId}`)
               }
-              className="mt-6 w-full rounded-xl bg-blue-600 py-3.5 text-sm font-black text-white hover:bg-blue-700"
+              className="mt-5 w-full rounded-xl bg-blue-600 py-3.5 text-sm font-black text-white hover:bg-blue-700"
             >
-              Analyse Attempt
+              Analyse Attempt &amp; Solutions
             </button>
             <button
               onClick={() => router.replace('/psc-exam')}
@@ -1117,7 +1294,7 @@ function ModalStat({
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 text-center">
-      <div className={`text-lg font-black ${cls}`}>{value}</div>
+      <div className={`text-base sm:text-lg font-black ${cls}`}>{value}</div>
       <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
         {label}
       </div>
@@ -1127,9 +1304,9 @@ function ModalStat({
 
 function SummaryStat({ label, value, cls }: { label: string; value: string; cls: string }) {
   return (
-    <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
+    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 sm:p-4">
       <div className="text-xs text-slate-500">{label}</div>
-      <div className={`text-2xl font-black mt-1 ${cls}`}>{value}</div>
+      <div className={`text-xl sm:text-2xl font-black mt-1 ${cls}`}>{value}</div>
     </div>
   );
 }
