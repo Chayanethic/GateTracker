@@ -21,6 +21,8 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Menu,
+  X,
 } from 'lucide-react';
 
 export default function UserLayout({
@@ -38,10 +40,10 @@ export default function UserLayout({
   const [gateDaysRemaining, setGateDaysRemaining] = useState(0);
   const [previousGateDays, setPreviousGateDays] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // The examination route is rendered as a dedicated full-screen app.
-  // Do not show the normal dashboard/sidebar/mobile navigation while an exam is open.
   const isExamRoute =
     (/^\/test-series\/[^/]+$/.test(pathname || '') && pathname !== '/test-series/marked') ||
     /^\/psc-exam\/[^/]+$/.test(pathname || '');
@@ -59,6 +61,11 @@ export default function UserLayout({
     const savedSidebar = localStorage.getItem('gateTrackerSidebarCollapsed');
     setSidebarCollapsed(savedSidebar === 'true');
   }, []);
+
+  // Close mobile drawer when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
@@ -104,7 +111,6 @@ export default function UserLayout({
 
       setIsAuthorized(true);
 
-      // GATE 2027 daily countdown animation
       if (isExamRoute || isAnalysisRoute) {
         setIsAuthorized(true);
         return;
@@ -190,9 +196,25 @@ export default function UserLayout({
       icon: LayoutDashboard,
     },
     {
-      name: 'Leaderboard',
-      href: '/leaderboard',
-      icon: Trophy,
+      name: 'PSC Exam Test',
+      href: '/psc-exam',
+      icon: Award,
+      highlight: true,
+    },
+    {
+      name: 'Test Series',
+      href: '/test-series',
+      icon: FileQuestion,
+    },
+    {
+      name: 'Question Bank',
+      href: '/question-bank',
+      icon: BookOpen,
+    },
+    {
+      name: 'Curriculum',
+      href: '/resources',
+      icon: BookOpen,
     },
     {
       name: 'Daily HUD',
@@ -205,29 +227,18 @@ export default function UserLayout({
       icon: ClipboardCheck,
     },
     {
-      name: 'Curriculum',
-      href: '/resources',
-      icon: BookOpen,
-    },
-    {
-      name: 'Test Series',
-      href: '/test-series',
-      icon: FileQuestion,
-    },
-    {
-      name: 'PSC Exam Test',
-      href: '/psc-exam',
-      icon: Award,
-    },
-    {
-      name: 'Question Bank',
-      href: '/question-bank',
-      icon: BookOpen,
+      name: 'Leaderboard',
+      href: '/leaderboard',
+      icon: Trophy,
     },
   ];
 
   if (isExamRoute) {
-    return <div className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#050505]">{children}</div>;
+    return (
+      <div className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-y-auto overflow-x-hidden overscroll-contain bg-[#050505]">
+        {children}
+      </div>
+    );
   }
 
   if (isAnalysisRoute) {
@@ -393,11 +404,7 @@ export default function UserLayout({
           <div className={`p-5 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-3 border-b border-white/5`}>
             <div className="w-10 h-10 rounded-[10px] bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shadow-inner relative overflow-hidden group">
               <div className="absolute inset-0 bg-emerald-500/20 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300" />
-
-              <Hexagon
-                size={20}
-                className="text-emerald-400 relative z-10"
-              />
+              <Hexagon size={20} className="text-emerald-400 relative z-10" />
             </div>
 
             <div className={`${sidebarCollapsed ? 'hidden' : 'flex'} flex-col min-w-0`}>
@@ -429,8 +436,7 @@ export default function UserLayout({
             {navLinks.map((link) => {
               const isActive =
                 pathname === link.href ||
-                (link.href !== '/dashboard' &&
-                  pathname?.startsWith(link.href));
+                (link.href !== '/dashboard' && pathname?.startsWith(link.href));
 
               const Icon = link.icon;
 
@@ -464,9 +470,7 @@ export default function UserLayout({
 
             <div className={`mt-4 flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3.5 rounded-xl font-bold text-xs text-zinc-600 cursor-not-allowed bg-black/20 ring-1 ring-white/5 relative overflow-hidden`}>
               <div className="absolute top-0 right-0 w-16 h-16 bg-zinc-800/10 rounded-full blur-xl" />
-
               <User size={18} className="opacity-50" />
-
               {!sidebarCollapsed && 'Analytics (Locked)'}
             </div>
           </nav>
@@ -501,6 +505,97 @@ export default function UserLayout({
           </div>
         </aside>
 
+        {/* Mobile Slide-Out Sidebar Drawer */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden fixed inset-0 z-[150] flex">
+            <div
+              className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <aside className="relative z-10 w-[280px] max-w-[82vw] h-full bg-zinc-950 border-r border-white/10 flex flex-col shadow-2xl overflow-y-auto">
+              <div className="p-4 flex items-center justify-between border-b border-white/10">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center">
+                    <Hexagon size={18} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-black text-white leading-tight">Target Gate</div>
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-400">
+                      Navigation Menu
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  aria-label="Close sidebar menu"
+                  className="p-2 rounded-xl bg-white/5 text-zinc-400 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
+                {navLinks.map((link) => {
+                  const isActive =
+                    pathname === link.href ||
+                    (link.href !== '/dashboard' && pathname?.startsWith(link.href));
+                  const Icon = link.icon;
+                  return (
+                    <Link
+                      key={link.name}
+                      href={link.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
+                        isActive
+                          ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30'
+                          : link.highlight
+                            ? 'bg-emerald-500/5 text-emerald-300 ring-1 ring-emerald-500/15 hover:bg-emerald-500/10'
+                            : 'text-zinc-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <Icon
+                        size={19}
+                        className={isActive || link.highlight ? 'text-emerald-400' : 'text-zinc-400'}
+                      />
+                      <span>{link.name}</span>
+                      {link.highlight && !isActive && (
+                        <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-300">
+                          CBT
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </nav>
+
+              <div className="p-3 border-t border-white/10 space-y-2">
+                <button
+                  onClick={toggleTheme}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 text-xs font-bold text-zinc-300 hover:text-amber-400"
+                >
+                  {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+                  {theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/branch-selection?change=1');
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 text-xs font-bold text-zinc-300 hover:text-emerald-400"
+                >
+                  <ArrowLeftRight size={15} /> Switch Branch
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 text-xs font-bold text-red-400"
+                >
+                  <LogOut size={15} /> Disconnect
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+
         {/* Desktop Leaderboard Shortcut */}
         <Link
           href="/leaderboard"
@@ -512,53 +607,48 @@ export default function UserLayout({
           </span>
         </Link>
 
-        {/* Mobile Header */}
-        <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950/80 backdrop-blur-xl border-b border-white/5 z-40 flex items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shadow-inner">
-              <Hexagon
-                size={16}
-                className="text-emerald-400"
-              />
-            </div>
+        {/* Mobile Header with Hamburger Drawer Toggle + Direct PSC Exam Quick Button */}
+        <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950/95 backdrop-blur-xl border-b border-white/10 z-40 flex items-center justify-between px-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open navigation sidebar"
+              className="p-2 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20"
+            >
+              <Menu size={20} />
+            </button>
 
-            <span className="text-sm font-black text-zinc-100 tracking-tight">
+            <span className="text-sm font-black text-zinc-100 tracking-tight truncate">
               Target Gate
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <Link
+              href="/psc-exam"
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-black transition ${
+                pathname?.startsWith('/psc-exam')
+                  ? 'bg-emerald-500 text-black'
+                  : 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30'
+              }`}
+            >
+              <Award size={14} /> PSC Exam
+            </Link>
+
             <button
               onClick={toggleTheme}
               title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              className="p-2 text-zinc-500 hover:text-amber-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors"
+              className="p-2 text-zinc-400 hover:text-amber-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors"
             >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            <button
-              onClick={() => router.push('/leaderboard')}
-              title="Leaderboard"
-              className="p-2 text-zinc-500 hover:text-amber-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors"
-            >
-              <Trophy size={16} />
-            </button>
-
-            <button
-              onClick={() =>
-                router.push('/branch-selection?change=1')
-              }
-              title="Switch Branch"
-              className="p-2 text-zinc-500 hover:text-emerald-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors"
-            >
-              <ArrowLeftRight size={16} />
+              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
             </button>
 
             <button
               onClick={handleLogout}
               title="Disconnect"
-              className="p-2 text-zinc-500 hover:text-red-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors"
+              className="p-2 text-zinc-400 hover:text-red-400 bg-white/5 rounded-lg ring-1 ring-white/5 transition-colors"
             >
-              <LogOut size={16} />
+              <LogOut size={15} />
             </button>
           </div>
         </div>
@@ -568,14 +658,19 @@ export default function UserLayout({
           {children}
         </main>
 
-        {/* Mobile Bottom Navigation */}
-        <div className="lg:hidden fixed bottom-5 left-4 right-4 z-50 pointer-events-none">
-          <nav className="pointer-events-auto max-w-md mx-auto bg-zinc-950/90 backdrop-blur-2xl ring-1 ring-white/10 p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex items-center justify-between gap-1 overflow-x-auto">
-            {navLinks.map((link) => {
+        {/* Mobile Bottom Navigation Bar */}
+        <div className="lg:hidden fixed bottom-3 left-3 right-3 z-50 pointer-events-none">
+          <nav className="pointer-events-auto max-w-md mx-auto bg-zinc-950/95 backdrop-blur-2xl ring-1 ring-white/15 p-1.5 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] flex items-center justify-between gap-1 overflow-x-auto scrollbar-none">
+            {[
+              navLinks[0], // Dashboard
+              navLinks[1], // PSC Exam Test
+              navLinks[2], // Test Series
+              navLinks[3], // Question Bank
+              navLinks[4], // Curriculum
+            ].map((link) => {
               const isActive =
                 pathname === link.href ||
-                (link.href !== '/dashboard' &&
-                  pathname?.startsWith(link.href));
+                (link.href !== '/dashboard' && pathname?.startsWith(link.href));
 
               const Icon = link.icon;
 
@@ -583,37 +678,38 @@ export default function UserLayout({
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`flex flex-col items-center justify-center gap-1 min-w-[56px] w-full py-2.5 rounded-xl transition-all duration-300 relative overflow-hidden ${
+                  className={`flex flex-col items-center justify-center gap-1 min-w-[62px] flex-1 py-2 px-1 rounded-xl transition-all duration-200 relative overflow-hidden ${
                     isActive
-                      ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 shadow-inner'
-                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                      ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 shadow-inner'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
                   }`}
                 >
                   {isActive && (
-                    <div className="absolute top-0 w-8 h-1 bg-emerald-500 rounded-b-full shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                    <div className="absolute top-0 w-7 h-1 bg-emerald-500 rounded-b-full" />
                   )}
 
                   <Icon
                     size={18}
-                    className={
-                      isActive
-                        ? 'text-emerald-400'
-                        : 'text-zinc-400'
-                    }
+                    className={isActive ? 'text-emerald-400' : 'text-zinc-400'}
                   />
 
                   <span
-                    className={`text-[8px] font-bold tracking-wider uppercase truncate max-w-[54px] ${
-                      isActive
-                        ? 'text-emerald-400'
-                        : 'text-zinc-500'
+                    className={`text-[9px] font-black tracking-tight truncate max-w-[64px] ${
+                      isActive ? 'text-emerald-400' : 'text-zinc-400'
                     }`}
                   >
-                    {link.name}
+                    {link.name === 'PSC Exam Test' ? 'PSC Exam' : link.name}
                   </span>
                 </Link>
               );
             })}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="flex flex-col items-center justify-center gap-1 min-w-[54px] py-2 px-1 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5"
+            >
+              <Menu size={18} />
+              <span className="text-[9px] font-black">More</span>
+            </button>
           </nav>
         </div>
       </div>
