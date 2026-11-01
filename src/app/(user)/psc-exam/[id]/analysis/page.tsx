@@ -21,6 +21,8 @@ import {
   Sun,
   Moon,
   BookOpen,
+  LayoutGrid,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -48,6 +50,7 @@ export default function PscAnalysisPage() {
   const [filter, setFilter] = useState<Filter>('overview');
   const [openSolution, setOpenSolution] = useState<Record<string, boolean>>({});
   const [lightMode, setLightMode] = useState(false);
+  const [showMobileNav, setShowMobileNav] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -112,19 +115,21 @@ export default function PscAnalysisPage() {
 
   if (!data?.attempts?.length) {
     return (
-      <div className="max-w-3xl mx-auto p-6 lg:p-10">
+      <div className="max-w-3xl mx-auto p-5 sm:p-10">
         <button
           onClick={() => router.push('/psc-exam')}
-          className="flex items-center gap-2 text-zinc-400 hover:text-white mb-8"
+          className="flex items-center gap-2 text-zinc-400 hover:text-white mb-8 text-sm font-bold"
         >
           <ArrowLeft size={18} /> Back to PSC Exam Tests
         </button>
-        <div className="bg-zinc-950 border border-white/10 rounded-3xl p-10 text-center">
-          <h1 className="text-2xl font-black text-white">No Attempts Yet</h1>
-          <p className="text-zinc-500 mt-2">Start this exam to generate your analysis.</p>
+        <div className="bg-zinc-950 border border-white/10 rounded-3xl p-8 sm:p-10 text-center">
+          <h1 className="text-xl sm:text-2xl font-black text-white">No Attempts Yet</h1>
+          <p className="text-zinc-500 mt-2 text-sm">
+            Start this exam to generate your solution analysis.
+          </p>
           <button
             onClick={() => router.push(`/psc-exam/${id}`)}
-            className="mt-6 bg-emerald-500 text-black font-black px-6 py-3 rounded-xl"
+            className="mt-6 bg-emerald-500 text-black font-black px-6 py-3 rounded-xl text-sm"
           >
             Start Exam
           </button>
@@ -139,50 +144,70 @@ export default function PscAnalysisPage() {
     { key: 'correct', label: 'Correct', count: attempt?.correct },
     { key: 'incorrect', label: 'Incorrect', count: attempt?.incorrect },
     { key: 'unattempted', label: 'Unattempted', count: attempt?.notAnswered },
-    { key: 'marked', label: 'Marked For Review', count: attempt?.markedCount },
+    { key: 'marked', label: 'Review', count: attempt?.markedCount },
   ];
+
+  const expandAllSolutions = () => {
+    const all: Record<string, boolean> = {};
+    (attempt?.review || []).forEach((r: any) => {
+      all[r.id] = true;
+    });
+    setOpenSolution(all);
+  };
+
+  const collapseAllSolutions = () => {
+    setOpenSolution({});
+  };
 
   return (
     <div
       className={
         lightMode
-          ? 'min-h-screen bg-slate-100 text-slate-900'
-          : 'min-h-screen bg-[#181818] text-white'
+          ? 'min-h-screen bg-slate-100 text-slate-900 pb-20'
+          : 'min-h-screen bg-[#181818] text-white pb-20'
       }
     >
-      <div className="w-full min-h-screen px-4 sm:px-6 lg:px-8 py-5 lg:py-7">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-7">
+        {/* Top Action Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4">
           <button
             onClick={() => router.push('/psc-exam')}
             className={
               lightMode
-                ? 'inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition'
-                : 'inline-flex items-center gap-2 text-sm font-bold text-zinc-300 hover:text-white transition'
+                ? 'inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 transition'
+                : 'inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-zinc-300 hover:text-white transition'
             }
           >
-            <ArrowLeft size={18} /> Back to PSC Exam Tests
+            <ArrowLeft size={17} /> Back to PSC Exams
           </button>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => router.push(`/psc-exam/${id}`)}
-              className="rounded-lg bg-emerald-400 text-zinc-950 px-5 py-2.5 text-sm font-black hover:bg-emerald-300 transition"
+              onClick={() => setShowMobileNav(true)}
+              className="lg:hidden inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-400"
             >
-              Reattempt Exam
+              <LayoutGrid size={14} /> Navigator
+            </button>
+            <button
+              onClick={() => router.push(`/psc-exam/${id}`)}
+              className="rounded-lg bg-emerald-400 text-zinc-950 px-3.5 sm:px-5 py-2 text-xs sm:text-sm font-black hover:bg-emerald-300 transition"
+            >
+              Reattempt
             </button>
             <button
               onClick={() => setLightMode((v) => !v)}
               className={
                 lightMode
-                  ? 'inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50'
-                  : 'inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-black text-white hover:bg-white/10'
+                  ? 'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 sm:px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50'
+                  : 'inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 sm:px-3 py-2 text-xs font-black text-white hover:bg-white/10'
               }
             >
-              {lightMode ? <Moon size={16} /> : <Sun size={16} />}{' '}
-              {lightMode ? 'Dark' : 'Light'}
+              {lightMode ? <Moon size={15} /> : <Sun size={15} />}
+              <span className="hidden sm:inline">{lightMode ? 'Dark' : 'Light'}</span>
             </button>
           </div>
         </div>
 
+        {/* Scrollable Filter Tabs */}
         <div
           className={
             lightMode
@@ -194,7 +219,7 @@ export default function PscAnalysisPage() {
             <button
               key={tab.key}
               onClick={() => setFilter(tab.key)}
-              className={`relative whitespace-nowrap px-4 py-3 text-sm font-bold transition ${
+              className={`relative whitespace-nowrap px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold transition ${
                 filter === tab.key
                   ? lightMode
                     ? 'text-slate-900'
@@ -205,13 +230,13 @@ export default function PscAnalysisPage() {
               }`}
             >
               {tab.label}
-              {typeof tab.count === 'number' && tab.key !== 'all' && tab.key !== 'overview' ? (
-                <span className="ml-1.5 text-xs opacity-60">{tab.count}</span>
+              {typeof tab.count === 'number' && tab.key !== 'overview' ? (
+                <span className="ml-1 text-[11px] opacity-60">({tab.count})</span>
               ) : null}
               {filter === tab.key && (
                 <span
                   className={`absolute left-0 right-0 bottom-0 h-0.5 ${
-                    lightMode ? 'bg-slate-900' : 'bg-white'
+                    lightMode ? 'bg-slate-900' : 'bg-emerald-400'
                   }`}
                 />
               )}
@@ -219,9 +244,10 @@ export default function PscAnalysisPage() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 py-5">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+        {/* Exam Title & Attempt Selector */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4 sm:py-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
               {data.test.category && (
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase">
                   {data.test.category}
@@ -233,23 +259,40 @@ export default function PscAnalysisPage() {
                 </span>
               )}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{data.test.title}</h1>
-            <p className="text-zinc-500 text-sm mt-1">
+            <h1 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight break-words">
+              {data.test.title}
+            </h1>
+            <p className="text-zinc-500 text-xs sm:text-sm mt-1">
               Attempt {attempt?.attemptNumber} ·{' '}
               {new Date(attempt?.submittedAt).toLocaleString()}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-black text-emerald-400">
-              COMPLETED
-            </span>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={expandAllSolutions}
+              className="rounded-lg bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 text-xs font-black text-emerald-400 hover:bg-emerald-500/25"
+            >
+              Show All Solutions
+            </button>
+            <button
+              type="button"
+              onClick={collapseAllSolutions}
+              className={
+                lightMode
+                  ? 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700'
+                  : 'rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs font-bold text-zinc-300'
+              }
+            >
+              Hide All
+            </button>
             <select
               value={attempt?.attemptId || ''}
               onChange={(e) => setSelectedId(e.target.value)}
               className={
                 lightMode
-                  ? 'rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 outline-none'
-                  : 'rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs font-bold text-white outline-none'
+                  ? 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 outline-none'
+                  : 'rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white outline-none'
               }
             >
               {(data.attempts || []).map((a: any) => (
@@ -263,11 +306,11 @@ export default function PscAnalysisPage() {
 
         {filter === 'overview' ? (
           <>
-            <SectionTitle icon={<BarChart3 size={18} />} title="Question Stats" />
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+            <SectionTitle icon={<BarChart3 size={18} />} title="Performance Summary" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 sm:gap-3">
               <Stat
                 lightMode={lightMode}
-                icon={<Trophy size={17} />}
+                icon={<Trophy size={16} />}
                 label="Your Score"
                 value={`${Number(attempt.score).toFixed(2)}`}
                 sub={`/${attempt.maxMarks}`}
@@ -275,7 +318,7 @@ export default function PscAnalysisPage() {
               />
               <Stat
                 lightMode={lightMode}
-                icon={<Target size={17} />}
+                icon={<Target size={16} />}
                 label="Rank"
                 value={`${attempt.rank ?? '—'}`}
                 sub={attempt.totalRanked ? `/${attempt.totalRanked}` : ''}
@@ -283,7 +326,7 @@ export default function PscAnalysisPage() {
               />
               <Stat
                 lightMode={lightMode}
-                icon={<Percent size={17} />}
+                icon={<Percent size={16} />}
                 label="Percentile"
                 value={pct(attempt.percentile)}
                 sub=""
@@ -291,7 +334,7 @@ export default function PscAnalysisPage() {
               />
               <Stat
                 lightMode={lightMode}
-                icon={<CheckCircle2 size={17} />}
+                icon={<CheckCircle2 size={16} />}
                 label="Correct"
                 value={String(attempt.correct)}
                 sub=""
@@ -299,7 +342,7 @@ export default function PscAnalysisPage() {
               />
               <Stat
                 lightMode={lightMode}
-                icon={<XCircle size={17} />}
+                icon={<XCircle size={16} />}
                 label="Incorrect"
                 value={String(attempt.incorrect)}
                 sub=""
@@ -307,7 +350,7 @@ export default function PscAnalysisPage() {
               />
               <Stat
                 lightMode={lightMode}
-                icon={<MinusCircle size={17} />}
+                icon={<MinusCircle size={16} />}
                 label="Unattempted"
                 value={String(attempt.notAnswered)}
                 sub=""
@@ -315,7 +358,7 @@ export default function PscAnalysisPage() {
               />
               <Stat
                 lightMode={lightMode}
-                icon={<CircleDot size={17} />}
+                icon={<CircleDot size={16} />}
                 label="Accuracy"
                 value={pct(attempt.accuracy)}
                 sub=""
@@ -323,18 +366,18 @@ export default function PscAnalysisPage() {
               />
             </div>
 
-            <div className="mt-8 grid lg:grid-cols-[1.4fr_.6fr] gap-4">
+            <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1.4fr_.6fr] gap-4">
               <div
                 className={
                   lightMode
-                    ? 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm'
-                    : 'rounded-2xl border border-white/10 bg-[#222] p-5'
+                    ? 'rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm'
+                    : 'rounded-2xl border border-white/10 bg-[#222] p-4 sm:p-5'
                 }
               >
-                <div className="flex items-center justify-between gap-4 mb-5">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <div>
-                    <h2 className="font-black text-lg">Performance Breakdown</h2>
-                    <p className="text-xs text-zinc-500 mt-1">
+                    <h2 className="font-black text-base sm:text-lg">Performance Breakdown</h2>
+                    <p className="text-xs text-zinc-500 mt-0.5">
                       Across all {attempt.review.length} questions
                     </p>
                   </div>
@@ -347,8 +390,8 @@ export default function PscAnalysisPage() {
                 <div
                   className={
                     lightMode
-                      ? 'h-52 flex items-end justify-around gap-8 px-5 border-b border-slate-200'
-                      : 'h-52 flex items-end justify-around gap-8 px-5 border-b border-white/5'
+                      ? 'h-44 sm:h-52 flex items-end justify-around gap-3 sm:gap-8 px-2 sm:px-5 border-b border-slate-200'
+                      : 'h-44 sm:h-52 flex items-end justify-around gap-3 sm:gap-8 px-2 sm:px-5 border-b border-white/5'
                   }
                 >
                   <Bar
@@ -374,12 +417,12 @@ export default function PscAnalysisPage() {
               <div
                 className={
                   lightMode
-                    ? 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm'
-                    : 'rounded-2xl border border-white/10 bg-[#222] p-5'
+                    ? 'rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm'
+                    : 'rounded-2xl border border-white/10 bg-[#222] p-4 sm:p-5'
                 }
               >
-                <h2 className="font-black text-lg">Attempt Summary</h2>
-                <div className="mt-4 space-y-3 text-sm">
+                <h2 className="font-black text-base sm:text-lg">Attempt Summary</h2>
+                <div className="mt-4 space-y-3 text-xs sm:text-sm">
                   <SummaryRow
                     lightMode={lightMode}
                     label="Total time"
@@ -411,13 +454,13 @@ export default function PscAnalysisPage() {
               </div>
             </div>
 
-            <div className="mt-8 flex items-center justify-between gap-3">
-              <SectionTitle icon={<ListChecks size={18} />} title="Question-wise Analysis" />
+            <div className="mt-7 flex items-center justify-between gap-3">
+              <SectionTitle icon={<ListChecks size={18} />} title="Question-wise Solutions" />
               <button
                 onClick={() => setFilter('all')}
-                className="text-sm font-bold text-emerald-400 hover:text-emerald-300"
+                className="text-xs sm:text-sm font-bold text-emerald-400 hover:text-emerald-300"
               >
-                View All Questions →
+                Filter View →
               </button>
             </div>
             <QuestionList
@@ -441,21 +484,76 @@ export default function PscAnalysisPage() {
                 lightMode={lightMode}
               />
             ) : (
-              <div className="rounded-2xl border border-white/10 bg-[#222] p-12 text-center text-zinc-500">
+              <div className="rounded-2xl border border-white/10 bg-[#222] p-10 text-center text-zinc-500 text-sm">
                 No questions in this category.
               </div>
             )}
           </>
         )}
       </div>
+
+      {/* Mobile Slide-Over Question Navigator Drawer */}
+      {showMobileNav && (
+        <div className="lg:hidden fixed inset-0 z-[120] flex justify-end">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowMobileNav(false)}
+          />
+          <div
+            className={`relative z-10 w-[300px] max-w-[85vw] h-full overflow-y-auto p-4 shadow-2xl ${
+              lightMode ? 'bg-white text-slate-900' : 'bg-[#0f172a] text-white'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-current/10">
+              <span className="font-black text-sm">
+                Question Navigator ({filteredReview.length})
+              </span>
+              <button
+                onClick={() => setShowMobileNav(false)}
+                className="p-1.5 rounded-lg bg-current/10"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {filteredReview.map((r: any) => (
+                <button
+                  key={r.id}
+                  onClick={() => {
+                    setShowMobileNav(false);
+                    document
+                      .getElementById(`analysis-question-${r.id}`)
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                  className={`h-9 rounded-lg border text-xs font-black transition ${
+                    r.result === 'correct'
+                      ? lightMode
+                        ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+                        : 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
+                      : r.result === 'incorrect'
+                        ? lightMode
+                          ? 'border-red-300 text-red-700 bg-red-50'
+                          : 'border-red-500/40 text-red-300 bg-red-500/10'
+                        : lightMode
+                          ? 'border-slate-300 text-slate-600 bg-slate-50'
+                          : 'border-white/15 text-zinc-400 bg-white/[.02]'
+                  }`}
+                >
+                  {r.number}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function QuestionList({ review, openSolution, setOpenSolution, lightMode }: any) {
   return (
-    <div className="grid lg:grid-cols-[minmax(0,1fr)_220px] gap-5 items-start">
-      <div className="space-y-4">
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_230px] gap-5 items-start">
+      <div className="space-y-4 min-w-0">
         {review.map((r: any) => (
           <QuestionCard
             key={r.id}
@@ -503,7 +601,7 @@ function QuestionNavigator({ review, lightMode }: any) {
             {review.length}
           </span>
         </div>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-5 gap-2 max-h-[420px] overflow-y-auto pr-1">
           {review.map((r: any) => (
             <button
               key={r.id}
@@ -569,41 +667,42 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
       } overflow-hidden shadow-sm`}
     >
       <div
-        className={`px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3 ${
+        className={`px-3.5 sm:px-5 py-3.5 border-b flex flex-wrap items-center justify-between gap-2.5 ${
           lightMode ? 'border-slate-200' : 'border-white/10'
         }`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <div
-            className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-sm ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm ${
               lightMode ? 'bg-slate-100 text-slate-800' : 'bg-white/5'
             }`}
           >
             Q{r.number}
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-black text-sm">Question {r.number}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-black text-xs sm:text-sm">Question {r.number}</span>
               {r.topic && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-400">
-                  <BookOpen size={11} /> {r.topic}
+                  <BookOpen size={10} /> {r.topic}
                 </span>
               )}
             </div>
             <div
-              className={`text-[11px] uppercase tracking-widest mt-0.5 ${
+              className={`text-[10px] sm:text-[11px] uppercase tracking-wider mt-0.5 ${
                 lightMode ? 'text-slate-500' : 'text-zinc-500'
               }`}
             >
-              {r.type} · +{Number(r.positiveMarks || 0).toFixed(2)} marks
+              {r.type} · +{Number(r.positiveMarks || 0).toFixed(2)}
               {Number(r.negativeMarks || 0) > 0
                 ? ` · −${Number(r.negativeMarks).toFixed(2)}`
                 : ''}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 text-xs">
-          <span className={`rounded-full px-3 py-1.5 font-black ${statusClass}`}>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${statusClass}`}>
             {r.result === 'correct'
               ? '✓ Correct'
               : r.result === 'incorrect'
@@ -611,13 +710,13 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
                 : '— Unattempted'}
           </span>
           {r.markedForReview && (
-            <span className="rounded-full px-3 py-1.5 bg-violet-500/10 text-violet-600 font-bold">
-              <Flag size={12} className="inline mr-1" />
+            <span className="rounded-full px-2.5 py-1 bg-violet-500/10 text-violet-500 text-[11px] font-bold">
+              <Flag size={11} className="inline mr-1" />
               Review
             </span>
           )}
-          <span className={lightMode ? 'text-slate-500' : 'text-zinc-500'}>
-            <Clock3 size={13} className="inline mr-1" />
+          <span className={`text-[11px] ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>
+            <Clock3 size={12} className="inline mr-1" />
             {fmt(r.timeSpentSeconds)}
           </span>
           <b className={Number(r.marks) >= 0 ? 'text-emerald-500' : 'text-red-500'}>
@@ -627,9 +726,9 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
         </div>
       </div>
 
-      <div className="p-5 lg:p-7">
+      <div className="p-4 sm:p-6">
         <div
-          className={`prose max-w-none text-[15px] leading-7 ${
+          className={`prose max-w-none text-sm sm:text-[15px] leading-7 break-words ${
             lightMode ? 'text-slate-800' : 'prose-invert'
           }`}
           dangerouslySetInnerHTML={{
@@ -638,7 +737,7 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
         />
 
         {r.options?.length ? (
-          <div className="mt-6 space-y-2.5">
+          <div className="mt-5 space-y-2">
             {r.options.map((o: any) => {
               const optKey = String(o.key || o.id || '').toUpperCase();
               const isCorrect = answer.has(optKey);
@@ -658,10 +757,10 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
               return (
                 <div
                   key={optKey}
-                  className={`flex items-start gap-3 rounded-xl border p-3.5 ${optionClass}`}
+                  className={`flex items-start gap-2.5 sm:gap-3 rounded-xl border p-3 ${optionClass}`}
                 >
                   <span
-                    className={`mt-0.5 w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${
+                    className={`mt-0.5 w-6 h-6 sm:w-7 sm:h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${
                       open && isCorrect
                         ? 'bg-emerald-500 text-black'
                         : open && isSelected && !isCorrect
@@ -674,7 +773,7 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
                     {optKey}
                   </span>
                   <div
-                    className={`min-w-0 flex-1 text-sm leading-6 ${
+                    className={`min-w-0 flex-1 text-xs sm:text-sm leading-6 break-words ${
                       lightMode ? 'text-slate-800' : ''
                     }`}
                     dangerouslySetInnerHTML={{
@@ -682,10 +781,10 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
                     }}
                   />
                   {open && (
-                    <div className="shrink-0 text-[10px] font-black uppercase tracking-wide text-right">
-                      {isCorrect && <div className="text-emerald-500">Correct Answer</div>}
+                    <div className="shrink-0 text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-right">
+                      {isCorrect && <div className="text-emerald-500">Correct</div>}
                       {isSelected && !isCorrect && (
-                        <div className="text-red-500">Your Answer</div>
+                        <div className="text-red-500">Yours</div>
                       )}
                     </div>
                   )}
@@ -694,7 +793,7 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
             })}
           </div>
         ) : (
-          <div className={`mt-5 text-sm ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>
+          <div className={`mt-4 text-xs sm:text-sm ${lightMode ? 'text-slate-500' : 'text-zinc-400'}`}>
             Your numerical answer:{' '}
             <b className={lightMode ? 'text-slate-900' : 'text-white'}>
               {r.selected?.length ? r.selected.join(', ') : 'Not answered'}
@@ -703,11 +802,11 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
         )}
 
         <div
-          className={`mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+          className={`mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border px-3.5 py-3 ${
             lightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-[#1b1b1b]'
           }`}
         >
-          <div className={`text-sm ${lightMode ? 'text-slate-600' : 'text-zinc-400'}`}>
+          <div className={`text-xs sm:text-sm ${lightMode ? 'text-slate-600' : 'text-zinc-400'}`}>
             {open ? (
               <>
                 Correct answer:{' '}
@@ -729,72 +828,71 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
               </>
             ) : (
               <span>
-                Answer hidden · Press{' '}
+                Answer hidden · Tap{' '}
                 <b className={lightMode ? 'text-slate-900' : 'text-white'}>
                   Show Solution
                 </b>{' '}
-                to reveal the correct answer
+                to view answer
                 {hasExplanationContent ? ' & explanation' : ''}.
               </span>
             )}
           </div>
           <button
             onClick={onToggle}
-            className="inline-flex items-center gap-2 rounded-lg bg-white text-zinc-900 px-4 py-2.5 text-sm font-black hover:bg-emerald-300 transition"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-white text-zinc-900 px-4 py-2 text-xs sm:text-sm font-black hover:bg-emerald-300 transition shrink-0"
           >
-            {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{' '}
+            {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{' '}
             {open ? 'Hide Solution' : 'Show Solution'}
           </button>
         </div>
 
         {open && (
           <div
-            className={`mt-4 rounded-xl border p-4 sm:p-5 space-y-4 ${
+            className={`mt-3.5 rounded-xl border p-3.5 sm:p-5 space-y-3.5 ${
               lightMode
                 ? 'border-emerald-500/30 bg-emerald-50'
                 : 'border-emerald-500/20 bg-emerald-500/5'
             }`}
           >
             <div
-              className={`rounded-xl border p-4 ${
+              className={`rounded-xl border p-3.5 ${
                 lightMode
                   ? 'border-emerald-500/20 bg-white'
                   : 'border-white/10 bg-[#1b1b1b]'
               }`}
             >
               <div
-                className={`text-xs font-black uppercase tracking-widest mb-1 ${
+                className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
                   lightMode ? 'text-slate-500' : 'text-zinc-400'
                 }`}
               >
                 Correct Answer
               </div>
-              <div className="text-lg font-black text-emerald-500">
+              <div className="text-base sm:text-lg font-black text-emerald-500">
                 {r.answer?.length ? r.answer.join(', ') : '—'}
               </div>
             </div>
 
-            {/* Optional Explanation & Solution Image */}
             {hasExplanationContent && (
               <div
-                className={`rounded-xl border p-4 space-y-3 ${
+                className={`rounded-xl border p-3.5 sm:p-4 space-y-3 ${
                   lightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#1b1b1b]'
                 }`}
               >
                 <div
-                  className={`text-xs font-black uppercase tracking-widest ${
+                  className={`text-[10px] font-black uppercase tracking-widest ${
                     lightMode ? 'text-slate-500' : 'text-emerald-400'
                   }`}
                 >
                   Explanation
                 </div>
                 {r.explanation ? (
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                  <div className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
                     {r.explanation}
                   </div>
                 ) : r.solutionHtml ? (
                   <div
-                    className="prose max-w-none text-sm leading-6 dark:prose-invert"
+                    className="prose max-w-none text-xs sm:text-sm leading-6 dark:prose-invert break-words"
                     dangerouslySetInnerHTML={{ __html: r.solutionHtml }}
                   />
                 ) : null}
@@ -803,7 +901,7 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
                     <img
                       src={r.solutionImageUrl}
                       alt="Solution Visual"
-                      className="max-w-full max-h-[420px] h-auto rounded-xl border border-white/10 object-contain"
+                      className="max-w-full max-h-[380px] h-auto rounded-xl border border-white/10 object-contain"
                     />
                   </div>
                 )}
@@ -818,9 +916,9 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
 
 function SectionTitle({ icon, title }: any) {
   return (
-    <div className="flex items-center gap-2 mb-4">
+    <div className="flex items-center gap-2 mb-3.5">
       <span className="text-emerald-400">{icon}</span>
-      <h2 className="text-lg font-black">{title}</h2>
+      <h2 className="text-base sm:text-lg font-black">{title}</h2>
     </div>
   );
 }
@@ -837,20 +935,20 @@ function Stat({ icon, label, value, sub, tone, lightMode }: any) {
   };
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border p-4 min-h-[126px] ${
+      className={`relative overflow-hidden rounded-2xl border p-3.5 sm:p-4 ${
         lightMode ? 'border-slate-200 bg-white shadow-sm' : 'border-white/10 bg-[#242424]'
       }`}
     >
-      <div className={`w-8 h-8 rounded-lg ${tones[tone]} flex items-center justify-center`}>
+      <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg ${tones[tone]} flex items-center justify-center`}>
         {icon}
       </div>
-      <div className={`text-xs mt-3 ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>
+      <div className={`text-[11px] mt-2.5 ${lightMode ? 'text-slate-500' : 'text-zinc-500'}`}>
         {label}
       </div>
-      <div className="text-2xl font-black mt-1">
+      <div className="text-xl sm:text-2xl font-black mt-0.5 truncate">
         {value}
         <span
-          className={`text-sm font-bold ml-0.5 ${
+          className={`text-xs font-bold ml-0.5 ${
             lightMode ? 'text-slate-400' : 'text-zinc-500'
           }`}
         >
@@ -862,7 +960,7 @@ function Stat({ icon, label, value, sub, tone, lightMode }: any) {
 }
 
 function Bar({ value, label, pct: percent, tone }: any) {
-  const h = Math.max(10, Math.min(92, percent));
+  const h = Math.max(12, Math.min(92, percent));
   const bg: Record<string, string> = {
     green: 'bg-emerald-500',
     red: 'bg-red-500',
@@ -874,14 +972,14 @@ function Bar({ value, label, pct: percent, tone }: any) {
     gray: 'text-zinc-400',
   };
   return (
-    <div className="flex h-full w-28 flex-col items-center justify-end">
-      <div className={`mb-1 text-sm font-black ${text[tone]}`}>{value}</div>
-      <div className={`w-20 rounded-t-lg ${bg[tone]}`} style={{ height: `${h}%` }}>
-        <div className="h-full flex items-center justify-center text-xs font-black text-white">
+    <div className="flex h-full w-20 sm:w-28 flex-col items-center justify-end">
+      <div className={`mb-1 text-xs sm:text-sm font-black ${text[tone]}`}>{value}</div>
+      <div className={`w-14 sm:w-20 rounded-t-lg ${bg[tone]}`} style={{ height: `${h}%` }}>
+        <div className="h-full flex items-center justify-center text-[10px] sm:text-xs font-black text-white">
           {Math.round(percent)}%
         </div>
       </div>
-      <div className="mt-3 text-xs text-zinc-500">{label}</div>
+      <div className="mt-2.5 text-[11px] sm:text-xs text-zinc-500">{label}</div>
     </div>
   );
 }
@@ -898,7 +996,7 @@ function Legend({ dot, text }: any) {
 function SummaryRow({ label, value, good, bad, lightMode }: any) {
   return (
     <div
-      className={`flex items-center justify-between border-b pb-3 ${
+      className={`flex items-center justify-between border-b pb-2.5 ${
         lightMode ? 'border-slate-200' : 'border-white/5'
       }`}
     >
