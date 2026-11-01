@@ -304,7 +304,7 @@ export default function TestRunner() {
 
   if (!started) {
     return (
-      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-5">
+      <div className="min-h-full bg-zinc-950 text-white flex items-start sm:items-center justify-center px-4 py-6 sm:p-6 overflow-y-auto">
         <div className="w-full max-w-3xl">
           <div className="text-center mb-7">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-black text-emerald-400">
