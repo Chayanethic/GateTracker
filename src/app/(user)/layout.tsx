@@ -34,6 +34,7 @@ export default function UserLayout({
   const pathname = usePathname();
 
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [userBranch, setUserBranch] = useState<'ece' | 'cse' | 'psc'>('ece');
   const [showGateDayAnimation, setShowGateDayAnimation] = useState(false);
   const [gateAnimationStage, setGateAnimationStage] =
     useState<'cut' | 'reveal'>('cut');
@@ -62,7 +63,6 @@ export default function UserLayout({
     setSidebarCollapsed(savedSidebar === 'true');
   }, []);
 
-  // Close mobile drawer when route changes
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
@@ -94,6 +94,15 @@ export default function UserLayout({
         return;
       }
 
+      const metaBranch = String(session.user.user_metadata?.branch || '')
+        .toLowerCase()
+        .trim();
+      const localBranch = String(localStorage.getItem('gateTrackerBranch') || '')
+        .toLowerCase()
+        .trim();
+
+      let effectiveBranch = '';
+
       if (pathname !== '/branch-selection') {
         const { data: profile } = await supabase
           .from('user_profiles')
@@ -101,18 +110,41 @@ export default function UserLayout({
           .eq('user_id', session.user.id)
           .maybeSingle();
 
-        if (!profile?.branch) {
+        const dbBranch = String(profile?.branch || '')
+          .toLowerCase()
+          .trim();
+
+        // Priority: if user explicitly chose 'psc' in metadata or localStorage, honor 'psc'; otherwise use dbBranch
+        if (metaBranch === 'psc' || localBranch === 'psc' || dbBranch === 'psc') {
+          effectiveBranch = 'psc';
+        } else if (dbBranch === 'ece' || dbBranch === 'cse') {
+          effectiveBranch = dbBranch;
+        } else if (metaBranch === 'ece' || metaBranch === 'cse') {
+          effectiveBranch = metaBranch;
+        }
+
+        if (!effectiveBranch) {
           router.replace('/branch-selection');
           return;
         }
 
-        localStorage.setItem('gateTrackerBranch', profile.branch);
+        localStorage.setItem('gateTrackerBranch', effectiveBranch);
+        setUserBranch(effectiveBranch as 'ece' | 'cse' | 'psc');
+
+        // If user role is PSC Exam and they land on GATE /dashboard, send them straight to /psc-exam
+        if (effectiveBranch === 'psc' && pathname === '/dashboard') {
+          router.replace('/psc-exam');
+          return;
+        }
+      } else {
+        if (localBranch === 'psc' || metaBranch === 'psc') setUserBranch('psc');
+        else if (localBranch === 'cse' || metaBranch === 'cse') setUserBranch('cse');
       }
 
       setIsAuthorized(true);
 
-      if (isExamRoute || isAnalysisRoute) {
-        setIsAuthorized(true);
+      // Do not show GATE 2027 daily countdown animation for PSC Exam role or inside exam/analysis routes
+      if (effectiveBranch === 'psc' || isExamRoute || isAnalysisRoute || pathname === '/branch-selection') {
         return;
       }
 
@@ -167,7 +199,7 @@ export default function UserLayout({
       }
     };
 
-    verifyUser();
+    void verifyUser();
   }, [router, pathname, isExamRoute, isAnalysisRoute]);
 
   const handleLogout = async () => {
@@ -189,49 +221,56 @@ export default function UserLayout({
     );
   }
 
-  const navLinks = [
-    {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: LayoutDashboard,
-    },
-    {
-      name: 'PSC Exam Test',
-      href: '/psc-exam',
-      icon: Award,
-      highlight: true,
-    },
-    {
-      name: 'Test Series',
-      href: '/test-series',
-      icon: FileQuestion,
-    },
-    {
-      name: 'Question Bank',
-      href: '/question-bank',
-      icon: BookOpen,
-    },
-    {
-      name: 'Curriculum',
-      href: '/resources',
-      icon: BookOpen,
-    },
-    {
-      name: 'Daily HUD',
-      href: '/daily-goal',
-      icon: Target,
-    },
-    {
-      name: 'Daily Tracker',
-      href: '/daily-tracker',
-      icon: ClipboardCheck,
-    },
-    {
-      name: 'Leaderboard',
-      href: '/leaderboard',
-      icon: Trophy,
-    },
-  ];
+  const isPscRole = userBranch === 'psc';
+
+  // Role-based navigation links:
+  // - If user selected PSC Exam role ('psc'): ONLY show "PSC Exam PYQ" in the sidebar!
+  // - If user selected GATE role ('ece' or 'cse'): show the GATE navigation menu.
+  const navLinks = isPscRole
+    ? [
+        {
+          name: 'PSC Exam PYQ',
+          href: '/psc-exam',
+          icon: Award,
+        },
+      ]
+    : [
+        {
+          name: 'Dashboard',
+          href: '/dashboard',
+          icon: LayoutDashboard,
+        },
+        {
+          name: 'Leaderboard',
+          href: '/leaderboard',
+          icon: Trophy,
+        },
+        {
+          name: 'Daily HUD',
+          href: '/daily-goal',
+          icon: Target,
+        },
+        {
+          name: 'Daily Tracker',
+          href: '/daily-tracker',
+          icon: ClipboardCheck,
+        },
+        {
+          name: 'Curriculum',
+          href: '/resources',
+          icon: BookOpen,
+        },
+        {
+          name: 'Test Series',
+          href: '/test-series',
+          icon: FileQuestion,
+        },
+        {
+          name: 'Question Bank',
+          href: '/question-bank',
+          icon: BookOpen,
+        },
+      ];
 
   if (isExamRoute) {
     return (
@@ -329,7 +368,7 @@ export default function UserLayout({
         }
       `}</style>
 
-      {showGateDayAnimation && (
+      {showGateDayAnimation && !isPscRole && (
         <div
           className="fixed inset-0 z-[9999] bg-[#020202] flex items-center justify-center overflow-hidden"
           style={{
@@ -404,15 +443,19 @@ export default function UserLayout({
           <div className={`p-5 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-3 border-b border-white/5`}>
             <div className="w-10 h-10 rounded-[10px] bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center shadow-inner relative overflow-hidden group">
               <div className="absolute inset-0 bg-emerald-500/20 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300" />
-              <Hexagon size={20} className="text-emerald-400 relative z-10" />
+              {isPscRole ? (
+                <Award size={20} className="text-emerald-400 relative z-10" />
+              ) : (
+                <Hexagon size={20} className="text-emerald-400 relative z-10" />
+              )}
             </div>
 
             <div className={`${sidebarCollapsed ? 'hidden' : 'flex'} flex-col min-w-0`}>
               <span className="text-sm font-black text-zinc-100 tracking-tight leading-tight">
-                Target Gate Platform
+                {isPscRole ? 'PSC Exam Portal' : 'Target Gate Platform'}
               </span>
-              <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
-                Neural Engine
+              <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-400">
+                {isPscRole ? 'PYQ & Mock Engine' : `GATE ${userBranch.toUpperCase()}`}
               </span>
             </div>
 
@@ -429,7 +472,7 @@ export default function UserLayout({
           <nav className="flex-1 px-3 py-6 flex flex-col gap-2 overflow-y-auto">
             {!sidebarCollapsed && (
               <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2 px-2">
-                Main Menu
+                {isPscRole ? 'PSC Exam Menu' : 'Main Menu'}
               </span>
             )}
 
@@ -468,11 +511,13 @@ export default function UserLayout({
               );
             })}
 
-            <div className={`mt-4 flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3.5 rounded-xl font-bold text-xs text-zinc-600 cursor-not-allowed bg-black/20 ring-1 ring-white/5 relative overflow-hidden`}>
-              <div className="absolute top-0 right-0 w-16 h-16 bg-zinc-800/10 rounded-full blur-xl" />
-              <User size={18} className="opacity-50" />
-              {!sidebarCollapsed && 'Analytics (Locked)'}
-            </div>
+            {!isPscRole && (
+              <div className={`mt-4 flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3.5 rounded-xl font-bold text-xs text-zinc-600 cursor-not-allowed bg-black/20 ring-1 ring-white/5 relative overflow-hidden`}>
+                <div className="absolute top-0 right-0 w-16 h-16 bg-zinc-800/10 rounded-full blur-xl" />
+                <User size={18} className="opacity-50" />
+                {!sidebarCollapsed && 'Analytics (Locked)'}
+              </div>
+            )}
           </nav>
 
           <div className="p-4 border-t border-white/5 bg-white/[0.01] space-y-2">
@@ -487,11 +532,11 @@ export default function UserLayout({
 
             <button
               onClick={() => router.push('/branch-selection?change=1')}
-              title="Switch Branch"
+              title="Switch Role / Branch"
               className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} px-4 py-3 rounded-xl font-bold transition-all duration-300 text-[11px] uppercase tracking-widest text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 ring-1 ring-transparent hover:ring-emerald-500/20`}
             >
               <ArrowLeftRight size={16} />
-              {!sidebarCollapsed && 'Switch Branch'}
+              {!sidebarCollapsed && 'Switch Role'}
             </button>
 
             <button
@@ -516,12 +561,18 @@ export default function UserLayout({
               <div className="p-4 flex items-center justify-between border-b border-white/10">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20 flex items-center justify-center">
-                    <Hexagon size={18} className="text-emerald-400" />
+                    {isPscRole ? (
+                      <Award size={18} className="text-emerald-400" />
+                    ) : (
+                      <Hexagon size={18} className="text-emerald-400" />
+                    )}
                   </div>
                   <div>
-                    <div className="text-sm font-black text-white leading-tight">Target Gate</div>
+                    <div className="text-sm font-black text-white leading-tight">
+                      {isPscRole ? 'PSC Exam Portal' : 'Target Gate'}
+                    </div>
                     <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-400">
-                      Navigation Menu
+                      {isPscRole ? 'PSC Exam PYQ' : `GATE ${userBranch.toUpperCase()}`}
                     </div>
                   </div>
                 </div>
@@ -548,21 +599,14 @@ export default function UserLayout({
                       className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
                         isActive
                           ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30'
-                          : link.highlight
-                            ? 'bg-emerald-500/5 text-emerald-300 ring-1 ring-emerald-500/15 hover:bg-emerald-500/10'
-                            : 'text-zinc-300 hover:text-white hover:bg-white/5'
+                          : 'text-zinc-300 hover:text-white hover:bg-white/5'
                       }`}
                     >
                       <Icon
                         size={19}
-                        className={isActive || link.highlight ? 'text-emerald-400' : 'text-zinc-400'}
+                        className={isActive ? 'text-emerald-400' : 'text-zinc-400'}
                       />
                       <span>{link.name}</span>
-                      {link.highlight && !isActive && (
-                        <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-300">
-                          CBT
-                        </span>
-                      )}
                     </Link>
                   );
                 })}
@@ -583,7 +627,7 @@ export default function UserLayout({
                   }}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 text-xs font-bold text-zinc-300 hover:text-emerald-400"
                 >
-                  <ArrowLeftRight size={15} /> Switch Branch
+                  <ArrowLeftRight size={15} /> Switch Role
                 </button>
                 <button
                   onClick={handleLogout}
@@ -596,18 +640,20 @@ export default function UserLayout({
           </div>
         )}
 
-        {/* Desktop Leaderboard Shortcut */}
-        <Link
-          href="/leaderboard"
-          className="hidden lg:flex fixed top-5 right-6 z-40 items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-950/90 backdrop-blur-xl border border-white/10 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/30 shadow-[0_10px_35px_rgba(0,0,0,0.45)] transition-all"
-        >
-          <Trophy size={16} className="text-amber-400" />
-          <span className="text-[10px] font-black uppercase tracking-widest">
-            Leaderboard
-          </span>
-        </Link>
+        {/* Desktop Leaderboard Shortcut (Only for GATE ECE/CSE roles) */}
+        {!isPscRole && (
+          <Link
+            href="/leaderboard"
+            className="hidden lg:flex fixed top-5 right-6 z-40 items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-950/90 backdrop-blur-xl border border-white/10 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/30 shadow-[0_10px_35px_rgba(0,0,0,0.45)] transition-all"
+          >
+            <Trophy size={16} className="text-amber-400" />
+            <span className="text-[10px] font-black uppercase tracking-widest">
+              Leaderboard
+            </span>
+          </Link>
+        )}
 
-        {/* Mobile Header with Hamburger Drawer Toggle + Direct PSC Exam Quick Button */}
+        {/* Mobile Header */}
         <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950/95 backdrop-blur-xl border-b border-white/10 z-40 flex items-center justify-between px-3">
           <div className="flex items-center gap-2">
             <button
@@ -619,21 +665,18 @@ export default function UserLayout({
             </button>
 
             <span className="text-sm font-black text-zinc-100 tracking-tight truncate">
-              Target Gate
+              {isPscRole ? 'PSC Exam PYQ' : 'Target Gate'}
             </span>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <Link
-              href="/psc-exam"
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-black transition ${
-                pathname?.startsWith('/psc-exam')
-                  ? 'bg-emerald-500 text-black'
-                  : 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30'
-              }`}
+            <button
+              onClick={() => router.push('/branch-selection?change=1')}
+              title="Switch Role"
+              className="px-2.5 py-1.5 rounded-lg bg-white/5 ring-1 ring-white/10 text-[11px] font-bold text-zinc-300 hover:text-emerald-400 flex items-center gap-1"
             >
-              <Award size={14} /> PSC Exam
-            </Link>
+              <ArrowLeftRight size={13} /> Role
+            </button>
 
             <button
               onClick={toggleTheme}
@@ -661,13 +704,7 @@ export default function UserLayout({
         {/* Mobile Bottom Navigation Bar */}
         <div className="lg:hidden fixed bottom-3 left-3 right-3 z-50 pointer-events-none">
           <nav className="pointer-events-auto max-w-md mx-auto bg-zinc-950/95 backdrop-blur-2xl ring-1 ring-white/15 p-1.5 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] flex items-center justify-between gap-1 overflow-x-auto scrollbar-none">
-            {[
-              navLinks[0], // Dashboard
-              navLinks[1], // PSC Exam Test
-              navLinks[2], // Test Series
-              navLinks[3], // Question Bank
-              navLinks[4], // Curriculum
-            ].map((link) => {
+            {navLinks.slice(0, 5).map((link) => {
               const isActive =
                 pathname === link.href ||
                 (link.href !== '/dashboard' && pathname?.startsWith(link.href));
@@ -678,7 +715,7 @@ export default function UserLayout({
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`flex flex-col items-center justify-center gap-1 min-w-[62px] flex-1 py-2 px-1 rounded-xl transition-all duration-200 relative overflow-hidden ${
+                  className={`flex flex-col items-center justify-center gap-1 min-w-[62px] flex-1 py-2 px-2 rounded-xl transition-all duration-200 relative overflow-hidden ${
                     isActive
                       ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 shadow-inner'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
@@ -694,21 +731,21 @@ export default function UserLayout({
                   />
 
                   <span
-                    className={`text-[9px] font-black tracking-tight truncate max-w-[64px] ${
+                    className={`text-[10px] font-black tracking-tight truncate ${
                       isActive ? 'text-emerald-400' : 'text-zinc-400'
                     }`}
                   >
-                    {link.name === 'PSC Exam Test' ? 'PSC Exam' : link.name}
+                    {link.name}
                   </span>
                 </Link>
               );
             })}
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="flex flex-col items-center justify-center gap-1 min-w-[54px] py-2 px-1 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5"
+              className="flex flex-col items-center justify-center gap-1 min-w-[54px] py-2 px-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5"
             >
               <Menu size={18} />
-              <span className="text-[9px] font-black">More</span>
+              <span className="text-[10px] font-black">Menu</span>
             </button>
           </nav>
         </div>
