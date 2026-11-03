@@ -23,6 +23,9 @@ import {
   BookOpen,
   LayoutGrid,
   X,
+  AlertTriangle,
+  Sparkles,
+  Layers3,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -36,9 +39,44 @@ const fmt = (seconds: number) => {
   return `${r}s`;
 };
 
-const pct = (value: number) => `${Number(value || 0).toFixed(2)}%`;
+const pct = (value: number) => `${Number(value || 0).toFixed(1)}%`;
+
+/**
+ * Ensures <u>...</u> and previously escaped &lt;u&gt;...&lt;/u&gt; (plus <b>, <i>, <sub>, <sup>)
+ * always render properly as underlined / formatted HTML in both new and already-uploaded exams.
+ */
+function renderExamHtml(raw: string): string {
+  const str = String(raw || '').trim();
+  if (!str) return '';
+  return str
+    .replace(
+      /&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi,
+      '<u class="underline decoration-2 underline-offset-4">$1</u>'
+    )
+    .replace(/<u>/gi, '<u class="underline decoration-2 underline-offset-4">')
+    .replace(/&lt;(b|strong)&gt;([\s\S]*?)&lt;\/\1&gt;/gi, '<strong>$2</strong>')
+    .replace(/&lt;(i|em)&gt;([\s\S]*?)&lt;\/\1&gt;/gi, '<em>$2</em>')
+    .replace(/&lt;sub&gt;([\s\S]*?)&lt;\/sub&gt;/gi, '<sub>$1</sub>')
+    .replace(/&lt;sup&gt;([\s\S]*?)&lt;\/sup&gt;/gi, '<sup>$1</sup>')
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br/>');
+}
 
 type Filter = 'overview' | 'all' | 'correct' | 'incorrect' | 'unattempted' | 'marked';
+
+type SectionBreakdown = {
+  topic: string;
+  totalQuestions: number;
+  attempted: number;
+  correct: number;
+  incorrect: number;
+  unattempted: number;
+  score: number;
+  maxMarks: number;
+  scorePercent: number;
+  accuracy: number;
+  timeSeconds: number;
+  status: 'strong' | 'moderate' | 'weak';
+};
 
 export default function PscAnalysisPage() {
   const { id } = useParams<{ id: string }>();
@@ -48,11 +86,13 @@ export default function PscAnalysisPage() {
   const [selectedId, setSelectedId] = useState<string | null>(params.get('attempt'));
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('overview');
+  const [selectedSection, setSelectedSection] = useState<string>('ALL');
   const [openSolution, setOpenSolution] = useState<Record<string, boolean>>({});
   const [lightMode, setLightMode] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       const {
         data: { session },
@@ -70,6 +110,7 @@ export default function PscAnalysisPage() {
           }
         );
         const d = await res.json();
+        if (cancelled) return;
         if (!res.ok) {
           toast.error(d.error || 'Unable to load analysis.');
           setLoading(false);
@@ -80,13 +121,18 @@ export default function PscAnalysisPage() {
           setSelectedId(d.attempts[0].attemptId);
         }
       } catch (e) {
-        console.error(e);
-        toast.error('Unable to load analysis.');
+        if (!cancelled) {
+          console.error(e);
+          toast.error('Unable to load analysis.');
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, [id, router, selectedId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, router]);
 
   const attempt = useMemo(
     () =>
@@ -95,15 +141,115 @@ export default function PscAnalysisPage() {
     [data, selectedId]
   );
 
+  // Compute Section-Wise Breakdown (e.g. English, Arithmetic, General Studies)
+  const sectionStats = useMemo<SectionBreakdown[]>(() => {
+    const review: any[] = attempt?.review || [];
+    if (!review.length) return [];
+
+    const map = new Map<
+      string,
+      {
+        topic: string;
+        totalQuestions: number;
+        attempted: number;
+        correct: number;
+        incorrect: number;
+        unattempted: number;
+        score: number;
+        maxMarks: number;
+        timeSeconds: number;
+      }
+    >();
+
+    review.forEach((r: any) => {
+      const topic = String(r.topic || 'General').trim() || 'General';
+      const entry = map.get(topic) || {
+        topic,
+        totalQuestions: 0,
+        attempted: 0,
+        correct: 0,
+        incorrect: 0,
+        unattempted: 0,
+        score: 0,
+        maxMarks: 0,
+        timeSeconds: 0,
+      };
+
+      entry.totalQuestions += 1;
+      entry.maxMarks += Number(r.positiveMarks || 1);
+      entry.score += Number(r.marks || 0);
+      entry.timeSeconds += Number(r.timeSpentSeconds || 0);
+
+      if (r.result === 'correct') {
+        entry.correct += 1;
+        entry.attempted += 1;
+      } else if (r.result === 'incorrect') {
+        entry.incorrect += 1;
+        entry.attempted += 1;
+      } else {
+        entry.unattempted += 1;
+      }
+
+      map.set(topic, entry);
+    });
+
+    const list = Array.from(map.values()).map((s) => {
+      const score = Number(s.score.toFixed(2));
+      const maxMarks = Number(s.maxMarks.toFixed(2));
+      const scorePercent = maxMarks > 0 ? Math.max(0, (score / maxMarks) * 100) : 0;
+      const accuracy = s.attempted > 0 ? (s.correct / s.attempted) * 100 : 0;
+      let status: 'strong' | 'moderate' | 'weak' = 'moderate';
+      if (scorePercent >= 65) status = 'strong';
+      else if (scorePercent < 45) status = 'weak';
+      return {
+        ...s,
+        score,
+        maxMarks,
+        scorePercent,
+        accuracy,
+        status,
+      };
+    });
+
+    // If multiple sections exist and none were <45% but one is clearly the lowest (<65%), mark the lowest as weak
+    if (list.length > 1 && !list.some((x) => x.status === 'weak')) {
+      const sorted = [...list].sort((a, b) => a.scorePercent - b.scorePercent);
+      if (sorted[0].scorePercent < 65) {
+        sorted[0].status = 'weak';
+      }
+    }
+
+    return list;
+  }, [attempt]);
+
+  const weakestSections = useMemo(
+    () =>
+      [...sectionStats]
+        .filter((s) => s.status === 'weak')
+        .sort((a, b) => a.scorePercent - b.scorePercent),
+    [sectionStats]
+  );
+
+  const strongestSection = useMemo(() => {
+    if (!sectionStats.length) return null;
+    const sorted = [...sectionStats].sort((a, b) => b.scorePercent - a.scorePercent);
+    return sorted[0].score > 0 ? sorted[0] : null;
+  }, [sectionStats]);
+
   const filteredReview = useMemo(() => {
-    const review = attempt?.review || [];
+    let review: any[] = attempt?.review || [];
+    if (selectedSection !== 'ALL') {
+      review = review.filter(
+        (r: any) => (String(r.topic || 'General').trim() || 'General') === selectedSection
+      );
+    }
     if (filter === 'correct') return review.filter((r: any) => r.result === 'correct');
     if (filter === 'incorrect') return review.filter((r: any) => r.result === 'incorrect');
     if (filter === 'unattempted')
       return review.filter((r: any) => r.result === 'not_answered');
     if (filter === 'marked') return review.filter((r: any) => r.markedForReview);
     return review;
-  }, [attempt, filter]);
+  }, [attempt, filter, selectedSection]);
 
   if (loading) {
     return (
@@ -140,7 +286,7 @@ export default function PscAnalysisPage() {
 
   const tabs: { key: Filter; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'all', label: 'All', count: attempt?.review?.length },
+    { key: 'all', label: 'All Questions', count: attempt?.review?.length },
     { key: 'correct', label: 'Correct', count: attempt?.correct },
     { key: 'incorrect', label: 'Incorrect', count: attempt?.incorrect },
     { key: 'unattempted', label: 'Unattempted', count: attempt?.notAnswered },
@@ -304,9 +450,9 @@ export default function PscAnalysisPage() {
           </div>
         </div>
 
-        {filter === 'overview' ? (
+        {filter === 'overview' && (
           <>
-            <SectionTitle icon={<BarChart3 size={18} />} title="Performance Summary" />
+            <SectionTitle icon={<BarChart3 size={18} />} title="Overall Performance" />
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 sm:gap-3">
               <Stat
                 lightMode={lightMode}
@@ -365,6 +511,238 @@ export default function PscAnalysisPage() {
                 tone="cyan"
               />
             </div>
+
+            {/* Section-Wise (Topic-Wise) Score & Weakness Breakdown */}
+            {sectionStats.length > 0 && (
+              <div className="mt-7">
+                <SectionTitle
+                  icon={<Layers3 size={18} />}
+                  title="Section-Wise Score & Strength / Weakness Analysis"
+                />
+
+                {/* Diagnostic Alert Banner */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                  {weakestSections.length > 0 ? (
+                    <div
+                      className={
+                        lightMode
+                          ? 'rounded-2xl border border-red-300 bg-red-50 p-4 flex items-start gap-3'
+                          : 'rounded-2xl border border-red-500/30 bg-red-500/10 p-4 flex items-start gap-3'
+                      }
+                    >
+                      <AlertTriangle
+                        size={20}
+                        className="text-red-500 shrink-0 mt-0.5"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-xs font-black uppercase tracking-wider text-red-500">
+                          Weak Section Identified
+                        </div>
+                        <p
+                          className={`text-xs sm:text-sm font-medium mt-1 leading-relaxed ${
+                            lightMode ? 'text-slate-800' : 'text-zinc-200'
+                          }`}
+                        >
+                          You are weak in{' '}
+                          <b className="text-red-400">
+                            {weakestSections.map((w) => w.topic).join(', ')}
+                          </b>{' '}
+                          (scored{' '}
+                          <b>
+                            {weakestSections[0].score.toFixed(2)} /{' '}
+                            {weakestSections[0].maxMarks}
+                          </b>{' '}
+                          marks from <b>{weakestSections[0].totalQuestions}</b> questions,{' '}
+                          {pct(weakestSections[0].accuracy)} accuracy). Focus on practicing this
+                          section.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className={
+                        lightMode
+                          ? 'rounded-2xl border border-emerald-300 bg-emerald-50 p-4 flex items-start gap-3'
+                          : 'rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 flex items-start gap-3'
+                      }
+                    >
+                      <CheckCircle2
+                        size={20}
+                        className="text-emerald-500 shrink-0 mt-0.5"
+                      />
+                      <div>
+                        <div className="text-xs font-black uppercase tracking-wider text-emerald-500">
+                          Balanced Performance
+                        </div>
+                        <p
+                          className={`text-xs sm:text-sm font-medium mt-1 ${
+                            lightMode ? 'text-slate-800' : 'text-zinc-200'
+                          }`}
+                        >
+                          Great job! You maintained a solid score across all sections of this
+                          examination.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {strongestSection && (
+                    <div
+                      className={
+                        lightMode
+                          ? 'rounded-2xl border border-emerald-300 bg-emerald-50 p-4 flex items-start gap-3'
+                          : 'rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-4 flex items-start gap-3'
+                      }
+                    >
+                      <Sparkles
+                        size={20}
+                        className="text-emerald-400 shrink-0 mt-0.5"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                          Strongest Section
+                        </div>
+                        <p
+                          className={`text-xs sm:text-sm font-medium mt-1 leading-relaxed ${
+                            lightMode ? 'text-slate-800' : 'text-zinc-200'
+                          }`}
+                        >
+                          Your best performance is in{' '}
+                          <b className="text-emerald-400">{strongestSection.topic}</b> with{' '}
+                          <b>
+                            {strongestSection.score.toFixed(2)} /{' '}
+                            {strongestSection.maxMarks}
+                          </b>{' '}
+                          marks ({pct(strongestSection.scorePercent)}) from{' '}
+                          <b>{strongestSection.totalQuestions}</b> questions.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section Cards Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  {sectionStats.map((sec) => {
+                    const isWeak = sec.status === 'weak';
+                    const isStrong = sec.status === 'strong';
+                    const isSelected = selectedSection === sec.topic;
+
+                    return (
+                      <div
+                        key={sec.topic}
+                        className={`rounded-2xl border p-4 sm:p-5 transition ${
+                          isSelected
+                            ? 'ring-2 ring-emerald-400'
+                            : ''
+                        } ${
+                          lightMode
+                            ? 'bg-white border-slate-200 shadow-sm'
+                            : 'bg-[#222] border-white/10'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className="font-black text-base sm:text-lg">{sec.topic}</h3>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              {sec.totalQuestions} Questions • Max {sec.maxMarks} Marks
+                            </p>
+                          </div>
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase shrink-0 ${
+                              isWeak
+                                ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                                : isStrong
+                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                            }`}
+                          >
+                            {isWeak
+                              ? 'Weak Section'
+                              : isStrong
+                                ? 'Strong Section'
+                                : 'Moderate'}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 flex items-baseline justify-between">
+                          <div>
+                            <span className="text-2xl sm:text-3xl font-black text-emerald-400">
+                              {sec.score.toFixed(2)}
+                            </span>
+                            <span className="text-xs sm:text-sm font-bold text-zinc-500">
+                              {' '}
+                              / {sec.maxMarks} Marks
+                            </span>
+                          </div>
+                          <span className="text-xs font-black font-mono">
+                            {pct(sec.scorePercent)}
+                          </span>
+                        </div>
+
+                        {/* Section Score Bar */}
+                        <div className="mt-2.5 h-2 rounded-full bg-black/40 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              isWeak
+                                ? 'bg-red-500'
+                                : isStrong
+                                  ? 'bg-emerald-500'
+                                  : 'bg-amber-400'
+                            }`}
+                            style={{
+                              width: `${Math.max(4, Math.min(100, sec.scorePercent))}%`,
+                            }}
+                          />
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-4 gap-1.5 text-center rounded-xl bg-black/20 p-2.5 text-xs">
+                          <div>
+                            <b className="block text-emerald-400">{sec.correct}</b>
+                            <span className="text-[10px] text-zinc-500">Correct</span>
+                          </div>
+                          <div>
+                            <b className="block text-red-400">{sec.incorrect}</b>
+                            <span className="text-[10px] text-zinc-500">Wrong</span>
+                          </div>
+                          <div>
+                            <b className="block text-zinc-400">{sec.unattempted}</b>
+                            <span className="text-[10px] text-zinc-500">Left</span>
+                          </div>
+                          <div>
+                            <b className="block text-cyan-400">{Math.round(sec.accuracy)}%</b>
+                            <span className="text-[10px] text-zinc-500">Acc.</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3.5 flex items-center justify-between text-xs">
+                          <span className="text-zinc-500">
+                            <Clock3 size={12} className="inline mr-1" />
+                            Time: {fmt(sec.timeSeconds)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedSection(
+                                selectedSection === sec.topic ? 'ALL' : sec.topic
+                              );
+                              document
+                                .getElementById('solutions-section-anchor')
+                                ?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="font-black text-emerald-400 hover:underline"
+                          >
+                            {selectedSection === sec.topic
+                              ? 'Showing Section ✓'
+                              : `Review ${sec.topic} →`}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1.4fr_.6fr] gap-4">
               <div
@@ -453,43 +831,85 @@ export default function PscAnalysisPage() {
                 </div>
               </div>
             </div>
+          </>
+        )}
 
-            <div className="mt-7 flex items-center justify-between gap-3">
-              <SectionTitle icon={<ListChecks size={18} />} title="Question-wise Solutions" />
+        {/* Section-Wise Filter Bar for Question Solutions */}
+        <div id="solutions-section-anchor" className="mt-8 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <SectionTitle
+              icon={<ListChecks size={18} />}
+              title={
+                selectedSection === 'ALL'
+                  ? 'Question-wise Solutions'
+                  : `${selectedSection} — Question-wise Solutions (${filteredReview.length})`
+              }
+            />
+          </div>
+
+          {sectionStats.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 mb-5">
+              <span className="text-xs font-black uppercase tracking-wider text-zinc-500 mr-1">
+                Section Filter:
+              </span>
               <button
-                onClick={() => setFilter('all')}
-                className="text-xs sm:text-sm font-bold text-emerald-400 hover:text-emerald-300"
+                type="button"
+                onClick={() => setSelectedSection('ALL')}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-black border transition ${
+                  selectedSection === 'ALL'
+                    ? 'bg-emerald-500 text-black border-emerald-500'
+                    : lightMode
+                      ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                      : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+                }`}
               >
-                Filter View →
+                All Sections ({attempt.review.length})
               </button>
+              {sectionStats.map((sec) => (
+                <button
+                  key={sec.topic}
+                  type="button"
+                  onClick={() => setSelectedSection(sec.topic)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-black border transition flex items-center gap-1.5 ${
+                    selectedSection === sec.topic
+                      ? 'bg-emerald-500 text-black border-emerald-500'
+                      : lightMode
+                        ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                        : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+                  }`}
+                >
+                  <span>
+                    {sec.topic} ({sec.totalQuestions})
+                  </span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      selectedSection === sec.topic
+                        ? 'bg-black/20 text-black'
+                        : sec.status === 'weak'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'bg-emerald-500/20 text-emerald-400'
+                    }`}
+                  >
+                    {sec.score.toFixed(1)}/{sec.maxMarks}
+                  </span>
+                </button>
+              ))}
             </div>
+          )}
+
+          {filteredReview.length ? (
             <QuestionList
-              review={attempt.review}
+              review={filteredReview}
               openSolution={openSolution}
               setOpenSolution={setOpenSolution}
               lightMode={lightMode}
             />
-          </>
-        ) : (
-          <>
-            <SectionTitle
-              icon={<ListChecks size={18} />}
-              title={`${tabs.find((t) => t.key === filter)?.label || 'Questions'} Questions`}
-            />
-            {filteredReview.length ? (
-              <QuestionList
-                review={filteredReview}
-                openSolution={openSolution}
-                setOpenSolution={setOpenSolution}
-                lightMode={lightMode}
-              />
-            ) : (
-              <div className="rounded-2xl border border-white/10 bg-[#222] p-10 text-center text-zinc-500 text-sm">
-                No questions in this category.
-              </div>
-            )}
-          </>
-        )}
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-[#222] p-10 text-center text-zinc-500 text-sm">
+              No questions match this filter.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Mobile Slide-Over Question Navigator Drawer */}
@@ -728,11 +1148,11 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
 
       <div className="p-4 sm:p-6">
         <div
-          className={`prose max-w-none text-sm sm:text-[15px] leading-7 break-words ${
+          className={`prose max-w-none text-sm sm:text-[15px] leading-7 break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4 ${
             lightMode ? 'text-slate-800' : 'prose-invert'
           }`}
           dangerouslySetInnerHTML={{
-            __html: r.questionHtml || r.questionText || '',
+            __html: renderExamHtml(r.questionHtml || r.questionText || ''),
           }}
         />
 
@@ -773,11 +1193,11 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
                     {optKey}
                   </span>
                   <div
-                    className={`min-w-0 flex-1 text-xs sm:text-sm leading-6 break-words ${
+                    className={`min-w-0 flex-1 text-xs sm:text-sm leading-6 break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4 ${
                       lightMode ? 'text-slate-800' : ''
                     }`}
                     dangerouslySetInnerHTML={{
-                      __html: o.html || o.text || '',
+                      __html: renderExamHtml(o.html || o.text || ''),
                     }}
                   />
                   {open && (
@@ -887,13 +1307,16 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
                   Explanation
                 </div>
                 {r.explanation ? (
-                  <div className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {r.explanation}
-                  </div>
+                  <div
+                    className="text-xs sm:text-sm leading-relaxed break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4"
+                    dangerouslySetInnerHTML={{
+                      __html: renderExamHtml(r.explanation).replace(/\n/g, '<br/>'),
+                    }}
+                  />
                 ) : r.solutionHtml ? (
                   <div
-                    className="prose max-w-none text-xs sm:text-sm leading-6 dark:prose-invert break-words"
-                    dangerouslySetInnerHTML={{ __html: r.solutionHtml }}
+                    className="prose max-w-none text-xs sm:text-sm leading-6 dark:prose-invert break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4"
+                    dangerouslySetInnerHTML={{ __html: renderExamHtml(r.solutionHtml) }}
                   />
                 ) : null}
                 {r.solutionImageUrl && (
@@ -901,6 +1324,7 @@ function QuestionCard({ r, open, onToggle, lightMode }: any) {
                     <img
                       src={r.solutionImageUrl}
                       alt="Solution Visual"
+                      loading="lazy"
                       className="max-w-full max-h-[380px] h-auto rounded-xl border border-white/10 object-contain"
                     />
                   </div>
