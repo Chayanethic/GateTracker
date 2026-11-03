@@ -25,12 +25,12 @@ import {
 import toast from 'react-hot-toast';
 import {
   defaultNegativeForMarks,
+  formatTextOrHtml,
   parseIncomingExamJson,
   PscExamPaper,
   PscOption,
   PscQuestion,
   PscQuestionType,
-  safeParseExamJsonText,
   SAMPLE_PSC_EXAM_JSON,
 } from '@/lib/pscExam';
 
@@ -54,6 +54,44 @@ type UploadProgressState = {
   label: string;
 };
 
+function renderPreviewHtml(raw: string): string {
+  return formatTextOrHtml(raw || '');
+}
+
+function safeParseExamJsonText(text: string): {
+  paper: PscExamPaper;
+  recoveredFromTruncation: boolean;
+} {
+  const cleaned = String(text || '').trim();
+  if (!cleaned) {
+    throw new Error('JSON content is empty.');
+  }
+  try {
+    const raw = JSON.parse(cleaned);
+    return { paper: parseIncomingExamJson(raw), recoveredFromTruncation: false };
+  } catch (originalErr: any) {
+    let searchPos = cleaned.length;
+    while (searchPos > 0) {
+      const lastObjEnd = cleaned.lastIndexOf('},', searchPos - 1);
+      if (lastObjEnd === -1) break;
+      const candidate = cleaned.slice(0, lastObjEnd + 1) + '\n  ]\n}';
+      try {
+        const raw = JSON.parse(candidate);
+        const paper = parseIncomingExamJson(raw);
+        if (paper.questions.length > 0) {
+          return { paper, recoveredFromTruncation: true };
+        }
+      } catch {}
+      searchPos = lastObjEnd;
+    }
+    throw new Error(
+      originalErr instanceof SyntaxError
+        ? `Invalid or incomplete JSON syntax: ${originalErr.message}`
+        : originalErr?.message || 'Could not parse JSON.'
+    );
+  }
+}
+
 export default function AdminPscExamPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,7 +101,6 @@ export default function AdminPscExamPage() {
   const [loadingPaperId, setLoadingPaperId] = useState<string | null>(null);
   const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
 
-  // Percentage progress bar state for reading & uploading large JSON files
   const [progress, setProgress] = useState<UploadProgressState>({
     active: false,
     percent: 0,
@@ -414,18 +451,22 @@ export default function AdminPscExamPage() {
     const totalQ = paper.questions.length;
     const totalMarks = recalcTotalMarks(paper.questions);
     const topicsSummary = Array.from(
-      new Set(paper.questions.map((q: PscQuestion) => String(q.topic || '').trim()).filter(Boolean))
+      new Set(
+        paper.questions
+          .map((q: PscQuestion) => String(q.topic || '').trim())
+          .filter(Boolean)
+      )
     ).join(', ');
 
     setSaving(true);
     setProgress({
       active: true,
-      percent: 5,
+      percent: 8,
       done: 0,
       total: totalQ,
       label: editingPaperId
-        ? 'Initializing update on server (5%)...'
-        : 'Creating exam paper on server (5%)...',
+        ? 'Initializing update on server (8%)...'
+        : 'Creating exam paper on server (8%)...',
     });
 
     let activeTestId = editingPaperId || '';
@@ -443,7 +484,6 @@ export default function AdminPscExamPage() {
     };
 
     try {
-      // Step 1: Start / initialize paper shell
       const started = await postStep({
         mode: 'start',
         id: editingPaperId || undefined,
@@ -458,12 +498,12 @@ export default function AdminPscExamPage() {
       activeTestId = String(started.id || '');
       if (!activeTestId) throw new Error('Server did not return an exam ID.');
 
-      // Step 2: Upload questions in batches of 15 with live percentage progress bar
-      const BATCH_SIZE = 15;
+      // Cost-optimized batch size (50 questions per request minimizes serverless function invocations)
+      const BATCH_SIZE = 50;
       for (let offset = 0; offset < totalQ; offset += BATCH_SIZE) {
         const chunk = paper.questions.slice(offset, offset + BATCH_SIZE);
         const doneAfterChunk = Math.min(totalQ, offset + chunk.length);
-        const pctBefore = Math.min(92, Math.max(8, Math.round((offset / totalQ) * 85) + 8));
+        const pctBefore = Math.min(90, Math.max(15, Math.round((offset / totalQ) * 80) + 12));
 
         setProgress({
           active: true,
@@ -484,7 +524,7 @@ export default function AdminPscExamPage() {
 
         const pctAfter = Math.min(
           95,
-          Math.max(12, Math.round((doneAfterChunk / totalQ) * 85) + 10)
+          Math.max(25, Math.round((doneAfterChunk / totalQ) * 82) + 12)
         );
         setProgress({
           active: true,
@@ -495,7 +535,6 @@ export default function AdminPscExamPage() {
         });
       }
 
-      // Step 3: Complete & publish
       setProgress({
         active: true,
         percent: 98,
@@ -637,42 +676,43 @@ export default function AdminPscExamPage() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black uppercase tracking-widest mb-3">
             <FileJson size={14} /> PSC / JSON Exam Control
           </div>
-          <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
             JSON Upload Exam Section
           </h1>
-          <p className="text-gray-400 mt-2 text-sm max-w-2xl">
+          <p className="text-gray-400 mt-2 text-xs sm:text-sm max-w-2xl">
             Upload your JSON question paper, preview and delete individual questions, add question
-            image URLs, customize question marks, or delete full question papers. Explanations are
-            optional.
+            image URLs, customize question marks, or delete full question papers. Supports{' '}
+            <code className="text-emerald-300">&lt;u&gt;underline&lt;/u&gt;</code> tags and optional
+            explanations.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleLoadSampleJson}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300 hover:bg-violet-500/25 text-xs font-black transition"
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300 hover:bg-violet-500/25 text-xs font-black transition"
           >
             <Sparkles size={15} /> Load Sample JSON
           </button>
           <button
             type="button"
             onClick={handleDownloadSampleJson}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 border border-gray-700 text-gray-300 hover:text-white text-xs font-bold transition"
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gray-900 border border-gray-700 text-gray-300 hover:text-white text-xs font-bold transition"
           >
             <Download size={15} /> Sample .JSON
           </button>
           <button
             type="button"
             onClick={() => setShowRawJsonModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 border border-gray-700 text-gray-300 hover:text-white text-xs font-bold transition"
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gray-900 border border-gray-700 text-gray-300 hover:text-white text-xs font-bold transition"
           >
-            <FileJson size={15} /> Paste JSON Text
+            <FileJson size={15} /> Paste JSON
           </button>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-black hover:bg-emerald-400 text-xs font-black transition shadow-lg shadow-emerald-500/10"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-black hover:bg-emerald-400 text-xs font-black transition shadow-lg shadow-emerald-500/10"
           >
             <Upload size={16} /> Upload JSON File
           </button>
@@ -736,7 +776,7 @@ export default function AdminPscExamPage() {
             if (f) void handleFileSelect(f);
           }}
           onClick={() => fileInputRef.current?.click()}
-          className={`cursor-pointer rounded-3xl border-2 border-dashed p-8 md:p-10 text-center transition-all ${
+          className={`cursor-pointer rounded-3xl border-2 border-dashed p-6 sm:p-10 text-center transition-all ${
             dragging
               ? 'border-emerald-400 bg-emerald-500/10'
               : 'border-gray-800 bg-gray-900/60 hover:border-emerald-500/40 hover:bg-gray-900'
@@ -754,17 +794,18 @@ export default function AdminPscExamPage() {
             <code className="text-emerald-300">stream</code>,{' '}
             <code className="text-emerald-300">durationMinutes</code>,{' '}
             <code className="text-emerald-300">totalMarks</code>, and{' '}
-            <code className="text-emerald-300">questions</code>) with chunked upload and live
-            percentage progress bar.
+            <code className="text-emerald-300">questions</code>) with{' '}
+            <code className="text-emerald-300">&lt;u&gt;underline&lt;/u&gt;</code> tag rendering and
+            live percentage progress bar.
           </p>
         </div>
       )}
 
       {paper && (
         <section className="rounded-3xl border border-emerald-500/30 bg-gray-900/90 shadow-2xl overflow-hidden">
-          <div className="p-6 bg-gradient-to-r from-emerald-950/50 via-gray-900 to-gray-900 border-b border-gray-800 flex flex-wrap items-center justify-between gap-4">
+          <div className="p-4 sm:p-6 bg-gradient-to-r from-emerald-950/50 via-gray-900 to-gray-900 border-b border-gray-800 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <span className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
                   {editingPaperId ? 'Editing Published Paper' : 'JSON Exam Preview & Setup'}
                 </span>
@@ -774,10 +815,10 @@ export default function AdminPscExamPage() {
                   {msqCount ? ` • ${msqCount} MSQ` : ''})
                 </span>
               </div>
-              <h2 className="text-xl md:text-2xl font-black text-white mt-2">{paper.title}</h2>
+              <h2 className="text-lg sm:text-2xl font-black text-white mt-2">{paper.title}</h2>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleExportCurrentJson}
@@ -834,7 +875,7 @@ export default function AdminPscExamPage() {
             </div>
           </div>
 
-          <div className="p-6 border-b border-gray-800 bg-black/30 space-y-4">
+          <div className="p-4 sm:p-6 border-b border-gray-800 bg-black/30 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-[11px] font-black uppercase tracking-wider text-gray-400 mb-1.5">
@@ -943,7 +984,7 @@ export default function AdminPscExamPage() {
             </div>
           </div>
 
-          <div className="p-6 space-y-5 max-h-[820px] overflow-y-auto">
+          <div className="p-4 sm:p-6 space-y-5 max-h-[820px] overflow-y-auto">
             {paper.questions.map((q: PscQuestion, index: number) => {
               const isExpanded = Boolean(expandedEditIds[q.id]);
               const hasExp = Boolean(
@@ -956,8 +997,8 @@ export default function AdminPscExamPage() {
                   key={q.id}
                   className="rounded-2xl border border-gray-800 bg-gray-950/80 overflow-hidden transition hover:border-gray-700"
                 >
-                  <div className="px-5 py-3.5 bg-gray-900/90 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="px-4 sm:px-5 py-3.5 bg-gray-900/90 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-black text-xs">
                         Q{index + 1}
                       </span>
@@ -1044,7 +1085,7 @@ export default function AdminPscExamPage() {
                         className="px-3 py-1.5 rounded-xl border border-gray-700 bg-gray-800 text-gray-200 hover:text-white text-xs font-bold flex items-center gap-1"
                       >
                         <Edit3 size={13} />
-                        {isExpanded ? 'Hide Full Edit' : 'Edit Text / Explanation'}
+                        {isExpanded ? 'Hide Edit' : 'Edit'}
                         {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </button>
 
@@ -1054,15 +1095,17 @@ export default function AdminPscExamPage() {
                         title="Delete this question"
                         className="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 text-xs font-black flex items-center gap-1"
                       >
-                        <Trash2 size={14} /> Delete Question
+                        <Trash2 size={14} /> Delete
                       </button>
                     </div>
                   </div>
 
-                  <div className="p-5 space-y-4">
-                    <div className="text-sm md:text-base text-gray-100 leading-relaxed whitespace-pre-wrap font-medium">
-                      {q.questionText}
-                    </div>
+                  <div className="p-4 sm:p-5 space-y-4">
+                    {/* Renders <u>underline</u> tags cleanly in preview */}
+                    <div
+                      className="text-sm md:text-base text-gray-100 leading-relaxed font-medium [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4"
+                      dangerouslySetInnerHTML={{ __html: renderPreviewHtml(q.questionText) }}
+                    />
 
                     <div className="rounded-xl border border-gray-800/90 bg-black/40 p-3.5 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1079,7 +1122,7 @@ export default function AdminPscExamPage() {
                             }))
                           }
                           placeholder="Paste image URL (https://... or data:image/...) to display an image with this question"
-                          className="flex-1 min-w-[220px] bg-gray-900 border border-gray-700 focus:border-cyan-500 rounded-lg px-3 py-1.5 text-xs text-white outline-none"
+                          className="flex-1 min-w-[200px] bg-gray-900 border border-gray-700 focus:border-cyan-500 rounded-lg px-3 py-1.5 text-xs text-white outline-none"
                         />
                         <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 text-xs font-bold shrink-0">
                           Upload Image
@@ -1195,7 +1238,10 @@ export default function AdminPscExamPage() {
                                 {opt.id}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <div className="text-sm text-gray-200 break-words">{opt.text}</div>
+                                <div
+                                  className="text-sm text-gray-200 break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4"
+                                  dangerouslySetInnerHTML={{ __html: renderPreviewHtml(opt.text) }}
+                                />
                                 {opt.imageUrl && (
                                   <img
                                     src={opt.imageUrl}
@@ -1220,7 +1266,12 @@ export default function AdminPscExamPage() {
                         <div className="font-black text-emerald-400 uppercase tracking-wider text-[10px]">
                           Explanation (Optional)
                         </div>
-                        {q.explanation && <p className="leading-relaxed">{q.explanation}</p>}
+                        {q.explanation && (
+                          <div
+                            className="leading-relaxed [&_u]:underline"
+                            dangerouslySetInnerHTML={{ __html: renderPreviewHtml(q.explanation) }}
+                          />
+                        )}
                         {q.solutionImageUrl && (
                           <img
                             src={q.solutionImageUrl}
@@ -1268,7 +1319,7 @@ export default function AdminPscExamPage() {
                           </div>
                           <div>
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">
-                              Topic
+                              Section / Topic
                             </label>
                             <input
                               value={q.topic || ''}
@@ -1278,7 +1329,7 @@ export default function AdminPscExamPage() {
                                   topic: e.target.value,
                                 }))
                               }
-                              placeholder="e.g. English / Arithmetic"
+                              placeholder="e.g. English / Arithmetic / General Studies"
                               className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
                             />
                           </div>
@@ -1302,7 +1353,7 @@ export default function AdminPscExamPage() {
 
                         <div>
                           <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">
-                            Question Text
+                            Question Text (Use &lt;u&gt;word&lt;/u&gt; for underline)
                           </label>
                           <textarea
                             rows={2}
@@ -1406,7 +1457,7 @@ export default function AdminPscExamPage() {
       )}
 
       <section className="rounded-3xl border border-gray-800 bg-gray-900 overflow-hidden">
-        <div className="p-6 border-b border-gray-800 flex flex-wrap items-center justify-between gap-4">
+        <div className="p-4 sm:p-6 border-b border-gray-800 flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5 text-lg font-black text-white">
               <Layers3 size={20} className="text-emerald-400" />
@@ -1455,7 +1506,7 @@ export default function AdminPscExamPage() {
             {filteredPublished.map((ex: PublishedExamSummary) => (
               <div
                 key={ex.id}
-                className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-white/[0.015] transition"
+                className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-white/[0.015] transition"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
