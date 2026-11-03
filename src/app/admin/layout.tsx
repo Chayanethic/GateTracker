@@ -93,9 +93,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (pathname === '/admin/stream') return <>{children}</>;
 
+  // PSC Exam / JSON Upload Exam placed at the very top of the Admin Sidebar
   const adminNavItems = [
+    { href: '/admin/psc-exam', label: 'PSC Exam (JSON Upload)', icon: FileJson, highlight: true },
     { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/admin/psc-exam', label: 'JSON Upload Exam', icon: FileJson, highlight: true },
     { href: '/admin/test-series', label: 'Test Series', icon: ClipboardCheck },
     { href: '/admin/question-bank', label: 'Question Bank', icon: BookOpen },
     { href: '/admin/resources', label: 'Manage Resources', icon: Database },
@@ -124,7 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             href="/admin/psc-exam"
             className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-black flex items-center gap-1"
           >
-            <FileJson size={14} /> JSON Exam
+            <FileJson size={14} /> PSC Exam
           </Link>
           <button
             onClick={toggleTheme}
