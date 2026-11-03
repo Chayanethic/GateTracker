@@ -4,8 +4,8 @@ import { extractRawSolutionFields, parsePscExamMeta } from '@/lib/pscExam';
 
 const db = () =>
   createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   );
 
 function checkAnswerMatch(type: string, selected: string[], expected: string[]): boolean {
@@ -28,8 +28,8 @@ function checkAnswerMatch(type: string, selected: string[], expected: string[]):
     }
     return false;
   }
-  const normSel = [...selected].map((s) => String(s).trim().toUpperCase()).sort();
-  const normExp = [...expected].map((s) => String(s).trim().toUpperCase()).sort();
+  const normSel = [...selected].map((s: string) => String(s).trim().toUpperCase()).sort();
+  const normExp = [...expected].map((s: string) => String(s).trim().toUpperCase()).sort();
   return normSel.length === normExp.length && normSel.join(',') === normExp.join(',');
 }
 
@@ -37,8 +37,8 @@ async function getUser(req: Request) {
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
   const client = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
     { global: { headers: { Authorization: `Bearer ${token}` } } }
   );
   const { data, error } = await client.auth.getUser(token);
@@ -60,54 +60,57 @@ export async function GET(req: Request) {
 
     const database = db();
 
-    const { data: test, error: testError } = await database
-      .from('test_series')
-      .select('id,title,exam_name,max_marks,question_count,questions')
-      .eq('id', testId)
-      .eq('is_published', true)
-      .single();
+    // Run test lookup, user attempts lookup, keys lookup, and score pool lookup in parallel to minimize latency & server wall-clock time
+    const [testRes, attemptsRes, allScoresRes, keysRes] = await Promise.all([
+      database
+        .from('test_series')
+        .select('id,title,exam_name,max_marks,question_count,questions')
+        .eq('id', testId)
+        .eq('is_published', true)
+        .single(),
+      database
+        .from('test_series_attempts')
+        .select(
+          'id,answers,correct_count,incorrect_count,not_answered_count,score,time_spent_seconds,question_time_seconds,submitted_at'
+        )
+        .eq('user_id', user.id)
+        .eq('test_series_id', testId)
+        .order('submitted_at', { ascending: false })
+        .limit(20),
+      database
+        .from('test_series_attempts')
+        .select('score')
+        .eq('test_series_id', testId)
+        .limit(500),
+      database
+        .from('test_series_keys')
+        .select('*')
+        .eq('test_series_id', testId)
+        .order('number'),
+    ]);
 
-    if (testError || !test) {
+    if (testRes.error || !testRes.data) {
       return NextResponse.json({ error: 'Exam not found.' }, { status: 404 });
     }
-
-    const meta = parsePscExamMeta(test);
-
-    const { data: attempts, error } = await database
-      .from('test_series_attempts')
-      .select(
-        'id,answers,correct_count,incorrect_count,not_answered_count,score,time_spent_seconds,question_time_seconds,submitted_at'
-      )
-      .eq('user_id', user.id)
-      .eq('test_series_id', testId)
-      .order('submitted_at', { ascending: false });
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    const { data: allAttempts, error: allAttemptsError } = await database
-      .from('test_series_attempts')
-      .select('score')
-      .eq('test_series_id', testId);
-
-    if (allAttemptsError) {
-      return NextResponse.json({ error: allAttemptsError.message }, { status: 500 });
+    if (attemptsRes.error) {
+      return NextResponse.json({ error: attemptsRes.error.message }, { status: 500 });
+    }
+    if (keysRes.error) {
+      return NextResponse.json({ error: keysRes.error.message }, { status: 500 });
     }
 
-    const scorePool = (allAttempts || [])
+    const test = testRes.data;
+    const attempts = attemptsRes.data || [];
+    const keys = keysRes.data || [];
+    const meta = parsePscExamMeta(test);
+
+    const scorePool = (allScoresRes.data || [])
       .map((a: any) => Number(a.score || 0))
       .filter((n: number) => Number.isFinite(n));
     const ranked = (score: number) => {
       const better = scorePool.filter((s: number) => s > score).length;
       return { rank: better + 1, total: scorePool.length };
     };
-
-    const { data: keys, error: keyError } = await database
-      .from('test_series_keys')
-      .select('*')
-      .eq('test_series_id', testId)
-      .order('number');
-
-    if (keyError) return NextResponse.json({ error: keyError.message }, { status: 500 });
 
     const defaultMarks = test.question_count
       ? Number(test.max_marks) / Number(test.question_count)
@@ -118,7 +121,7 @@ export async function GET(req: Request) {
       testQuestions.map((q: any) => [String(q.id), q])
     );
 
-    const hydrated = (attempts || []).map((a: any, index: number) => {
+    const hydrated = attempts.map((a: any, index: number) => {
       let total = 0;
       let positiveGained = 0;
       let negativeLost = 0;
@@ -131,7 +134,7 @@ export async function GET(req: Request) {
           ? a.answers.__bookmarked
           : {};
 
-      const review = (keys || []).map((k: any) => {
+      const review = keys.map((k: any) => {
         const question = qMap.get(String(k.id_in_test)) || {};
         const selected = Array.isArray(a.answers?.[k.id_in_test])
           ? a.answers[k.id_in_test].map(String).filter((s: string) => s.trim() !== '')
@@ -167,7 +170,7 @@ export async function GET(req: Request) {
           id: k.id_in_test,
           number: k.number,
           type,
-          topic: question?.topic || '',
+          topic: String(question?.topic || 'General').trim() || 'General',
           selected,
           answer: expected,
           correct: ok,
@@ -202,7 +205,7 @@ export async function GET(req: Request) {
 
       return {
         attemptId: a.id,
-        attemptNumber: (attempts?.length || 0) - index,
+        attemptNumber: attempts.length - index,
         submittedAt: a.submitted_at,
         score,
         maxMarks: test.max_marks,
@@ -229,7 +232,6 @@ export async function GET(req: Request) {
         stream: meta.stream,
         maxMarks: test.max_marks,
         questionCount: test.question_count,
-        questions: test.questions,
       },
       attempts: hydrated,
     });
