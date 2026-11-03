@@ -40,7 +40,7 @@ export const SAMPLE_PSC_EXAM_JSON: PscExamPaper = {
       id: 'q1',
       type: 'MCQ',
       topic: 'Algorithms',
-      questionText: 'What is the worst-case time complexity of QuickSort?',
+      questionText: 'What is the worst-case time complexity of <u>QuickSort</u>?',
       questionImageUrl: '',
       options: [
         { id: 'A', text: 'O(n log n)', imageUrl: '' },
@@ -85,17 +85,39 @@ export function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Safely formats plain text or inline HTML tags (including <u>, <b>, <i>, <strong>, <em>, <sub>, <sup>, <mark>, <br>)
+ * and also unescapes previously escaped &lt;u&gt;...&lt;/u&gt; tags so underlined words always render properly.
+ */
 export function formatTextOrHtml(raw: string): string {
   const trimmed = String(raw || '').trim();
   if (!trimmed) return '';
-  if (/<(p|div|span|br|ul|ol|li|pre|code|table|tr|td|th|strong|b|em|i|sub|sup|img)\b/i.test(trimmed)) {
+
+  // Including u, ins, s, strike, del, mark, p, div, span, br, ul, ol, li, pre, code, table, tr, td, th, strong, b, em, i, sub, sup, img
+  if (
+    /<(u|ins|s|strike|del|mark|p|div|span|br|ul|ol|li|pre|code|table|tr|td|th|strong|b|em|i|sub|sup|img)\b/i.test(
+      trimmed
+    )
+  ) {
     return trimmed
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/\s+on[a-z]+\s*=\s*(["']).*?\1/gi, '')
-      .replace(/javascript:/gi, '');
+      .replace(/javascript:/gi, '')
+      .replace(/<u>/gi, '<u class="underline decoration-2 underline-offset-4">');
   }
-  return escapeHtml(trimmed).replace(/\n/g, '<br/>');
+
+  return escapeHtml(trimmed)
+    .replace(
+      /&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi,
+      '<u class="underline decoration-2 underline-offset-4">$1</u>'
+    )
+    .replace(/&lt;(b|strong)&gt;([\s\S]*?)&lt;\/\1&gt;/gi, '<strong>$2</strong>')
+    .replace(/&lt;(i|em)&gt;([\s\S]*?)&lt;\/\1&gt;/gi, '<em>$2</em>')
+    .replace(/&lt;sub&gt;([\s\S]*?)&lt;\/sub&gt;/gi, '<sub>$1</sub>')
+    .replace(/&lt;sup&gt;([\s\S]*?)&lt;\/sup&gt;/gi, '<sup>$1</sup>')
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br/>')
+    .replace(/\n/g, '<br/>');
 }
 
 export function buildQuestionHtml(questionText: string, questionImageUrl?: string): string {
@@ -107,7 +129,7 @@ export function buildQuestionHtml(questionText: string, questionImageUrl?: strin
   const img = String(questionImageUrl || '').trim();
   if (img) {
     parts.push(
-      `<div class="psc-question-image mt-4"><img src="${escapeHtml(img)}" alt="Question Illustration" class="max-w-full max-h-[420px] h-auto rounded-xl border border-white/10 object-contain" /></div>`
+      `<div class="psc-question-image mt-4"><img src="${escapeHtml(img)}" alt="Question Illustration" loading="lazy" class="max-w-full max-h-[420px] h-auto rounded-xl border border-white/10 object-contain" /></div>`
     );
   }
   return parts.join('');
@@ -122,7 +144,7 @@ export function buildOptionHtml(text: string, imageUrl?: string): string {
   const img = String(imageUrl || '').trim();
   if (img) {
     parts.push(
-      `<div class="mt-2"><img src="${escapeHtml(img)}" alt="Option Illustration" class="max-w-full max-h-48 h-auto rounded-lg border border-white/10 object-contain" /></div>`
+      `<div class="mt-2"><img src="${escapeHtml(img)}" alt="Option Illustration" loading="lazy" class="max-w-full max-h-48 h-auto rounded-lg border border-white/10 object-contain" /></div>`
     );
   }
   return parts.join('');
@@ -140,7 +162,7 @@ export function buildSolutionHtml(explanation?: string, solutionImageUrl?: strin
   }
   if (img) {
     parts.push(
-      `<div class="psc-solution-image mt-3" data-raw-solution-image="${encodeURIComponent(img)}"><img src="${escapeHtml(img)}" alt="Solution Illustration" class="max-w-full max-h-[420px] h-auto rounded-xl border border-white/10 object-contain" /></div>`
+      `<div class="psc-solution-image mt-3" data-raw-solution-image="${encodeURIComponent(img)}"><img src="${escapeHtml(img)}" alt="Solution Illustration" loading="lazy" class="max-w-full max-h-[420px] h-auto rounded-xl border border-white/10 object-contain" /></div>`
     );
   }
   return parts.join('');
@@ -346,10 +368,6 @@ export function parseIncomingExamJson(raw: any): PscExamPaper {
   };
 }
 
-/**
- * Parses raw JSON text and automatically recovers all complete question objects
- * if a large AI-generated JSON file was truncated mid-question at the end.
- */
 export function safeParseExamJsonText(text: string): {
   paper: PscExamPaper;
   recoveredFromTruncation: boolean;
@@ -363,7 +381,6 @@ export function safeParseExamJsonText(text: string): {
     const raw = JSON.parse(cleaned);
     return { paper: parseIncomingExamJson(raw), recoveredFromTruncation: false };
   } catch (originalErr: any) {
-    // Attempt automatic recovery if the JSON was cut off mid-question at the end
     let searchPos = cleaned.length;
     while (searchPos > 0) {
       const lastObjEnd = cleaned.lastIndexOf('},', searchPos - 1);
@@ -375,9 +392,7 @@ export function safeParseExamJsonText(text: string): {
         if (paper.questions.length > 0) {
           return { paper, recoveredFromTruncation: true };
         }
-      } catch {
-        // Keep searching earlier `},` boundaries
-      }
+      } catch {}
       searchPos = lastObjEnd;
     }
 
