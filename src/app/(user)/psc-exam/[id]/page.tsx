@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
@@ -59,6 +59,26 @@ const formatDuration = (seconds: number) => {
   return m ? `${m}m ${r}s` : `${r}s`;
 };
 
+/**
+ * Ensures <u>...</u> and previously escaped &lt;u&gt;...&lt;/u&gt; (plus <b>, <i>, <sub>, <sup>)
+ * always render properly as underlined / formatted HTML in both new and already-uploaded exams.
+ */
+function renderExamHtml(raw: string): string {
+  const str = String(raw || '').trim();
+  if (!str) return '';
+  return str
+    .replace(
+      /&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi,
+      '<u class="underline decoration-2 underline-offset-4">$1</u>'
+    )
+    .replace(/<u>/gi, '<u class="underline decoration-2 underline-offset-4">')
+    .replace(/&lt;(b|strong)&gt;([\s\S]*?)&lt;\/\1&gt;/gi, '<strong>$2</strong>')
+    .replace(/&lt;(i|em)&gt;([\s\S]*?)&lt;\/\1&gt;/gi, '<em>$2</em>')
+    .replace(/&lt;sub&gt;([\s\S]*?)&lt;\/sub&gt;/gi, '<sub>$1</sub>')
+    .replace(/&lt;sup&gt;([\s\S]*?)&lt;\/sup&gt;/gi, '<sup>$1</sup>')
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br/>');
+}
+
 export default function PscExamRunner() {
   const params = useParams<{ id?: string }>();
   const id = typeof params?.id === 'string' ? params.id : '';
@@ -88,6 +108,21 @@ export default function PscExamRunner() {
 
   const questions: Q[] = test?.questions || [];
   const q = questions[current];
+
+  // Group sections (e.g. English, Arithmetic, General Studies) so user can jump between sections
+  const sections = useMemo(() => {
+    const map = new Map<string, { name: string; firstIndex: number; count: number }>();
+    questions.forEach((item: Q, idx: number) => {
+      const sec = String(item.topic || '').trim() || 'General';
+      const existing = map.get(sec);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(sec, { name: sec, firstIndex: idx, count: 1 });
+      }
+    });
+    return Array.from(map.values());
+  }, [questions]);
 
   useEffect(() => {
     if (!id) {
@@ -379,6 +414,24 @@ export default function PscExamRunner() {
             </div>
 
             <div className="p-5 sm:p-8">
+              {sections.length > 1 && (
+                <div className="mb-5">
+                  <div className="text-xs font-black uppercase tracking-wider text-zinc-400 mb-2">
+                    Exam Sections
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {sections.map((sec) => (
+                      <span
+                        key={sec.name}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-black text-emerald-300"
+                      >
+                        {sec.name}: {sec.count} Qs
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <h2 className="font-black text-lg sm:text-xl">Before You Begin</h2>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm text-zinc-300">
                 <Instruction
@@ -391,7 +444,7 @@ export default function PscExamRunner() {
                 />
                 <Instruction
                   icon={<Eye size={16} />}
-                  text="Time spent on each question is recorded for post-exam solution analysis."
+                  text="Section-wise score, accuracy, and weak-area diagnosis are generated after submission."
                 />
                 <Instruction
                   icon={<Flag size={16} />}
@@ -441,6 +494,7 @@ export default function PscExamRunner() {
   const answeredCount = questions.filter((x: Q) => (answers[x.id] || []).length > 0).length;
   const reviewCount = questions.filter((x: Q) => marked[x.id]).length;
   const unansweredCount = questions.length - answeredCount;
+  const currentSection = String(q?.topic || '').trim() || 'General';
 
   return (
     <div
@@ -460,9 +514,7 @@ export default function PscExamRunner() {
       >
         <div className="min-h-14 flex items-center justify-between px-2.5 sm:px-5 py-2 gap-2">
           <div className="min-w-0 flex-1">
-            <div className="font-black text-xs sm:text-sm truncate">
-              {test.title}
-            </div>
+            <div className="font-black text-xs sm:text-sm truncate">{test.title}</div>
             <div className="text-[10px] uppercase tracking-wider opacity-60 truncate">
               {test.category || 'PSC Exam'} {test.stream ? `• ${test.stream}` : ''}
             </div>
@@ -504,7 +556,6 @@ export default function PscExamRunner() {
               {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
 
-            {/* Countdown Timer */}
             <div
               className={`rounded-lg px-2.5 py-1.5 text-center font-mono text-xs sm:text-sm font-black tracking-wider border ${
                 remaining <= 300
@@ -517,7 +568,6 @@ export default function PscExamRunner() {
               {formatClock(remaining)}
             </div>
 
-            {/* Mobile Question Palette Toggle Button */}
             <button
               onClick={() => setShowMobilePalette(true)}
               className="lg:hidden inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-black text-white"
@@ -529,7 +579,6 @@ export default function PscExamRunner() {
               </span>
             </button>
 
-            {/* Submit Button — Visible on both Mobile & Desktop */}
             <button
               onClick={() => void submitTest(false)}
               className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-black text-white hover:bg-red-500"
@@ -540,7 +589,7 @@ export default function PscExamRunner() {
           </div>
         </div>
 
-        {/* Sub-Header: Section/Topic & Marks */}
+        {/* Sub-Header: Section Tabs & Question Marks */}
         <div
           className={
             lightMode
@@ -548,23 +597,44 @@ export default function PscExamRunner() {
               : 'min-h-10 bg-[#292929] border-t border-white/5 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-1.5 text-xs font-bold'
           }
         >
-          <div className="flex items-center gap-2">
-            <span className="rounded-md bg-[#1d4ed8] text-white px-2.5 py-1 text-[11px] font-black">
-              {q?.topic || test.category || 'General'}
-            </span>
-            <span className="opacity-75">
-              Q {current + 1} of {questions.length}
-            </span>
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none max-w-full">
+            {sections.length > 1 ? (
+              sections.map((sec) => {
+                const activeSec = currentSection === sec.name;
+                return (
+                  <button
+                    key={sec.name}
+                    type="button"
+                    onClick={() => goTo(sec.firstIndex)}
+                    className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-black transition ${
+                      activeSec
+                        ? 'bg-[#1d4ed8] text-white shadow-sm'
+                        : lightMode
+                          ? 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-200'
+                          : 'bg-white/5 border border-white/10 text-zinc-300 hover:bg-white/10'
+                    }`}
+                  >
+                    {sec.name} ({sec.count})
+                  </button>
+                );
+              })
+            ) : (
+              <span className="rounded-md bg-[#1d4ed8] text-white px-2.5 py-1 text-[11px] font-black">
+                {q?.topic || test.category || 'General'}
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 text-[11px] sm:text-xs">
+          <div className="flex items-center gap-2 text-[11px] sm:text-xs ml-auto">
+            <span className="opacity-75">
+              Q {current + 1}/{questions.length}
+            </span>
             <span>
-              Correct: <b className="text-emerald-500">+{Number(q?.marks || 1).toFixed(2)}</b>
+              | <b className="text-emerald-500">+{Number(q?.marks || 1).toFixed(2)}</b>
             </span>
             {Number(q?.negativeMarks || 0) > 0 && (
               <span>
-                | Negative:{' '}
-                <b className="text-red-500">−{Number(q?.negativeMarks || 0).toFixed(2)}</b>
+                / <b className="text-red-500">−{Number(q?.negativeMarks || 0).toFixed(2)}</b>
               </span>
             )}
           </div>
@@ -608,7 +678,6 @@ export default function PscExamRunner() {
                   : 'rounded-2xl bg-[#242424] border border-white/10 shadow-xl p-4 sm:p-7'
               }
             >
-              {/* Mark for Review & Bookmark Bar */}
               <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-current/10">
                 <div className="flex items-center gap-2">
                   <span
@@ -638,8 +707,7 @@ export default function PscExamRunner() {
                           : 'flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-black'
                     }
                   >
-                    <Flag size={14} />{' '}
-                    {marked[q?.id || ''] ? 'Marked' : 'Review'}
+                    <Flag size={14} /> {marked[q?.id || ''] ? 'Marked' : 'Review'}
                   </button>
                   <button
                     onClick={toggleBookmark}
@@ -659,26 +727,30 @@ export default function PscExamRunner() {
                 </div>
               </div>
 
-              {/* Question Text & Image */}
+              {/* Question Text & Image with full <u> underline support */}
               {q?.questionHtml ? (
                 <div
                   className={
                     lightMode
-                      ? 'mt-5 prose max-w-none text-sm sm:text-base leading-7 text-slate-800 break-words'
-                      : 'mt-5 prose prose-invert max-w-none text-sm sm:text-base leading-7 break-words'
+                      ? 'mt-5 prose max-w-none text-sm sm:text-base leading-7 text-slate-800 break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4'
+                      : 'mt-5 prose prose-invert max-w-none text-sm sm:text-base leading-7 break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4'
                   }
-                  dangerouslySetInnerHTML={{ __html: q.questionHtml }}
+                  dangerouslySetInnerHTML={{ __html: renderExamHtml(q.questionHtml) }}
                 />
               ) : (
                 <div className="mt-5 space-y-4">
-                  <div className="text-sm sm:text-base leading-7 whitespace-pre-wrap break-words">
-                    {q?.questionText}
-                  </div>
+                  <div
+                    className="text-sm sm:text-base leading-7 break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4"
+                    dangerouslySetInnerHTML={{
+                      __html: renderExamHtml(q?.questionText || ''),
+                    }}
+                  />
                   {q?.questionImageUrl && (
                     <div>
                       <img
                         src={q.questionImageUrl}
                         alt={`Question ${q.number}`}
+                        loading="lazy"
                         className="max-w-full max-h-[380px] h-auto rounded-xl border border-white/10 object-contain"
                       />
                     </div>
@@ -738,9 +810,9 @@ export default function PscExamRunner() {
                           {optKey}
                         </span>
                         <span
-                          className="text-sm leading-6 flex-1 break-words"
+                          className="text-sm leading-6 flex-1 break-words [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4"
                           dangerouslySetInnerHTML={{
-                            __html: o.html || o.text || '',
+                            __html: renderExamHtml(o.html || o.text || ''),
                           }}
                         />
                       </button>
@@ -808,7 +880,7 @@ export default function PscExamRunner() {
         </aside>
       </div>
 
-      {/* Sticky Mobile Bottom Action Bar for Fast Question Navigation */}
+      {/* Sticky Mobile Bottom Action Bar */}
       <div
         className={
           lightMode
@@ -921,7 +993,8 @@ export default function PscExamRunner() {
                 />
               </div>
               <p className="mt-4 text-xs sm:text-sm leading-6 text-slate-600">
-                Once submitted, your answers and per-question timing will be evaluated and saved.
+                Once submitted, your answers and section-wise performance will be evaluated and
+                saved.
               </p>
               <div className="mt-5 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
                 <button
@@ -955,7 +1028,7 @@ export default function PscExamRunner() {
             <div
               className={
                 lightMode
-                  ? ' flex items-center justify-between gap-4 border-b border-slate-300 bg-white px-4 py-3.5'
+                  ? 'flex items-center justify-between gap-4 border-b border-slate-300 bg-white px-4 py-3.5'
                   : 'flex items-center justify-between gap-4 border-b border-white/10 bg-[#181818] px-4 py-3.5'
               }
             >
@@ -1022,11 +1095,13 @@ export default function PscExamRunner() {
                     <div
                       className={
                         lightMode
-                          ? 'prose max-w-none mt-4 text-sm leading-7 text-slate-800'
-                          : 'prose prose-invert max-w-none mt-4 text-sm leading-7'
+                          ? 'prose max-w-none mt-4 text-sm leading-7 text-slate-800 [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4'
+                          : 'prose prose-invert max-w-none mt-4 text-sm leading-7 [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4'
                       }
                       dangerouslySetInnerHTML={{
-                        __html: question.questionHtml || question.questionText || '',
+                        __html: renderExamHtml(
+                          question.questionHtml || question.questionText || ''
+                        ),
                       }}
                     />
 
@@ -1047,9 +1122,9 @@ export default function PscExamRunner() {
                           >
                             <span className="shrink-0 font-black text-xs">{option.key}.</span>
                             <span
-                              className="text-xs sm:text-sm leading-6"
+                              className="text-xs sm:text-sm leading-6 [&_u]:underline [&_u]:decoration-2 [&_u]:underline-offset-4"
                               dangerouslySetInnerHTML={{
-                                __html: option.html || option.text || '',
+                                __html: renderExamHtml(option.html || option.text || ''),
                               }}
                             />
                           </div>
@@ -1257,10 +1332,10 @@ function Result({ test, result }: { test: any; result: any }) {
             <div className="text-xs font-black uppercase tracking-widest text-slate-500">
               Next Step
             </div>
-            <h2 className="mt-2 text-lg sm:text-xl font-black">Review your performance</h2>
+            <h2 className="mt-2 text-lg sm:text-xl font-black">Section-wise &amp; Solution Review</h2>
             <p className="mt-2 text-xs sm:text-sm leading-6 text-slate-500">
-              Open detailed analysis for question-wise marks, negative marking, time spent, and
-              explanations.
+              Open detailed analysis to see your section-wise scores (English, Arithmetic, General
+              Studies, etc.), identify weak sections, and read question explanations.
             </p>
             <button
               onClick={() =>
