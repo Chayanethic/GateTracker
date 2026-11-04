@@ -23,20 +23,20 @@ export default function Gateway() {
   // 1. Check existing session
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push('/dashboard');
+      if (session) router.push('/branch-selection');
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) router.push('/dashboard');
+      if (session) router.push('/branch-selection');
     });
 
     return () => subscription.unsubscribe();
   }, [router]);
 
-  // 2. Redirect URL generator
+  // 2. Redirect URL generator — send users to Role Selection (/branch-selection)
   const getRedirectUrl = () => {
     if (typeof window !== 'undefined') {
-      return `${window.location.origin}/dashboard`;
+      return `${window.location.origin}/branch-selection`;
     }
     return '';
   };
@@ -44,6 +44,8 @@ export default function Gateway() {
   // --- GOOGLE OAUTH LOGIC ---
   const handleGoogleLogin = async () => {
     setIsLoading(true);
+    localStorage.removeItem('gateTrackerRoleSelectedV3');
+    localStorage.removeItem('gateTrackerBranch');
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -61,6 +63,8 @@ export default function Gateway() {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    localStorage.removeItem('gateTrackerRoleSelectedV3');
+    localStorage.removeItem('gateTrackerBranch');
     
     const { error } = await supabase.auth.signInWithOtp({
       email: userEmail,
@@ -95,7 +99,7 @@ export default function Gateway() {
       toast.error(`Invalid Code: ${error.message}`);
     } else {
       toast.success('Access Granted!');
-      router.push('/dashboard');
+      router.push('/branch-selection');
     }
   };
 
