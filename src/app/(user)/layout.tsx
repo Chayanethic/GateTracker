@@ -25,6 +25,9 @@ import {
   X,
 } from 'lucide-react';
 
+const isValidRole = (val: string): val is 'ece' | 'cse' | 'psc' =>
+  val === 'ece' || val === 'cse' || val === 'psc';
+
 export default function UserLayout({
   children,
 }: {
@@ -34,7 +37,7 @@ export default function UserLayout({
   const pathname = usePathname();
 
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [userBranch, setUserBranch] = useState<'ece' | 'cse' | 'psc'>('ece');
+  const [userBranch, setUserBranch] = useState<'ece' | 'cse' | 'psc'>('psc');
   const [showGateDayAnimation, setShowGateDayAnimation] = useState(false);
   const [gateAnimationStage, setGateAnimationStage] =
     useState<'cut' | 'reveal'>('cut');
@@ -44,7 +47,8 @@ export default function UserLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // The examination route is rendered as a dedicated full-screen app.
+  // The examination route and role selection route are rendered as dedicated full-screen views.
+  const isBranchSelectionRoute = pathname === '/branch-selection';
   const isExamRoute =
     (/^\/test-series\/[^/]+$/.test(pathname || '') && pathname !== '/test-series/marked') ||
     /^\/psc-exam\/[^/]+$/.test(pathname || '');
@@ -61,6 +65,18 @@ export default function UserLayout({
 
     const savedSidebar = localStorage.getItem('gateTrackerSidebarCollapsed');
     setSidebarCollapsed(savedSidebar === 'true');
+
+    const handleRoleChanged = () => {
+      const updated = String(localStorage.getItem('gateTrackerRoleSelectedV3') || '')
+        .toLowerCase()
+        .trim();
+      if (isValidRole(updated)) {
+        setUserBranch(updated);
+      }
+    };
+
+    window.addEventListener('gateTrackerRoleChanged', handleRoleChanged);
+    return () => window.removeEventListener('gateTrackerRoleChanged', handleRoleChanged);
   }, []);
 
   useEffect(() => {
@@ -94,57 +110,54 @@ export default function UserLayout({
         return;
       }
 
-      const metaBranch = String(session.user.user_metadata?.branch || '')
+      // Check ONLY the new V3 role key so all existing users forget old pre-PSC selections
+      // and are prompted once to choose among PSC Exam, GATE ECE, or GATE CSE.
+      const localRoleV3 = String(localStorage.getItem('gateTrackerRoleSelectedV3') || '')
         .toLowerCase()
         .trim();
-      const localBranch = String(localStorage.getItem('gateTrackerBranch') || '')
+      const metaRoleV3 = String(session.user.user_metadata?.role_selected_v3 || '')
         .toLowerCase()
         .trim();
 
-      let effectiveBranch = '';
+      // Priority 1: localRoleV3 (instant when user switches roles on this browser)
+      // Priority 2: metaRoleV3 (persisted in Supabase Auth user_metadata across devices)
+      let effectiveBranch: 'ece' | 'cse' | 'psc' | '' = '';
+      if (isValidRole(localRoleV3)) {
+        effectiveBranch = localRoleV3;
+      } else if (isValidRole(metaRoleV3)) {
+        effectiveBranch = metaRoleV3;
+      }
 
-      if (pathname !== '/branch-selection') {
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('branch')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-
-        const dbBranch = String(profile?.branch || '')
-          .toLowerCase()
-          .trim();
-
-        // Priority: if user explicitly chose 'psc' in metadata or localStorage, honor 'psc'; otherwise use dbBranch
-        if (metaBranch === 'psc' || localBranch === 'psc' || dbBranch === 'psc') {
-          effectiveBranch = 'psc';
-        } else if (dbBranch === 'ece' || dbBranch === 'cse') {
-          effectiveBranch = dbBranch;
-        } else if (metaBranch === 'ece' || metaBranch === 'cse') {
-          effectiveBranch = metaBranch;
-        }
-
+      if (!isBranchSelectionRoute) {
         if (!effectiveBranch) {
+          // Clear legacy branch cache and prompt the user to select their role
+          localStorage.removeItem('gateTrackerBranch');
           router.replace('/branch-selection');
           return;
         }
 
+        localStorage.setItem('gateTrackerRoleSelectedV3', effectiveBranch);
         localStorage.setItem('gateTrackerBranch', effectiveBranch);
-        setUserBranch(effectiveBranch as 'ece' | 'cse' | 'psc');
+        setUserBranch(effectiveBranch);
 
         // If user role is PSC Exam and they land on GATE /dashboard, send them straight to /psc-exam
         if (effectiveBranch === 'psc' && pathname === '/dashboard') {
           router.replace('/psc-exam');
           return;
         }
-      } else {
-        if (localBranch === 'psc' || metaBranch === 'psc') setUserBranch('psc');
-        else if (localBranch === 'cse' || metaBranch === 'cse') setUserBranch('cse');
+      } else if (effectiveBranch) {
+        setUserBranch(effectiveBranch);
       }
 
       setIsAuthorized(true);
 
-      // Do not show GATE 2027 daily countdown animation for PSC Exam role or inside exam/analysis routes
-      if (effectiveBranch === 'psc' || isExamRoute || isAnalysisRoute || pathname === '/branch-selection') {
+      // Do not show GATE 2027 daily countdown animation for PSC Exam role or inside exam/analysis/branch-selection routes
+      if (
+        effectiveBranch === 'psc' ||
+        isExamRoute ||
+        isAnalysisRoute ||
+        isBranchSelectionRoute
+      ) {
         return;
       }
 
@@ -200,9 +213,11 @@ export default function UserLayout({
     };
 
     void verifyUser();
-  }, [router, pathname, isExamRoute, isAnalysisRoute]);
+  }, [router, pathname, isExamRoute, isAnalysisRoute, isBranchSelectionRoute]);
 
   const handleLogout = async () => {
+    localStorage.removeItem('gateTrackerRoleSelectedV3');
+    localStorage.removeItem('gateTrackerBranch');
     await supabase.auth.signOut();
     router.replace('/login');
   };
@@ -217,6 +232,14 @@ export default function UserLayout({
         <span className="animate-pulse">
           Authenticating Secure Channel...
         </span>
+      </div>
+    );
+  }
+
+  if (isBranchSelectionRoute) {
+    return (
+      <div className="min-h-screen w-full overflow-y-auto overflow-x-hidden bg-[#050505]">
+        {children}
       </div>
     );
   }
@@ -469,7 +492,30 @@ export default function UserLayout({
             </button>
           </div>
 
-          <nav className="flex-1 px-3 py-6 flex flex-col gap-2 overflow-y-auto">
+          {/* Prominent Role Switcher Banner at top of Sidebar */}
+          <div className="px-3 pt-3">
+            <button
+              onClick={() => router.push('/branch-selection?change=1')}
+              title="Change Exam Role (PSC Exam / GATE ECE / GATE CSE)"
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3.5 py-2.5'} rounded-xl bg-emerald-500/10 hover:bg-emerald-500/15 ring-1 ring-emerald-500/25 text-emerald-300 transition-all`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <ArrowLeftRight size={15} className="text-emerald-400 shrink-0" />
+                {!sidebarCollapsed && (
+                  <span className="text-[11px] font-black uppercase tracking-wider truncate">
+                    Role: {isPscRole ? 'PSC Exam' : `GATE ${userBranch.toUpperCase()}`}
+                  </span>
+                )}
+              </div>
+              {!sidebarCollapsed && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-200">
+                  Switch
+                </span>
+              )}
+            </button>
+          </div>
+
+          <nav className="flex-1 px-3 py-5 flex flex-col gap-2 overflow-y-auto">
             {!sidebarCollapsed && (
               <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2 px-2">
                 {isPscRole ? 'PSC Exam Menu' : 'Main Menu'}
@@ -585,6 +631,24 @@ export default function UserLayout({
                 </button>
               </div>
 
+              <div className="px-3 pt-3">
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/branch-selection?change=1');
+                  }}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/30 text-emerald-300"
+                >
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider">
+                    <ArrowLeftRight size={14} className="text-emerald-400" />
+                    Role: {isPscRole ? 'PSC Exam' : `GATE ${userBranch.toUpperCase()}`}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-200">
+                    Switch
+                  </span>
+                </button>
+              </div>
+
               <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
                 {navLinks.map((link) => {
                   const isActive =
@@ -673,9 +737,9 @@ export default function UserLayout({
             <button
               onClick={() => router.push('/branch-selection?change=1')}
               title="Switch Role"
-              className="px-2.5 py-1.5 rounded-lg bg-white/5 ring-1 ring-white/10 text-[11px] font-bold text-zinc-300 hover:text-emerald-400 flex items-center gap-1"
+              className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/30 text-[11px] font-bold text-emerald-300 hover:text-emerald-200 flex items-center gap-1"
             >
-              <ArrowLeftRight size={13} /> Role
+              <ArrowLeftRight size={13} /> Switch Role
             </button>
 
             <button
@@ -740,6 +804,13 @@ export default function UserLayout({
                 </Link>
               );
             })}
+            <button
+              onClick={() => router.push('/branch-selection?change=1')}
+              className="flex flex-col items-center justify-center gap-1 min-w-[58px] py-2 px-2 rounded-xl text-emerald-400 hover:bg-emerald-500/10"
+            >
+              <ArrowLeftRight size={18} />
+              <span className="text-[10px] font-black">Role</span>
+            </button>
             <button
               onClick={() => setMobileMenuOpen(true)}
               className="flex flex-col items-center justify-center gap-1 min-w-[54px] py-2 px-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5"
