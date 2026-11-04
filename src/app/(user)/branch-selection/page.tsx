@@ -1,20 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Cpu, Radio, Award, ArrowRight, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function BranchSelectionPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isChanging = searchParams.get('change') === '1';
+  const [isChanging, setIsChanging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
 
   useEffect(() => {
-    setSelectedRole(localStorage.getItem('gateTrackerBranch'));
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      setIsChanging(params.get('change') === '1');
+      setSelectedRole(localStorage.getItem('gateTrackerRoleSelectedV3'));
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) router.replace('/login');
     });
@@ -31,26 +35,30 @@ export default function BranchSelectionPage() {
         return;
       }
 
-      await supabase.auth.updateUser({
-        data: { branch },
-      });
+      // 1. Save immediately in localStorage with V3 key so UserLayout honors the new choice immediately
+      localStorage.setItem('gateTrackerRoleSelectedV3', branch);
       localStorage.setItem('gateTrackerBranch', branch);
+      setSelectedRole(branch);
 
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('gateTrackerRoleChanged'));
+      }
+
+      // 2. Save in Supabase Auth user_metadata
+      await supabase.auth.updateUser({
+        data: { branch, role_selected_v3: branch },
+      });
+
+      // 3. Best-effort sync to user_profiles table
       const { error } = await supabase
         .from('user_profiles')
         .upsert({ user_id: session.user.id, branch }, { onConflict: 'user_id' });
 
-      if (error) {
-        if (branch === 'psc') {
-          await supabase
-            .from('user_profiles')
-            .upsert({ user_id: session.user.id, branch: 'ece' }, { onConflict: 'user_id' });
-        } else {
-          console.error(error);
-          toast.error(`Could not save role: ${error.message}`);
-          setLoading(false);
-          return;
-        }
+      if (error && branch === 'psc') {
+        // Fallback if user_profiles has a legacy check constraint only allowing 'ece'/'cse'
+        await supabase
+          .from('user_profiles')
+          .upsert({ user_id: session.user.id, branch: 'ece' }, { onConflict: 'user_id' });
       }
 
       if (branch === 'psc') {
@@ -77,10 +85,9 @@ export default function BranchSelectionPage() {
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight">
             {isChanging ? 'Switch Your Exam Role' : 'Choose Your Exam Role'}
           </h1>
-          <p className="text-zinc-500 text-sm sm:text-base mt-2.5 max-w-xl mx-auto">
-            {isChanging
-              ? 'Select your target exam stream and your sidebar workspace will update immediately.'
-              : 'Select PSC Exam PYQ or GATE (ECE / CSE) to customize your workspace.'}
+          <p className="text-zinc-400 text-sm sm:text-base mt-2.5 max-w-xl mx-auto">
+            Select <span className="text-emerald-400 font-bold">PSC Exam</span> or{' '}
+            <span className="text-zinc-200 font-bold">GATE (ECE / CSE)</span> to open your dedicated exam workspace. You can switch roles anytime from the sidebar.
           </p>
         </div>
 
